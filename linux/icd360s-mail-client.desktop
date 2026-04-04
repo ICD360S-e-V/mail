@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=ICD360S Mail
+Comment=ICD360S Mail Client - Modern email client with threat detection
+Exec=icd360s_mail_client
+Icon=icd360s_mail_client
+Terminal=false
+Type=Application
+Categories=Network;Email;Office;
+MimeType=x-scheme-handler/mailto;
+Keywords=email;mail;imap;smtp;
