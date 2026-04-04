@@ -1,0 +1,5 @@
+#include "../../Flutter/Flutter-Release.xcconfig"
+#include "Warnings.xcconfig"
+
+// Skip dSYM generation to avoid pdfrx/libpdfium.a duplicate debug map warnings
+DEBUG_INFORMATION_FORMAT = dwarf
