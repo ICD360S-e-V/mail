@@ -446,6 +446,111 @@ jobs:
           key: build-success-windows-${{ steps.hashes.outputs.windows_hash }}
 
   # ============================================================
+  # Deploy to VPS - Upload all artifacts to mail.icd360s.de
+  # ============================================================
+  deploy:
+    name: Deploy to VPS
+    needs: [build-linux, build-android, android-cache-save, build-apple, build-windows]
+    if: always() && github.ref == 'refs/heads/main' && !cancelled()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: artifacts/
+
+      - name: Prepare deploy structure
+        run: |
+          DEPLOY_DIR="deploy/downloads/mail"
+
+          # Android - per flavor directories
+          for flavor in universal fdroid googleplay samsung huawei; do
+            mkdir -p "${DEPLOY_DIR}/android/${flavor}"
+            if [ -d "artifacts/android-${flavor}-apk" ]; then
+              APK=$(find "artifacts/android-${flavor}-apk" -name "*.apk" | head -1)
+              if [ -n "$APK" ]; then
+                cp "$APK" "${DEPLOY_DIR}/android/${flavor}/icd360s-mail.apk"
+              fi
+            fi
+          done
+
+          # Google Play AAB
+          if [ -d "artifacts/android-googleplay-aab" ]; then
+            AAB=$(find "artifacts/android-googleplay-aab" -name "*.aab" | head -1)
+            if [ -n "$AAB" ]; then
+              cp "$AAB" "${DEPLOY_DIR}/android/googleplay/icd360s-mail.aab"
+            fi
+          fi
+
+          # Linux
+          mkdir -p "${DEPLOY_DIR}/linux"
+          if [ -d "artifacts/linux-build" ]; then
+            # tar.gz from bundle
+            if [ -d "artifacts/linux-build/build/linux/x64/release/bundle" ]; then
+              tar -czf "${DEPLOY_DIR}/linux/icd360s-mail-linux.tar.gz" -C artifacts/linux-build/build/linux/x64/release/bundle .
+            fi
+            # .deb
+            DEB=$(find "artifacts/linux-build" -maxdepth 1 -name "*.deb" | head -1)
+            [ -n "$DEB" ] && cp "$DEB" "${DEPLOY_DIR}/linux/icd360s-mail.deb"
+            # .rpm
+            RPM=$(find "artifacts/linux-build" -maxdepth 1 -name "*.rpm" | head -1)
+            [ -n "$RPM" ] && cp "$RPM" "${DEPLOY_DIR}/linux/icd360s-mail.rpm"
+            # AppImage
+            APPIMAGE=$(find "artifacts/linux-build" -maxdepth 1 -name "*.AppImage" | head -1)
+            [ -n "$APPIMAGE" ] && cp "$APPIMAGE" "${DEPLOY_DIR}/linux/icd360s-mail.AppImage"
+          fi
+
+          # Windows
+          mkdir -p "${DEPLOY_DIR}/windows"
+          if [ -d "artifacts/windows-build" ]; then
+            cd artifacts/windows-build && zip -r "../../${DEPLOY_DIR}/windows/icd360s-mail-windows.zip" . && cd ../..
+          fi
+
+          # macOS
+          mkdir -p "${DEPLOY_DIR}/macos"
+          if [ -d "artifacts/macos-build" ]; then
+            cd artifacts/macos-build && zip -r "../../${DEPLOY_DIR}/macos/icd360s-mail-macos.zip" . && cd ../..
+          fi
+
+          # iOS
+          mkdir -p "${DEPLOY_DIR}/ios"
+          if [ -d "artifacts/ios-build" ]; then
+            cd artifacts/ios-build && zip -r "../../${DEPLOY_DIR}/ios/icd360s-mail-ios.zip" . && cd ../..
+          fi
+
+          echo "## Deploy structure:" >> "$GITHUB_STEP_SUMMARY"
+          find deploy/ -type f | sort | while read f; do
+            SIZE=$(du -h "$f" | cut -f1)
+            echo "- ${f#deploy/} ($SIZE)" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/vps_key
+          chmod 600 ~/.ssh/vps_key
+          ssh-keyscan -p 36000 mail.icd360s.de >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Upload to VPS
+        run: |
+          # Create directory structure on server
+          ssh -i ~/.ssh/vps_key -p 36000 root@mail.icd360s.de \
+            "mkdir -p /var/www/html/downloads/mail/{android/{universal,fdroid,googleplay,samsung,huawei},linux,windows,macos,ios}"
+
+          # Upload all files
+          scp -i ~/.ssh/vps_key -P 36000 -r deploy/downloads/mail/* root@mail.icd360s.de:/var/www/html/downloads/mail/
+
+      - name: Verify deploy
+        run: |
+          echo "## Deployed files on server:" >> "$GITHUB_STEP_SUMMARY"
+          ssh -i ~/.ssh/vps_key -p 36000 root@mail.icd360s.de \
+            "find /var/www/html/downloads/mail -type f | sort" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Cleanup SSH
+        if: always()
+        run: rm -f ~/.ssh/vps_key
+
+  # ============================================================
   # Release - Create GitHub Release on tags v*
   # ============================================================
   release:
