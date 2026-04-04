@@ -347,6 +347,12 @@ jobs:
           flutter pub get
           flutter build ios --release --no-codesign
 
+      - name: Create iOS .ipa
+        run: |
+          mkdir -p build/ios/Payload
+          cp -r build/ios/iphoneos/Runner.app build/ios/Payload/
+          cd build/ios && zip -r ../icd360s-mail.ipa Payload/
+
       - name: Disable macOS code signing
         run: |
           # Disable code signing in project.pbxproj for CI
@@ -358,18 +364,25 @@ jobs:
         run: |
           flutter build macos --release
 
+      - name: Create macOS .dmg
+        run: |
+          hdiutil create -volname "ICD360S Mail Client" \
+            -srcfolder build/macos/Build/Products/Release/icd360s_mail_client.app \
+            -ov -format UDZO \
+            build/icd360s-mail.dmg
+
       - name: Upload iOS artifact
         uses: actions/upload-artifact@v7
         with:
           name: ios-build
-          path: build/ios/iphoneos/Runner.app/
+          path: build/icd360s-mail.ipa
           retention-days: 30
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v7
         with:
           name: macos-build
-          path: build/macos/Build/Products/Release/icd360s_mail_client.app/
+          path: build/icd360s-mail.dmg
           retention-days: 30
 
       - name: Compute Apple hash
@@ -415,11 +428,16 @@ jobs:
           flutter pub get
           flutter build windows --release
 
+      - name: Build Inno Setup installer
+        run: |
+          choco install innosetup -y --no-progress
+          iscc windows/installer.iss
+
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v7
         with:
           name: windows-build
-          path: build/windows/x64/runner/Release/
+          path: build/installer/*.exe
           retention-days: 30
 
       - name: Compute Windows hash
@@ -500,22 +518,25 @@ jobs:
             [ -n "$APPIMAGE" ] && cp "$APPIMAGE" "${DEPLOY_DIR}/linux/icd360s-mail.AppImage"
           fi
 
-          # Windows
+          # Windows (.exe installer)
           mkdir -p "${DEPLOY_DIR}/windows"
           if [ -d "artifacts/windows-build" ]; then
-            cd artifacts/windows-build && zip -r "../../${DEPLOY_DIR}/windows/icd360s-mail-windows.zip" . && cd ../..
+            EXE=$(find "artifacts/windows-build" -name "*.exe" | head -1)
+            [ -n "$EXE" ] && cp "$EXE" "${DEPLOY_DIR}/windows/icd360s-mail-setup.exe"
           fi
 
-          # macOS
+          # macOS (.dmg)
           mkdir -p "${DEPLOY_DIR}/macos"
           if [ -d "artifacts/macos-build" ]; then
-            cd artifacts/macos-build && zip -r "../../${DEPLOY_DIR}/macos/icd360s-mail-macos.zip" . && cd ../..
+            DMG=$(find "artifacts/macos-build" -name "*.dmg" | head -1)
+            [ -n "$DMG" ] && cp "$DMG" "${DEPLOY_DIR}/macos/icd360s-mail.dmg"
           fi
 
-          # iOS
+          # iOS (.ipa)
           mkdir -p "${DEPLOY_DIR}/ios"
           if [ -d "artifacts/ios-build" ]; then
-            cd artifacts/ios-build && zip -r "../../${DEPLOY_DIR}/ios/icd360s-mail-ios.zip" . && cd ../..
+            IPA=$(find "artifacts/ios-build" -name "*.ipa" | head -1)
+            [ -n "$IPA" ] && cp "$IPA" "${DEPLOY_DIR}/ios/icd360s-mail.ipa"
           fi
 
           echo "## Deploy structure:" >> "$GITHUB_STEP_SUMMARY"
@@ -594,19 +615,22 @@ jobs:
             find "artifacts/android-googleplay-aab" -name "*.aab" -exec cp {} release/ \; 2>/dev/null || true
           fi
 
-          # iOS
+          # iOS (.ipa)
           if [ -d "artifacts/ios-build" ]; then
-            cd artifacts/ios-build && zip -r "../../release/ICD360S-Mail-Client-${VERSION}-ios.zip" . && cd ../..
+            IPA=$(find "artifacts/ios-build" -name "*.ipa" | head -1)
+            [ -n "$IPA" ] && cp "$IPA" "release/ICD360S-Mail-Client-${VERSION}.ipa"
           fi
 
-          # macOS
+          # macOS (.dmg)
           if [ -d "artifacts/macos-build" ]; then
-            cd artifacts/macos-build && zip -r "../../release/ICD360S-Mail-Client-${VERSION}-macos.zip" . && cd ../..
+            DMG=$(find "artifacts/macos-build" -name "*.dmg" | head -1)
+            [ -n "$DMG" ] && cp "$DMG" "release/ICD360S-Mail-Client-${VERSION}.dmg"
           fi
 
-          # Windows
+          # Windows (.exe installer)
           if [ -d "artifacts/windows-build" ]; then
-            cd artifacts/windows-build && zip -r "../../release/ICD360S-Mail-Client-${VERSION}-windows-x64.zip" . && cd ../..
+            EXE=$(find "artifacts/windows-build" -name "*.exe" | head -1)
+            [ -n "$EXE" ] && cp "$EXE" "release/ICD360S-Mail-Client-Setup-${VERSION}.exe"
           fi
 
           echo "## Release artifacts:" >> "$GITHUB_STEP_SUMMARY"
