@@ -39,6 +39,30 @@ android {
         versionName = flutter.versionName
     }
 
+    flavorDimensions += "store"
+    productFlavors {
+        create("universal") {
+            dimension = "store"
+            // Universal APK - no store-specific config
+        }
+        create("fdroid") {
+            dimension = "store"
+            applicationIdSuffix = ".fdroid"
+        }
+        create("googleplay") {
+            dimension = "store"
+            applicationIdSuffix = ".gplay"
+        }
+        create("samsung") {
+            dimension = "store"
+            applicationIdSuffix = ".samsung"
+        }
+        create("huawei") {
+            dimension = "store"
+            applicationIdSuffix = ".huawei"
+        }
+    }
+
     signingConfigs {
         create("release") {
             keyAlias = keystoreProperties["keyAlias"] as String?

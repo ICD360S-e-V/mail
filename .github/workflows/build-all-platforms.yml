@@ -224,29 +224,37 @@ jobs:
           key: build-success-linux-${{ steps.hashes.outputs.linux_hash }}
 
   # ============================================================
-  # Recompute hashes for cache save (needed after builds)
-  # ============================================================
-  # Note: Cache save keys are computed inline per job
-
-  # ============================================================
-  # Android Build - APK (split-per-abi) + AAB, parallel matrix
+  # Android Build - Per-flavor APKs + AAB, each on dedicated runner
   # ============================================================
   build-android:
-    name: Android (${{ matrix.target }})
+    name: Android (${{ matrix.flavor }}${{ matrix.format == 'aab' && ' AAB' || '' }})
     needs: detect-changes
     if: needs.detect-changes.outputs.android_changed == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        target: [apk, aab]
         include:
-          - target: apk
+          # APKs per flavor (split-per-abi, obfuscated)
+          - flavor: universal
+            format: apk
             build_args: "--split-per-abi --obfuscate --split-debug-info=build/symbols"
-            artifact_path: "build/app/outputs/flutter-apk/*.apk"
-          - target: aab
+          - flavor: fdroid
+            format: apk
+            build_args: "--split-per-abi --obfuscate --split-debug-info=build/symbols"
+          - flavor: googleplay
+            format: apk
+            build_args: "--split-per-abi --obfuscate --split-debug-info=build/symbols"
+          - flavor: samsung
+            format: apk
+            build_args: "--split-per-abi --obfuscate --split-debug-info=build/symbols"
+          - flavor: huawei
+            format: apk
+            build_args: "--split-per-abi --obfuscate --split-debug-info=build/symbols"
+          # AAB (Google Play upload format)
+          - flavor: googleplay
+            format: aab
             build_args: "--obfuscate --split-debug-info=build/symbols"
-            artifact_path: "build/app/outputs/bundle/release/*.aab"
     steps:
       - uses: actions/checkout@v5
 
@@ -262,17 +270,18 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
-      - name: Build Android ${{ matrix.target }}
+      - name: Build Android ${{ matrix.flavor }} ${{ matrix.format }}
         run: |
           flutter pub get
-          flutter build ${{ matrix.target }} --release ${{ matrix.build_args }}
+          flutter build ${{ matrix.format }} --release --flavor ${{ matrix.flavor }} ${{ matrix.build_args }}
 
-      - name: Upload Android ${{ matrix.target }} artifact
+      - name: Upload Android ${{ matrix.flavor }} ${{ matrix.format }} artifact
         uses: actions/upload-artifact@v7
         with:
-          name: android-${{ matrix.target }}
+          name: android-${{ matrix.flavor }}-${{ matrix.format }}
           path: |
-            ${{ matrix.artifact_path }}
+            build/app/outputs/flutter-apk/*${{ matrix.flavor }}*.apk
+            build/app/outputs/bundle/${{ matrix.flavor }}Release/*.aab
             build/symbols/
           retention-days: 30
 
@@ -468,14 +477,16 @@ jobs:
           find artifacts/linux-build/ -maxdepth 1 -name "*.rpm" -exec cp {} release/ \; 2>/dev/null || true
           find artifacts/linux-build/ -maxdepth 1 -name "*.AppImage" -exec cp {} release/ \; 2>/dev/null || true
 
-          # Android APKs
-          if [ -d "artifacts/android-apk" ]; then
-            find artifacts/android-apk -name "*.apk" -exec cp {} release/ \; 2>/dev/null || true
-          fi
+          # Android APKs (all flavors)
+          for flavor in universal fdroid googleplay samsung huawei; do
+            if [ -d "artifacts/android-${flavor}-apk" ]; then
+              find "artifacts/android-${flavor}-apk" -name "*.apk" -exec cp {} release/ \; 2>/dev/null || true
+            fi
+          done
 
-          # Android AAB
-          if [ -d "artifacts/android-aab" ]; then
-            find artifacts/android-aab -name "*.aab" -exec cp {} release/ \; 2>/dev/null || true
+          # Android AAB (Google Play)
+          if [ -d "artifacts/android-googleplay-aab" ]; then
+            find "artifacts/android-googleplay-aab" -name "*.aab" -exec cp {} release/ \; 2>/dev/null || true
           fi
 
           # iOS
