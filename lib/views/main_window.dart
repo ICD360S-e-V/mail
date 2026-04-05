@@ -55,6 +55,9 @@ class _MainWindowState extends State<MainWindow> {
   int? _pingMs;
   bool _pingError = false;
 
+  // Mobile sidebar toggle
+  bool _mobileSidebarOpen = false;
+
   @override
   void initState() {
     super.initState();
@@ -222,31 +225,84 @@ class _MainWindowState extends State<MainWindow> {
       final updateInfo = await UpdateService.checkForUpdates();
 
       if (updateInfo != null && mounted) {
-        LoggerService.log('UPDATE', 'Update found: v${updateInfo.version} - starting auto-download');
+        LoggerService.log('UPDATE', 'Update found: v${updateInfo.version}');
 
         final l10n = l10nOf(context);
 
-        // Show initial notification
-        _showNotificationBar(
-          l10n.mainWindowNotificationUpdateAvailable,
-          l10n.mainWindowNotificationDownloading(updateInfo.version),
-          NotificationType.info,
-        );
+        // On mobile: show dialog asking user to update
+        // On desktop: auto-download silently
+        if (Platform.isAndroid || Platform.isIOS) {
+          final shouldUpdate = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => ContentDialog(
+              title: Row(
+                children: [
+                  const Icon(FluentIcons.download, size: 24),
+                  const SizedBox(width: 12),
+                  Text(l10n.mainWindowNotificationUpdateAvailable),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l10n.mainWindowNotificationDownloading(updateInfo.version),
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  if (updateInfo.changelog.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      updateInfo.changelog,
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                Button(
+                  child: Text(l10n.buttonCancel),
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                ),
+                FilledButton(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(FluentIcons.download, size: 16),
+                      const SizedBox(width: 8),
+                      Text(l10n.mainWindowNotificationUpdateAvailable),
+                    ],
+                  ),
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                ),
+              ],
+            ),
+          );
 
-        // Set up progress callback
-        UpdateService.onProgress = (downloaded, total, status) {
-          if (mounted) {
-            setState(() {
-              _notificationTitle = l10n.mainWindowNotificationUpdateInProgress;
-              _notificationMessage = status;
-              _notificationType = NotificationType.info;
-              _showNotification = true;
-            });
+          if (shouldUpdate == true && mounted) {
+            await UpdateService.downloadAndInstallAuto(updateInfo);
           }
-        };
+        } else {
+          // Desktop: auto-download silently with progress bar
+          _showNotificationBar(
+            l10n.mainWindowNotificationUpdateAvailable,
+            l10n.mainWindowNotificationDownloading(updateInfo.version),
+            NotificationType.info,
+          );
 
-        // Start auto-download and install (will exit app when done)
-        await UpdateService.downloadAndInstallAuto(updateInfo);
+          UpdateService.onProgress = (downloaded, total, status) {
+            if (mounted) {
+              setState(() {
+                _notificationTitle = l10n.mainWindowNotificationUpdateInProgress;
+                _notificationMessage = status;
+                _notificationType = NotificationType.info;
+                _showNotification = true;
+              });
+            }
+          };
+
+          await UpdateService.downloadAndInstallAuto(updateInfo);
+        }
       }
     } catch (e) {
       LoggerService.log('UPDATE', 'Update check error: $e');
@@ -447,25 +503,30 @@ class _MainWindowState extends State<MainWindow> {
               child: NavigationView(
       titleBar: Row(
           children: [
-            const SizedBox(width: 16),
+            // Hamburger menu button (mobile only)
+            if (Platform.isAndroid || Platform.isIOS)
+              IconButton(
+                icon: Icon(_mobileSidebarOpen ? FluentIcons.chrome_close : FluentIcons.global_nav_button, size: 20),
+                onPressed: () => setState(() => _mobileSidebarOpen = !_mobileSidebarOpen),
+              ),
+            const SizedBox(width: 8),
             Text(l10n.mainWindowTitle, style: theme.typography.subtitle),
-            // Spacer to center compose button
             const Spacer(),
 
-            // Compose Email Button (center)
-            FilledButton(
-              onPressed: () => _showComposeWindow(context),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(FluentIcons.edit_mail, size: 16),
-                  const SizedBox(width: 8),
-                  Text(l10n.mainWindowComposeButton),
-                ],
+            // Compose Email Button (desktop only — mobile uses FAB)
+            if (!Platform.isAndroid && !Platform.isIOS)
+              FilledButton(
+                onPressed: () => _showComposeWindow(context),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(FluentIcons.edit_mail, size: 16),
+                    const SizedBox(width: 8),
+                    Text(l10n.mainWindowComposeButton),
+                  ],
+                ),
               ),
-            ),
 
-            // Spacer to push buttons to far right
             const Spacer(),
 
             // Lock Button
@@ -500,7 +561,9 @@ class _MainWindowState extends State<MainWindow> {
         ),
       pane: NavigationPane(
         selected: 0,
-        displayMode: PaneDisplayMode.auto,
+        displayMode: (Platform.isAndroid || Platform.isIOS)
+            ? (_mobileSidebarOpen ? PaneDisplayMode.expanded : PaneDisplayMode.compact)
+            : PaneDisplayMode.auto,
         header: Padding(
           padding: const EdgeInsets.all(12.0),
           child: Text(
@@ -515,18 +578,7 @@ class _MainWindowState extends State<MainWindow> {
           PaneItem(
             icon: const Icon(FluentIcons.add),
             title: Text(l10n.mainWindowAddAccount),
-            body: Stack(
-              children: [
-                _buildEmailList(theme, emailProvider),
-                if (_showNotification)
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: _buildNotificationBar(theme),
-                  ),
-              ],
-            ),
+            body: _buildEmailBody(theme, emailProvider),
             onTap: () => _showAddAccountDialog(context, emailProvider),
           ),
         ],
@@ -783,35 +835,13 @@ class _MainWindowState extends State<MainWindow> {
               }
             },
           ),
-          body: Stack(
-            children: [
-              _buildEmailList(theme, emailProvider),
-              if (_showNotification)
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  child: _buildNotificationBar(theme),
-                ),
-            ],
-          ),
+          body: _buildEmailBody(theme, emailProvider),
           items: account.folders
               .map(
                 (folder) => PaneItem(
                   icon: _getFolderIcon(folder),
                   title: Text('$folder (${account.folderCounts[folder] ?? 0})'),
-                  body: Stack(
-                    children: [
-                      _buildEmailList(theme, emailProvider),
-                      if (_showNotification)
-                        Positioned(
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          child: _buildNotificationBar(theme),
-                        ),
-                    ],
-                  ),
+                  body: _buildEmailBody(theme, emailProvider),
                   onTap: () => emailProvider.selectFolder(account, folder),
                 ),
               )
@@ -821,6 +851,47 @@ class _MainWindowState extends State<MainWindow> {
     }
 
     return items;
+  }
+
+  /// Build email list body with optional FAB compose button on mobile
+  Widget _buildEmailBody(FluentThemeData theme, EmailProvider emailProvider) {
+    return Stack(
+      children: [
+        _buildEmailList(theme, emailProvider),
+        if (_showNotification)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: _buildNotificationBar(theme),
+          ),
+        // FAB Compose button (mobile only)
+        if (Platform.isAndroid || Platform.isIOS)
+          Positioned(
+            bottom: 24,
+            right: 24,
+            child: GestureDetector(
+              onTap: () => _showComposeWindow(context),
+              child: Container(
+                width: 56,
+                height: 56,
+                decoration: BoxDecoration(
+                  color: theme.accentColor,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: theme.accentColor.withValues(alpha: 0.4),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: const Icon(FluentIcons.add, color: Colors.white, size: 28),
+              ),
+            ),
+          ),
+      ],
+    );
   }
 
   /// Get icon for folder type
@@ -1336,7 +1407,7 @@ class _MainWindowState extends State<MainWindow> {
                 onPressed: _showChangelog,
                 builder: (context, states) {
                   return Text(
-                    l10n.mainWindowVersion('2.17.4'),
+                    l10n.mainWindowVersion('2.17.9'),
                     style: theme.typography.caption?.copyWith(
                       color: states.isHovered ? theme.accentColor.light : theme.accentColor,
                       fontWeight: FontWeight.bold,

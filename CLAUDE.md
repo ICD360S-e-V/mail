@@ -1,7 +1,7 @@
 # ICD360S Mail Client - Documentatie
 
-**Actualizat:** 3 Aprilie 2026
-**Versiune Curenta:** 2.17.2 (Cross-Platform)
+**Actualizat:** 5 Aprilie 2026
+**Versiune Curenta:** 2.17.9 (Cross-Platform)
 
 ---
 
@@ -450,11 +450,35 @@ for v in d['versions'][:3]:
 **SSH Key:** `/Users/ionut-claudiuduinea/Documents/mail-client/ICD360S.MailClient.Flutter/vps_mail.icd360s.de`
 **Flutter:** `/Users/ionut-claudiuduinea/Development/flutter/bin/flutter`
 
+### RELEASE CU AGENTI PARALELI (Rapid - 2-3 minute)
+
+In loc sa faci fiecare pas secvential, lanseaza agenti in paralel:
+
+**FAZA 1 — Pregatire (paralel):**
+- **Agent 1**: Schimba versiunea in cele 4 fisiere (pubspec.yaml, update_service.dart, main_window.dart, installer.iss)
+- **Agent 2**: Actualizeaza changelog_window.dart (fallback local)
+- **Agent 3**: Actualizeaza CLAUDE.md (versiune, data, istoric)
+
+**FAZA 2 — Build (dupa Faza 1):**
+- **Build APK**: `flutter build apk --release`
+- **Build macOS** (optional): `flutter build macos --release`
+
+**FAZA 3 — Deploy (paralel, dupa build):**
+- **Agent 4**: Upload APK/DMG pe server via scp
+- **Agent 5**: Update version.json pe server via ssh
+- **Agent 6**: Update changelog.json pe server via ssh
+
+**FAZA 4 — Verificare (paralel):**
+- **Agent 7**: Verifica version.json + changelog.json pe server
+- **Agent 8**: Verifica versiunea in cele 4 fisiere local
+
+**Timp total:** ~2-3 minute (vs 5-10 minute secvential)
+
 ---
 
 ## 5. CONTURI EMAIL SERVER
 
-**Total:** 41 conturi email (39 certificate mTLS)
+**Total:** 42 conturi email (40 certificate mTLS)
 
 | Email | UID | Status |
 |-------|-----|--------|
@@ -499,6 +523,7 @@ for v in d['versions'][:3]:
 | 92179@icd360s.de | 5043 | Activ (cont numeric) |
 | github@icd360s.de | 5044 | Activ (parola: 12345678901) |
 | microsoft@icd360s.de | 5045 | Activ (parola: 12345678901) |
+| 82872@icd360s.de | 5046 | Activ (cont numeric, parola: 12345678901) |
 
 ### Adaugare Cont Nou pe Server
 ```bash
@@ -788,6 +813,9 @@ echo "QUIT" | openssl s_client -connect 127.0.0.1:25 -starttls smtp -sigalgs RSA
 
 | Versiune | Data | Highlights |
 |----------|------|------------|
+| 2.17.9 | 5 Apr 2026 | Android FAB compose button (+ jos-dreapta), compose mutat din titleBar pe mobil |
+| 2.17.8 | 5 Apr 2026 | Android UI hamburger menu, GDPR consent opt-in, permisiuni native notificari, dialog actualizare Android, release cu agenti paraleli |
+| 2.17.7 | 5 Apr 2026 | Android UI: hamburger menu button vizibil pe mobil, sidebar toggle expand/compact, GDPR consent opt-in, permisiuni native notificari (Android 13+/iOS/macOS), dialog actualizare pe Android |
 | 2.17.2 | 4 Apr 2026 | GrapheneOS Fix: locale fallback (AppLocalizations null = ecran gri), l10nOf() helper in 12 views, CupertinoLocalizations, Process.runSync blocat pe Android, ErrorWidget.builder, scanner doar iOS |
 | 2.17.1 | 4 Apr 2026 | GrapheneOS Compatibility: Impeller dezactivat (Skia), edge-to-edge display, APK signing v2+v3, R8 minify dezactivat |
 | 2.17.0 | 3 Apr 2026 | Security Hardening (25 fix-uri): certificate validation MITM prevention, auto-update SHA-256 hash, master password salted 100K iterations, IMAP/SMTP connection leak fix, Process.runSync→async, fetchEmails concurrency guard, settings.json write lock, .gitignore secrets |

@@ -85,7 +85,16 @@ class _ChangelogWindowState extends State<ChangelogWindow> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSection(theme, '🆕 Version 2.17.2 - 4 Apr 2026', [
+          _buildSection(theme, '🆕 Version 2.17.8 - 5 Apr 2026', [
+            'UI - Android: hamburger menu button (☰) vizibil in titleBar',
+            'UI - Sidebar toggle expand/compact pe mobil',
+            'UI - Dialog actualizare cu changelog pe Android/iOS',
+            'Security - GDPR consent opt-in (checkbox-uri nebifate default)',
+            'Security - Permisiuni native notificari: Android 13+ POST_NOTIFICATIONS, iOS, macOS',
+            'Compatibility - PaneDisplayMode.auto pe desktop, compact/expanded pe mobil',
+          ]),
+          const SizedBox(height: 16),
+          _buildSection(theme, 'Version 2.17.2 - 4 Apr 2026', [
             'Compatibility - GrapheneOS: locale fallback (AppLocalizations null pe custom ROMs = ecran gri)',
             'Compatibility - l10nOf() helper cu English fallback in toate cele 12 views',
             'Compatibility - GlobalCupertinoLocalizations.delegate adaugat',

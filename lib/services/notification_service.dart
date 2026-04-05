@@ -56,9 +56,50 @@ class NotificationService {
       _isInitialized = true;
       final platform = Platform.operatingSystem;
       LoggerService.log('NOTIFICATION', 'Notifications initialized for $platform (enabled: $_notificationsEnabled)');
+      // NOTE: permission is requested contextually via requestPermission()
+      // after user consents in FirstRunConsentDialog or after first email fetch
     } catch (ex, stackTrace) {
       LoggerService.logError('NOTIFICATION_INIT', ex, stackTrace);
     }
+  }
+
+  /// Request notification permission (Android 13+, iOS, macOS)
+  /// Call this AFTER showing a pre-prompt dialog explaining why notifications are needed
+  /// Returns true if permission granted
+  static Future<bool> requestPermission() async {
+    try {
+      // Linux/Windows: no OS permission needed
+      if (Platform.isLinux || Platform.isWindows) return true;
+
+      if (Platform.isAndroid) {
+        final androidPlugin = _notificationsPlugin
+            .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+        if (androidPlugin != null) {
+          final granted = await androidPlugin.requestNotificationsPermission();
+          LoggerService.log('NOTIFICATION', 'Android permission ${granted == true ? "GRANTED" : "DENIED"}');
+          return granted ?? false;
+        }
+      } else if (Platform.isIOS) {
+        final iosPlugin = _notificationsPlugin
+            .resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>();
+        if (iosPlugin != null) {
+          final granted = await iosPlugin.requestPermissions(alert: true, badge: true, sound: true);
+          LoggerService.log('NOTIFICATION', 'iOS permission ${granted == true ? "GRANTED" : "DENIED"}');
+          return granted ?? false;
+        }
+      } else if (Platform.isMacOS) {
+        final macPlugin = _notificationsPlugin
+            .resolvePlatformSpecificImplementation<MacOSFlutterLocalNotificationsPlugin>();
+        if (macPlugin != null) {
+          final granted = await macPlugin.requestPermissions(alert: true, badge: true, sound: true);
+          LoggerService.log('NOTIFICATION', 'macOS permission ${granted == true ? "GRANTED" : "DENIED"}');
+          return granted ?? false;
+        }
+      }
+    } catch (ex) {
+      LoggerService.logError('NOTIFICATION_PERMISSION', ex, StackTrace.current);
+    }
+    return false;
   }
 
   /// Handle notification tap

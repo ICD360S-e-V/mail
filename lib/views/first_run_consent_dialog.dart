@@ -10,9 +10,10 @@ class FirstRunConsentDialog extends StatefulWidget {
 }
 
 class _FirstRunConsentDialogState extends State<FirstRunConsentDialog> {
-  bool _autoUpdateEnabled = true;
-  bool _loggingEnabled = true;
-  bool _notificationsEnabled = true;
+  // GDPR: all consent toggles OFF by default (opt-in, not opt-out)
+  bool _autoUpdateEnabled = false;
+  bool _loggingEnabled = false;
+  bool _notificationsEnabled = false;
 
   void _continue() {
     Navigator.of(context).pop({

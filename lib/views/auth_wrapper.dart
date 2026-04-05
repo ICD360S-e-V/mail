@@ -44,21 +44,26 @@ class _AuthWrapperState extends State<AuthWrapper> {
         );
 
         if (consent != null) {
-          // Save preferences
+          // GDPR: defaults are false (opt-in), save what user chose
           await SettingsService.saveSettings(
-            autoUpdateEnabled: consent['autoUpdate'] ?? true,
-            loggingEnabled: consent['logging'] ?? true,
-            notificationsEnabled: consent['notifications'] ?? true,
+            autoUpdateEnabled: consent['autoUpdate'] ?? false,
+            loggingEnabled: consent['logging'] ?? false,
+            notificationsEnabled: consent['notifications'] ?? false,
           );
 
-          // Enable logging if user consented
-          LogUploadService.setLoggingEnabled(consent['logging'] ?? true);
+          // Enable logging only if user consented
+          LogUploadService.setLoggingEnabled(consent['logging'] ?? false);
           if (consent['logging'] == true) {
             LogUploadService.startAutoUpload();
           }
 
-          // Enable notifications if user consented
-          NotificationService.setNotificationsEnabled(consent['notifications'] ?? true);
+          // Enable notifications only if user consented
+          NotificationService.setNotificationsEnabled(consent['notifications'] ?? false);
+
+          // Request native OS notification permission if user consented
+          if (consent['notifications'] == true) {
+            await NotificationService.requestPermission();
+          }
         }
       }
     } else {
