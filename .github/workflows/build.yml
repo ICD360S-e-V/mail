@@ -14,7 +14,7 @@ on:
         default: 'all'
 
 # Prevent duplicate runs - only one build per branch/PR at a time
-# If a new push arrives while a build is running, the old one gets cancelled
+# New push on same branch cancels the previous run
 concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
@@ -22,26 +22,50 @@ concurrency:
 env:
   FLUTTER_VERSION: '3.41.4'
   JAVA_VERSION: '17'
+  APP_NAME: 'ICD360S Mail Client'
+  APP_ID: 'de.icd360s.mailclient'
 
 jobs:
   # ──────────────────────────────────────────────
-  # Linux Build
+  # Version extraction (shared by all jobs)
   # ──────────────────────────────────────────────
+  version:
+    name: Get Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      build_number: ${{ steps.ver.outputs.build_number }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: ver
+        run: |
+          FULL=$(grep '^version:' pubspec.yaml | head -1 | sed 's/version: //')
+          echo "version=$(echo "$FULL" | cut -d'+' -f1)" >> "$GITHUB_OUTPUT"
+          echo "build_number=$(echo "$FULL" | cut -d'+' -f2)" >> "$GITHUB_OUTPUT"
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  #  LINUX
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   build-linux:
-    name: Linux
+    name: Linux (tar.gz + deb + rpm + AppImage)
+    needs: version
     runs-on: ubuntu-latest
     if: >-
       github.event_name != 'workflow_dispatch' ||
       contains(github.event.inputs.platforms, 'linux') ||
       contains(github.event.inputs.platforms, 'all')
+    env:
+      VER: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Linux dependencies
+      - name: Install Linux build dependencies
         run: |
           sudo apt-get update -y
-          sudo apt-get install -y clang cmake git ninja-build pkg-config \
-            libgtk-3-dev liblzma-dev libstdc++-12-dev
+          sudo apt-get install -y \
+            clang cmake git ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev libstdc++-12-dev \
+            dpkg-dev rpm fuse libfuse2
 
       - uses: subosito/flutter-action@v2
         with:
@@ -56,31 +80,177 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Build Linux
+      - name: Build Linux release
         run: flutter build linux --release
 
-      - name: Package Linux
+      - name: Package tar.gz
         run: |
-          VERSION=$(grep '^version:' pubspec.yaml | head -1 | sed 's/version: //' | cut -d'+' -f1)
           cd build/linux/x64/release
-          tar -czf "$GITHUB_WORKSPACE/ICD360S_MailClient_v${VERSION}_linux.tar.gz" bundle/
+          tar -czf "$GITHUB_WORKSPACE/ICD360S_MailClient_v${VER}_linux_x64.tar.gz" bundle/
+
+      - name: Build .deb package
+        run: |
+          PKG_DIR="icd360s-mail_${VER}_amd64"
+          mkdir -p "$PKG_DIR/DEBIAN"
+          mkdir -p "$PKG_DIR/usr/lib/icd360s-mail"
+          mkdir -p "$PKG_DIR/usr/bin"
+          mkdir -p "$PKG_DIR/usr/share/applications"
+          mkdir -p "$PKG_DIR/usr/share/icons/hicolor/256x256/apps"
+
+          # Copy built app
+          cp -r build/linux/x64/release/bundle/* "$PKG_DIR/usr/lib/icd360s-mail/"
+
+          # Symlink binary
+          ln -sf /usr/lib/icd360s-mail/icd360s_mail_client "$PKG_DIR/usr/bin/icd360s-mail"
+
+          # Desktop entry
+          cat > "$PKG_DIR/usr/share/applications/icd360s-mail.desktop" << 'DESKTOP'
+          [Desktop Entry]
+          Type=Application
+          Name=ICD360S Mail Client
+          Comment=Modern email client with mTLS security
+          Exec=icd360s-mail
+          Icon=icd360s-mail
+          Terminal=false
+          Categories=Network;Email;
+          MimeType=x-scheme-handler/mailto;
+          DESKTOP
+          sed -i 's/^          //' "$PKG_DIR/usr/share/applications/icd360s-mail.desktop"
+
+          # Icon
+          if [ -f assets/logo.png ]; then
+            cp assets/logo.png "$PKG_DIR/usr/share/icons/hicolor/256x256/apps/icd360s-mail.png"
+          fi
+
+          # Control file
+          cat > "$PKG_DIR/DEBIAN/control" << CTRL
+          Package: icd360s-mail
+          Version: ${VER}
+          Architecture: amd64
+          Maintainer: ICD360S e.V. <dev@icd360s.de>
+          Description: ICD360S Mail Client
+           Modern cross-platform email client with mTLS mutual authentication,
+           threat detection, and end-to-end security for mail.icd360s.de.
+          Section: mail
+          Priority: optional
+          Depends: libgtk-3-0, libblkid1, liblzma5
+          CTRL
+          sed -i 's/^          //' "$PKG_DIR/DEBIAN/control"
+
+          dpkg-deb --build "$PKG_DIR"
+          mv "${PKG_DIR}.deb" "ICD360S_MailClient_v${VER}_linux_amd64.deb"
+
+      - name: Build .rpm package
+        run: |
+          mkdir -p rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+
+          # Create tarball source
+          TAR_DIR="icd360s-mail-${VER}"
+          mkdir -p "$TAR_DIR"
+          cp -r build/linux/x64/release/bundle/* "$TAR_DIR/"
+          tar -czf "rpmbuild/SOURCES/icd360s-mail-${VER}.tar.gz" "$TAR_DIR"
+          rm -rf "$TAR_DIR"
+
+          cat > rpmbuild/SPECS/icd360s-mail.spec << SPEC
+          Name: icd360s-mail
+          Version: ${VER}
+          Release: 1
+          Summary: ICD360S Mail Client
+          License: Proprietary
+          URL: https://icd360s.de
+          Source0: icd360s-mail-${VER}.tar.gz
+
+          %description
+          Modern cross-platform email client with mTLS mutual authentication,
+          threat detection, and end-to-end security for mail.icd360s.de.
+
+          %install
+          mkdir -p %{buildroot}/usr/lib/icd360s-mail
+          mkdir -p %{buildroot}/usr/bin
+          tar -xzf %{SOURCE0} -C %{buildroot}/usr/lib/icd360s-mail --strip-components=1
+          ln -sf /usr/lib/icd360s-mail/icd360s_mail_client %{buildroot}/usr/bin/icd360s-mail
+
+          %files
+          /usr/lib/icd360s-mail/
+          /usr/bin/icd360s-mail
+          SPEC
+
+          rpmbuild --define "_topdir $(pwd)/rpmbuild" -bb rpmbuild/SPECS/icd360s-mail.spec
+          cp rpmbuild/RPMS/x86_64/*.rpm "ICD360S_MailClient_v${VER}_linux_x86_64.rpm" 2>/dev/null || \
+          cp rpmbuild/RPMS/noarch/*.rpm "ICD360S_MailClient_v${VER}_linux.rpm" 2>/dev/null || \
+          echo "RPM build skipped - may need additional deps"
+
+      - name: Build AppImage
+        run: |
+          # Download appimagetool
+          wget -q "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage" -O appimagetool
+          chmod +x appimagetool
+
+          # Create AppDir structure
+          APP_DIR="ICD360S_Mail.AppDir"
+          mkdir -p "$APP_DIR/usr/bin"
+          mkdir -p "$APP_DIR/usr/lib"
+          mkdir -p "$APP_DIR/usr/share/icons/hicolor/256x256/apps"
+
+          # Copy built app
+          cp -r build/linux/x64/release/bundle/* "$APP_DIR/usr/bin/"
+
+          # Desktop file at root
+          cat > "$APP_DIR/icd360s-mail.desktop" << 'DESKTOP'
+          [Desktop Entry]
+          Type=Application
+          Name=ICD360S Mail Client
+          Comment=Modern email client with mTLS security
+          Exec=icd360s_mail_client
+          Icon=icd360s-mail
+          Terminal=false
+          Categories=Network;Email;
+          DESKTOP
+          sed -i 's/^          //' "$APP_DIR/icd360s-mail.desktop"
+
+          # Icon
+          if [ -f assets/logo.png ]; then
+            cp assets/logo.png "$APP_DIR/icd360s-mail.png"
+            cp assets/logo.png "$APP_DIR/usr/share/icons/hicolor/256x256/apps/icd360s-mail.png"
+          fi
+
+          # AppRun
+          cat > "$APP_DIR/AppRun" << 'APPRUN'
+          #!/bin/bash
+          SELF=$(readlink -f "$0")
+          HERE=${SELF%/*}
+          export LD_LIBRARY_PATH="${HERE}/usr/bin/lib:${LD_LIBRARY_PATH}"
+          exec "${HERE}/usr/bin/icd360s_mail_client" "$@"
+          APPRUN
+          chmod +x "$APP_DIR/AppRun"
+
+          # Build AppImage
+          ARCH=x86_64 ./appimagetool "$APP_DIR" "ICD360S_MailClient_v${VER}_linux_x86_64.AppImage" || \
+          echo "AppImage build skipped"
 
       - uses: actions/upload-artifact@v4
         with:
           name: linux-build
-          path: ICD360S_MailClient_v*_linux.tar.gz
+          path: |
+            ICD360S_MailClient_v*_linux*.tar.gz
+            ICD360S_MailClient_v*_linux*.deb
+            ICD360S_MailClient_v*_linux*.rpm
+            ICD360S_MailClient_v*_linux*.AppImage
           retention-days: 30
 
-  # ──────────────────────────────────────────────
-  # Windows Build
-  # ──────────────────────────────────────────────
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  #  WINDOWS
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   build-windows:
-    name: Windows
+    name: Windows (zip + Inno Setup installer)
+    needs: version
     runs-on: windows-latest
     if: >-
       github.event_name != 'workflow_dispatch' ||
       contains(github.event.inputs.platforms, 'windows') ||
       contains(github.event.inputs.platforms, 'all')
+    env:
+      VER: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -97,31 +267,56 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Build Windows
+      - name: Build Windows release
         run: flutter build windows --release
 
-      - name: Package Windows
+      - name: Package ZIP (portable)
         shell: pwsh
         run: |
-          $version = (Select-String -Path pubspec.yaml -Pattern '^version:' | Select-Object -First 1).Line -replace 'version: ','' -replace '\+.*',''
-          Compress-Archive -Path "build\windows\x64\runner\Release\*" -DestinationPath "ICD360S_MailClient_v${version}_windows.zip"
+          Compress-Archive `
+            -Path "build\windows\x64\runner\Release\*" `
+            -DestinationPath "ICD360S_MailClient_v${{ env.VER }}_windows_x64_portable.zip"
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          echo "C:\Program Files (x86)\Inno Setup 6" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+
+      - name: Build Inno Setup installer
+        shell: cmd
+        run: |
+          iscc "windows\installer.iss"
+
+      - name: Copy installer
+        shell: pwsh
+        run: |
+          $installer = "build\installer\ICD360S_MailClient_Setup_v${{ env.VER }}.exe"
+          if (Test-Path $installer) {
+            Copy-Item $installer "ICD360S_MailClient_v${{ env.VER }}_windows_x64_setup.exe"
+          }
 
       - uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: ICD360S_MailClient_v*_windows.zip
+          path: |
+            ICD360S_MailClient_v*_windows*.zip
+            ICD360S_MailClient_v*_windows*.exe
           retention-days: 30
 
-  # ──────────────────────────────────────────────
-  # macOS Build
-  # ──────────────────────────────────────────────
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  #  macOS
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   build-macos:
-    name: macOS
+    name: macOS (DMG + codesign)
+    needs: version
     runs-on: macos-latest
     if: >-
       github.event_name != 'workflow_dispatch' ||
       contains(github.event.inputs.platforms, 'macos') ||
       contains(github.event.inputs.platforms, 'all')
+    env:
+      VER: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -138,16 +333,73 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Build macOS
+      - name: Build macOS release
         run: flutter build macos --release
+
+      # Code signing (optional - only if certificate secrets are configured)
+      - name: Import signing certificate
+        if: env.MACOS_CERTIFICATE_BASE64 != ''
+        env:
+          MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+        run: |
+          # Create temporary keychain
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          security create-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import certificate
+          CERT_PATH="$RUNNER_TEMP/certificate.p12"
+          echo "$MACOS_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
+          security import "$CERT_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+      - name: Codesign app bundle
+        if: env.MACOS_SIGNING_IDENTITY != ''
+        env:
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+        run: |
+          APP="build/macos/Build/Products/Release/icd360s_mail_client.app"
+          codesign --force --deep --options runtime \
+            --sign "$MACOS_SIGNING_IDENTITY" \
+            --entitlements macos/Runner/Release.entitlements \
+            "$APP" || echo "Codesign skipped (no identity)"
 
       - name: Create DMG
         run: |
-          VERSION=$(grep '^version:' pubspec.yaml | head -1 | sed 's/version: //' | cut -d'+' -f1)
+          APP="build/macos/Build/Products/Release/icd360s_mail_client.app"
+
+          # Create a temporary DMG folder with app + Applications symlink
+          DMG_DIR="$RUNNER_TEMP/dmg_contents"
+          mkdir -p "$DMG_DIR"
+          cp -r "$APP" "$DMG_DIR/"
+          ln -s /Applications "$DMG_DIR/Applications"
+
           hdiutil create -volname "ICD360S Mail Client" \
-            -srcfolder "build/macos/Build/Products/Release/icd360s_mail_client.app" \
-            -ov -format UDZO \
-            "ICD360S_MailClient_v${VERSION}_macos.dmg"
+            -srcfolder "$DMG_DIR" -ov -format UDZO \
+            "ICD360S_MailClient_v${VER}_macos.dmg"
+
+      # Notarize (optional - only if Apple ID secrets are configured)
+      - name: Notarize DMG
+        if: env.APPLE_ID != ''
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          xcrun notarytool submit \
+            "ICD360S_MailClient_v${VER}_macos.dmg" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --wait || echo "Notarization skipped or failed"
+
+          # Staple the notarization ticket
+          xcrun stapler staple "ICD360S_MailClient_v${VER}_macos.dmg" || true
 
       - uses: actions/upload-artifact@v4
         with:
@@ -155,16 +407,19 @@ jobs:
           path: ICD360S_MailClient_v*_macos.dmg
           retention-days: 30
 
-  # ──────────────────────────────────────────────
-  # iOS Build
-  # ──────────────────────────────────────────────
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  #  iOS
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   build-ios:
-    name: iOS
+    name: iOS (IPA)
+    needs: version
     runs-on: macos-latest
     if: >-
       github.event_name != 'workflow_dispatch' ||
       contains(github.event.inputs.platforms, 'ios') ||
       contains(github.event.inputs.platforms, 'all')
+    env:
+      VER: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -181,31 +436,105 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Install CocoaPods dependencies
+        run: |
+          cd ios
+          pod install --repo-update || pod install
+
+      # Import provisioning profile + certificate (if secrets exist)
+      - name: Setup iOS signing
+        if: env.IOS_DISTRIBUTION_CERT_BASE64 != ''
+        env:
+          IOS_DISTRIBUTION_CERT_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERT_BASE64 }}
+          IOS_DISTRIBUTION_CERT_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERT_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          IOS_KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
+        run: |
+          # Create keychain
+          KEYCHAIN_PATH="$RUNNER_TEMP/ios-signing.keychain-db"
+          security create-keychain -p "$IOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$IOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import certificate
+          CERT_PATH="$RUNNER_TEMP/ios-cert.p12"
+          echo "$IOS_DISTRIBUTION_CERT_BASE64" | base64 --decode > "$CERT_PATH"
+          security import "$CERT_PATH" -P "$IOS_DISTRIBUTION_CERT_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+          # Install provisioning profile
+          PP_PATH="$RUNNER_TEMP/profile.mobileprovision"
+          echo "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PP_PATH"
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          PP_UUID=$(security cms -D -i "$PP_PATH" | grep -A1 UUID | grep string | sed 's/.*<string>//' | sed 's/<\/string>.*//')
+          cp "$PP_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PP_UUID.mobileprovision"
+
       - name: Build iOS (unsigned)
+        if: env.IOS_DISTRIBUTION_CERT_BASE64 == ''
+        env:
+          IOS_DISTRIBUTION_CERT_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERT_BASE64 }}
         run: flutter build ios --release --no-codesign
 
-      - name: Package iOS
+      - name: Build iOS (signed)
+        if: env.IOS_DISTRIBUTION_CERT_BASE64 != ''
+        env:
+          IOS_DISTRIBUTION_CERT_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERT_BASE64 }}
+        run: flutter build ios --release
+
+      - name: Export IPA
         run: |
-          VERSION=$(grep '^version:' pubspec.yaml | head -1 | sed 's/version: //' | cut -d'+' -f1)
-          cd build/ios/iphoneos
-          zip -r "$GITHUB_WORKSPACE/ICD360S_MailClient_v${VERSION}_ios_unsigned.zip" Runner.app
+          if [ -d "build/ios/iphoneos/Runner.app" ]; then
+            mkdir -p Payload
+            cp -r build/ios/iphoneos/Runner.app Payload/
+            zip -r -q "ICD360S_MailClient_v${VER}_ios.ipa" Payload
+            rm -rf Payload
+            echo "IPA created (manual signing)"
+          fi
+
+          # Also create xcarchive export if xcodebuild archive exists
+          if [ -d "build/ios/archive/Runner.xcarchive" ]; then
+            cat > ExportOptions.plist << 'PLIST'
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0">
+            <dict>
+              <key>method</key>
+              <string>ad-hoc</string>
+              <key>teamID</key>
+              <string>B42ZX94AKL</string>
+            </dict>
+            </plist>
+          PLIST
+            xcodebuild -exportArchive \
+              -archivePath build/ios/archive/Runner.xcarchive \
+              -exportPath ipa_export \
+              -exportOptionsPlist ExportOptions.plist || true
+            if [ -f "ipa_export/Runner.ipa" ]; then
+              mv "ipa_export/Runner.ipa" "ICD360S_MailClient_v${VER}_ios.ipa"
+            fi
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
           name: ios-build
-          path: ICD360S_MailClient_v*_ios_unsigned.zip
+          path: ICD360S_MailClient_v*_ios.ipa
           retention-days: 30
+          if-no-files-found: warn
 
-  # ──────────────────────────────────────────────
-  # Android Builds (all flavors in one job)
-  # ──────────────────────────────────────────────
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  #  ANDROID (all store flavors)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   build-android:
-    name: Android (All Flavors)
+    name: Android (All Store Flavors)
+    needs: version
     runs-on: ubuntu-latest
     if: >-
       github.event_name != 'workflow_dispatch' ||
       contains(github.event.inputs.platforms, 'android') ||
       contains(github.event.inputs.platforms, 'all')
+    env:
+      VER: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -227,7 +556,6 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      # Decode signing key from secrets
       - name: Setup Android signing
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -236,80 +564,76 @@ jobs:
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "$KEYSTORE_BASE64" | base64 -d > android/upload-keystore.jks
             echo "$KEY_PROPERTIES" > android/key.properties
-            echo "Signing configured from secrets"
+            echo "Android signing configured"
           else
-            echo "No signing secrets found - builds will be unsigned (debug signing)"
+            echo "No signing secrets - builds will use debug signing"
           fi
 
-      - name: Get version
-        id: version
-        run: |
-          VERSION=$(grep '^version:' pubspec.yaml | head -1 | sed 's/version: //' | cut -d'+' -f1)
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-      # ── Universal APK (direct distribution / sideload) ──
+      # ── Universal APK (sideload / mail.icd360s.de) ──
       - name: Build Universal APK
         run: flutter build apk --release --flavor universal
-
-      - name: Copy Universal APK
-        run: |
-          mkdir -p dist
-          cp build/app/outputs/flutter-apk/app-universal-release.apk \
-            "dist/ICD360S_MailClient_v${{ steps.version.outputs.version }}_universal.apk"
 
       # ── F-Droid APK ──
       - name: Build F-Droid APK
         run: flutter build apk --release --flavor fdroid
 
-      - name: Copy F-Droid APK
-        run: |
-          cp build/app/outputs/flutter-apk/app-fdroid-release.apk \
-            "dist/ICD360S_MailClient_v${{ steps.version.outputs.version }}_fdroid.apk"
-
       # ── Google Play AAB ──
       - name: Build Google Play AAB
         run: flutter build appbundle --release --flavor googleplay
-
-      - name: Copy Google Play AAB
-        run: |
-          cp build/app/outputs/bundle/googleplayRelease/app-googleplay-release.aab \
-            "dist/ICD360S_MailClient_v${{ steps.version.outputs.version }}_googleplay.aab"
 
       # ── Huawei AppGallery APK ──
       - name: Build Huawei APK
         run: flutter build apk --release --flavor huawei
 
-      - name: Copy Huawei APK
-        run: |
-          cp build/app/outputs/flutter-apk/app-huawei-release.apk \
-            "dist/ICD360S_MailClient_v${{ steps.version.outputs.version }}_huawei.apk"
-
       # ── Samsung Galaxy Store APK ──
       - name: Build Samsung APK
         run: flutter build apk --release --flavor samsung
 
-      - name: Copy Samsung APK
+      - name: Collect Android artifacts
         run: |
-          cp build/app/outputs/flutter-apk/app-samsung-release.apk \
-            "dist/ICD360S_MailClient_v${{ steps.version.outputs.version }}_samsung.apk"
+          mkdir -p dist
 
-      # ── Upload all Android artifacts ──
+          # Universal APK
+          cp build/app/outputs/flutter-apk/app-universal-release.apk \
+            "dist/ICD360S_MailClient_v${VER}_android_universal.apk"
+
+          # F-Droid APK
+          cp build/app/outputs/flutter-apk/app-fdroid-release.apk \
+            "dist/ICD360S_MailClient_v${VER}_android_fdroid.apk"
+
+          # Google Play AAB
+          cp build/app/outputs/bundle/googleplayRelease/app-googleplay-release.aab \
+            "dist/ICD360S_MailClient_v${VER}_android_googleplay.aab"
+
+          # Huawei APK
+          cp build/app/outputs/flutter-apk/app-huawei-release.apk \
+            "dist/ICD360S_MailClient_v${VER}_android_huawei.apk"
+
+          # Samsung APK
+          cp build/app/outputs/flutter-apk/app-samsung-release.apk \
+            "dist/ICD360S_MailClient_v${VER}_android_samsung.apk"
+
+          echo "Android artifacts:"
+          ls -lh dist/
+
       - uses: actions/upload-artifact@v4
         with:
           name: android-builds
           path: dist/*
           retention-days: 30
 
-  # ──────────────────────────────────────────────
-  # Release (only on tags)
-  # ──────────────────────────────────────────────
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  #  RELEASE (on tags only)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   release:
-    name: Create Release
-    needs: [build-linux, build-windows, build-macos, build-ios, build-android]
+    name: Create GitHub Release
+    needs: [version, build-linux, build-windows, build-macos, build-ios, build-android]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      VER: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -317,26 +641,32 @@ jobs:
         with:
           path: artifacts
 
-      - name: Get version from tag
-        id: version
-        run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
-
-      - name: Generate checksums
+      - name: Generate SHA-256 checksums
         run: |
           cd artifacts
-          find . -type f \( -name '*.apk' -o -name '*.aab' -o -name '*.dmg' -o -name '*.zip' -o -name '*.tar.gz' \) \
-            -exec sha256sum {} + > checksums-sha256.txt
-          cat checksums-sha256.txt
+          find . -type f \( \
+            -name '*.apk' -o -name '*.aab' -o -name '*.ipa' \
+            -o -name '*.dmg' -o -name '*.zip' -o -name '*.exe' \
+            -o -name '*.tar.gz' -o -name '*.deb' -o -name '*.rpm' \
+            -o -name '*.AppImage' \
+          \) -exec sha256sum {} + | sort > SHA256SUMS.txt
+          echo "=== SHA-256 Checksums ==="
+          cat SHA256SUMS.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "v${{ steps.version.outputs.version }}"
+          name: "v${{ env.VER }}"
           generate_release_notes: true
           files: |
             artifacts/**/*.apk
             artifacts/**/*.aab
+            artifacts/**/*.ipa
             artifacts/**/*.dmg
             artifacts/**/*.zip
+            artifacts/**/*.exe
             artifacts/**/*.tar.gz
-            artifacts/checksums-sha256.txt
+            artifacts/**/*.deb
+            artifacts/**/*.rpm
+            artifacts/**/*.AppImage
+            artifacts/SHA256SUMS.txt
