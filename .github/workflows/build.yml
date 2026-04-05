@@ -308,7 +308,7 @@ jobs:
   #  macOS
   # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   build-macos:
-    name: macOS (DMG + codesign)
+    name: macOS (DMG)
     needs: version
     runs-on: macos-latest
     if: >-
@@ -336,44 +336,11 @@ jobs:
       - name: Build macOS release
         run: flutter build macos --release
 
-      # Code signing (optional - only if certificate secrets are configured)
-      - name: Import signing certificate
-        if: env.MACOS_CERTIFICATE_BASE64 != ''
-        env:
-          MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
-          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-          MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
-        run: |
-          # Create temporary keychain
-          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
-          security create-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-          # Import certificate
-          CERT_PATH="$RUNNER_TEMP/certificate.p12"
-          echo "$MACOS_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
-          security import "$CERT_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" \
-            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-
-          security list-keychain -d user -s "$KEYCHAIN_PATH"
-
-      - name: Codesign app bundle
-        if: env.MACOS_SIGNING_IDENTITY != ''
-        env:
-          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
-        run: |
-          APP="build/macos/Build/Products/Release/icd360s_mail_client.app"
-          codesign --force --deep --options runtime \
-            --sign "$MACOS_SIGNING_IDENTITY" \
-            --entitlements macos/Runner/Release.entitlements \
-            "$APP" || echo "Codesign skipped (no identity)"
-
       - name: Create DMG
         run: |
           APP="build/macos/Build/Products/Release/icd360s_mail_client.app"
 
-          # Create a temporary DMG folder with app + Applications symlink
+          # DMG with app + Applications symlink (drag to install)
           DMG_DIR="$RUNNER_TEMP/dmg_contents"
           mkdir -p "$DMG_DIR"
           cp -r "$APP" "$DMG_DIR/"
@@ -382,24 +349,6 @@ jobs:
           hdiutil create -volname "ICD360S Mail Client" \
             -srcfolder "$DMG_DIR" -ov -format UDZO \
             "ICD360S_MailClient_v${VER}_macos.dmg"
-
-      # Notarize (optional - only if Apple ID secrets are configured)
-      - name: Notarize DMG
-        if: env.APPLE_ID != ''
-        env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-        run: |
-          xcrun notarytool submit \
-            "ICD360S_MailClient_v${VER}_macos.dmg" \
-            --apple-id "$APPLE_ID" \
-            --team-id "$APPLE_TEAM_ID" \
-            --password "$APPLE_APP_PASSWORD" \
-            --wait || echo "Notarization skipped or failed"
-
-          # Staple the notarization ticket
-          xcrun stapler staple "ICD360S_MailClient_v${VER}_macos.dmg" || true
 
       - uses: actions/upload-artifact@v4
         with:
@@ -411,7 +360,7 @@ jobs:
   #  iOS
   # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   build-ios:
-    name: iOS (IPA)
+    name: iOS (IPA unsigned)
     needs: version
     runs-on: macos-latest
     if: >-
@@ -441,46 +390,8 @@ jobs:
           cd ios
           pod install --repo-update || pod install
 
-      # Import provisioning profile + certificate (if secrets exist)
-      - name: Setup iOS signing
-        if: env.IOS_DISTRIBUTION_CERT_BASE64 != ''
-        env:
-          IOS_DISTRIBUTION_CERT_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERT_BASE64 }}
-          IOS_DISTRIBUTION_CERT_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERT_PASSWORD }}
-          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
-          IOS_KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
-        run: |
-          # Create keychain
-          KEYCHAIN_PATH="$RUNNER_TEMP/ios-signing.keychain-db"
-          security create-keychain -p "$IOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$IOS_KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-          # Import certificate
-          CERT_PATH="$RUNNER_TEMP/ios-cert.p12"
-          echo "$IOS_DISTRIBUTION_CERT_BASE64" | base64 --decode > "$CERT_PATH"
-          security import "$CERT_PATH" -P "$IOS_DISTRIBUTION_CERT_PASSWORD" \
-            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-          security list-keychain -d user -s "$KEYCHAIN_PATH"
-
-          # Install provisioning profile
-          PP_PATH="$RUNNER_TEMP/profile.mobileprovision"
-          echo "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PP_PATH"
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          PP_UUID=$(security cms -D -i "$PP_PATH" | grep -A1 UUID | grep string | sed 's/.*<string>//' | sed 's/<\/string>.*//')
-          cp "$PP_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$PP_UUID.mobileprovision"
-
       - name: Build iOS (unsigned)
-        if: env.IOS_DISTRIBUTION_CERT_BASE64 == ''
-        env:
-          IOS_DISTRIBUTION_CERT_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERT_BASE64 }}
         run: flutter build ios --release --no-codesign
-
-      - name: Build iOS (signed)
-        if: env.IOS_DISTRIBUTION_CERT_BASE64 != ''
-        env:
-          IOS_DISTRIBUTION_CERT_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERT_BASE64 }}
-        run: flutter build ios --release
 
       - name: Export IPA
         run: |
@@ -489,30 +400,6 @@ jobs:
             cp -r build/ios/iphoneos/Runner.app Payload/
             zip -r -q "ICD360S_MailClient_v${VER}_ios.ipa" Payload
             rm -rf Payload
-            echo "IPA created (manual signing)"
-          fi
-
-          # Also create xcarchive export if xcodebuild archive exists
-          if [ -d "build/ios/archive/Runner.xcarchive" ]; then
-            cat > ExportOptions.plist << 'PLIST'
-            <?xml version="1.0" encoding="UTF-8"?>
-            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-            <plist version="1.0">
-            <dict>
-              <key>method</key>
-              <string>ad-hoc</string>
-              <key>teamID</key>
-              <string>B42ZX94AKL</string>
-            </dict>
-            </plist>
-          PLIST
-            xcodebuild -exportArchive \
-              -archivePath build/ios/archive/Runner.xcarchive \
-              -exportPath ipa_export \
-              -exportOptionsPlist ExportOptions.plist || true
-            if [ -f "ipa_export/Runner.ipa" ]; then
-              mv "ipa_export/Runner.ipa" "ICD360S_MailClient_v${VER}_ios.ipa"
-            fi
           fi
 
       - uses: actions/upload-artifact@v4
