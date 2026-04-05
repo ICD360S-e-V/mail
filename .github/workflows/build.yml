@@ -1,0 +1,342 @@
+name: Build All Platforms
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: 'Platforms to build (comma-separated: linux,windows,macos,ios,android)'
+        required: false
+        default: 'all'
+
+# Prevent duplicate runs - only one build per branch/PR at a time
+# If a new push arrives while a build is running, the old one gets cancelled
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: '3.41.4'
+  JAVA_VERSION: '17'
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Linux Build
+  # ──────────────────────────────────────────────
+  build-linux:
+    name: Linux
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name != 'workflow_dispatch' ||
+      contains(github.event.inputs.platforms, 'linux') ||
+      contains(github.event.inputs.platforms, 'all')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y clang cmake git ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev libstdc++-12-dev
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Install enough_mail_fork dependencies
+        run: flutter pub get
+        working-directory: enough_mail_fork
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Linux
+        run: flutter build linux --release
+
+      - name: Package Linux
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | head -1 | sed 's/version: //' | cut -d'+' -f1)
+          cd build/linux/x64/release
+          tar -czf "$GITHUB_WORKSPACE/ICD360S_MailClient_v${VERSION}_linux.tar.gz" bundle/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-build
+          path: ICD360S_MailClient_v*_linux.tar.gz
+          retention-days: 30
+
+  # ──────────────────────────────────────────────
+  # Windows Build
+  # ──────────────────────────────────────────────
+  build-windows:
+    name: Windows
+    runs-on: windows-latest
+    if: >-
+      github.event_name != 'workflow_dispatch' ||
+      contains(github.event.inputs.platforms, 'windows') ||
+      contains(github.event.inputs.platforms, 'all')
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Install enough_mail_fork dependencies
+        run: flutter pub get
+        working-directory: enough_mail_fork
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Windows
+        run: flutter build windows --release
+
+      - name: Package Windows
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path pubspec.yaml -Pattern '^version:' | Select-Object -First 1).Line -replace 'version: ','' -replace '\+.*',''
+          Compress-Archive -Path "build\windows\x64\runner\Release\*" -DestinationPath "ICD360S_MailClient_v${version}_windows.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: ICD360S_MailClient_v*_windows.zip
+          retention-days: 30
+
+  # ──────────────────────────────────────────────
+  # macOS Build
+  # ──────────────────────────────────────────────
+  build-macos:
+    name: macOS
+    runs-on: macos-latest
+    if: >-
+      github.event_name != 'workflow_dispatch' ||
+      contains(github.event.inputs.platforms, 'macos') ||
+      contains(github.event.inputs.platforms, 'all')
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Install enough_mail_fork dependencies
+        run: flutter pub get
+        working-directory: enough_mail_fork
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build macOS
+        run: flutter build macos --release
+
+      - name: Create DMG
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | head -1 | sed 's/version: //' | cut -d'+' -f1)
+          hdiutil create -volname "ICD360S Mail Client" \
+            -srcfolder "build/macos/Build/Products/Release/icd360s_mail_client.app" \
+            -ov -format UDZO \
+            "ICD360S_MailClient_v${VERSION}_macos.dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-build
+          path: ICD360S_MailClient_v*_macos.dmg
+          retention-days: 30
+
+  # ──────────────────────────────────────────────
+  # iOS Build
+  # ──────────────────────────────────────────────
+  build-ios:
+    name: iOS
+    runs-on: macos-latest
+    if: >-
+      github.event_name != 'workflow_dispatch' ||
+      contains(github.event.inputs.platforms, 'ios') ||
+      contains(github.event.inputs.platforms, 'all')
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Install enough_mail_fork dependencies
+        run: flutter pub get
+        working-directory: enough_mail_fork
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build iOS (unsigned)
+        run: flutter build ios --release --no-codesign
+
+      - name: Package iOS
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | head -1 | sed 's/version: //' | cut -d'+' -f1)
+          cd build/ios/iphoneos
+          zip -r "$GITHUB_WORKSPACE/ICD360S_MailClient_v${VERSION}_ios_unsigned.zip" Runner.app
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-build
+          path: ICD360S_MailClient_v*_ios_unsigned.zip
+          retention-days: 30
+
+  # ──────────────────────────────────────────────
+  # Android Builds (all flavors in one job)
+  # ──────────────────────────────────────────────
+  build-android:
+    name: Android (All Flavors)
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name != 'workflow_dispatch' ||
+      contains(github.event.inputs.platforms, 'android') ||
+      contains(github.event.inputs.platforms, 'all')
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Install enough_mail_fork dependencies
+        run: flutter pub get
+        working-directory: enough_mail_fork
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Decode signing key from secrets
+      - name: Setup Android signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEY_PROPERTIES: ${{ secrets.ANDROID_KEY_PROPERTIES }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > android/upload-keystore.jks
+            echo "$KEY_PROPERTIES" > android/key.properties
+            echo "Signing configured from secrets"
+          else
+            echo "No signing secrets found - builds will be unsigned (debug signing)"
+          fi
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | head -1 | sed 's/version: //' | cut -d'+' -f1)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      # ── Universal APK (direct distribution / sideload) ──
+      - name: Build Universal APK
+        run: flutter build apk --release --flavor universal
+
+      - name: Copy Universal APK
+        run: |
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-universal-release.apk \
+            "dist/ICD360S_MailClient_v${{ steps.version.outputs.version }}_universal.apk"
+
+      # ── F-Droid APK ──
+      - name: Build F-Droid APK
+        run: flutter build apk --release --flavor fdroid
+
+      - name: Copy F-Droid APK
+        run: |
+          cp build/app/outputs/flutter-apk/app-fdroid-release.apk \
+            "dist/ICD360S_MailClient_v${{ steps.version.outputs.version }}_fdroid.apk"
+
+      # ── Google Play AAB ──
+      - name: Build Google Play AAB
+        run: flutter build appbundle --release --flavor googleplay
+
+      - name: Copy Google Play AAB
+        run: |
+          cp build/app/outputs/bundle/googleplayRelease/app-googleplay-release.aab \
+            "dist/ICD360S_MailClient_v${{ steps.version.outputs.version }}_googleplay.aab"
+
+      # ── Huawei AppGallery APK ──
+      - name: Build Huawei APK
+        run: flutter build apk --release --flavor huawei
+
+      - name: Copy Huawei APK
+        run: |
+          cp build/app/outputs/flutter-apk/app-huawei-release.apk \
+            "dist/ICD360S_MailClient_v${{ steps.version.outputs.version }}_huawei.apk"
+
+      # ── Samsung Galaxy Store APK ──
+      - name: Build Samsung APK
+        run: flutter build apk --release --flavor samsung
+
+      - name: Copy Samsung APK
+        run: |
+          cp build/app/outputs/flutter-apk/app-samsung-release.apk \
+            "dist/ICD360S_MailClient_v${{ steps.version.outputs.version }}_samsung.apk"
+
+      # ── Upload all Android artifacts ──
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-builds
+          path: dist/*
+          retention-days: 30
+
+  # ──────────────────────────────────────────────
+  # Release (only on tags)
+  # ──────────────────────────────────────────────
+  release:
+    name: Create Release
+    needs: [build-linux, build-windows, build-macos, build-ios, build-android]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          find . -type f \( -name '*.apk' -o -name '*.aab' -o -name '*.dmg' -o -name '*.zip' -o -name '*.tar.gz' \) \
+            -exec sha256sum {} + > checksums-sha256.txt
+          cat checksums-sha256.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "v${{ steps.version.outputs.version }}"
+          generate_release_notes: true
+          files: |
+            artifacts/**/*.apk
+            artifacts/**/*.aab
+            artifacts/**/*.dmg
+            artifacts/**/*.zip
+            artifacts/**/*.tar.gz
+            artifacts/checksums-sha256.txt

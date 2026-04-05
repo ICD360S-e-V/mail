@@ -31,8 +31,6 @@ android {
 
     defaultConfig {
         applicationId = "de.icd360s.mailclient"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -49,6 +47,35 @@ android {
             enableV2Signing = true
             enableV3Signing = true
             enableV4Signing = true
+        }
+    }
+
+    // Product flavors for different distribution channels
+    flavorDimensions += "store"
+    productFlavors {
+        create("universal") {
+            dimension = "store"
+            // Direct distribution (sideload / mail.icd360s.de)
+            // No store-specific changes needed
+        }
+        create("fdroid") {
+            dimension = "store"
+            // F-Droid: no proprietary dependencies, builds from source
+            applicationIdSuffix = ".fdroid"
+        }
+        create("googleplay") {
+            dimension = "store"
+            // Google Play: AAB required, Google handles app signing
+        }
+        create("huawei") {
+            dimension = "store"
+            // Huawei AppGallery: standard APK, no HMS required
+            applicationIdSuffix = ".huawei"
+        }
+        create("samsung") {
+            dimension = "store"
+            // Samsung Galaxy Store: standard APK
+            applicationIdSuffix = ".samsung"
         }
     }
 
