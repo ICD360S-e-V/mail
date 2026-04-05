@@ -1,0 +1,572 @@
+name: Release Build & Deploy
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  FLUTTER_VERSION: '3.41.4'
+  APP_NAME: ICD360S_MailClient
+
+permissions:
+  contents: write
+
+jobs:
+  # ─────────────────────────────────────────────
+  # STEP 1: Test & Analyze
+  # ─────────────────────────────────────────────
+  test:
+    name: Test & Analyze
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+
+      - name: Run tests
+        run: flutter test
+
+  # ─────────────────────────────────────────────
+  # STEP 2a: Build Android (all flavors)
+  # ─────────────────────────────────────────────
+  build-android:
+    name: Android (${{ matrix.flavor }})
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        flavor: [universal, playstore, samsung, huawei]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/upload-keystore.jks
+
+      - name: Create key.properties
+        run: |
+          cat > android/key.properties << EOF
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          storeFile=upload-keystore.jks
+          EOF
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Extract version
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Build APK
+        run: flutter build apk --flavor ${{ matrix.flavor }} --release
+
+      - name: Build AAB (Play Store only)
+        if: matrix.flavor == 'playstore'
+        run: flutter build appbundle --flavor ${{ matrix.flavor }} --release
+
+      - name: Rename artifacts
+        run: |
+          VERSION="${{ steps.version.outputs.tag }}"
+          mkdir -p artifacts
+
+          # APK
+          cp build/app/outputs/flutter-apk/app-${{ matrix.flavor }}-release.apk \
+             artifacts/${APP_NAME}_v${VERSION}_${{ matrix.flavor }}.apk
+
+          # AAB (playstore only)
+          if [ "${{ matrix.flavor }}" = "playstore" ]; then
+            cp build/app/outputs/bundle/playstoreRelease/app-playstore-release.aab \
+               artifacts/${APP_NAME}_v${VERSION}_playstore.aab
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-${{ matrix.flavor }}
+          path: artifacts/*
+
+  # ─────────────────────────────────────────────
+  # STEP 2b: Build iOS
+  # ─────────────────────────────────────────────
+  build-ios:
+    name: iOS
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Extract version
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Install Apple certificate and provisioning profile
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          # Create keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 20)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import certificate
+          CERT_PATH=$RUNNER_TEMP/certificate.p12
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
+          security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: \
+            -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+
+          # Install provisioning profile
+          PP_PATH=$RUNNER_TEMP/profile.mobileprovision
+          echo "$IOS_PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PP_PATH"
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< \
+            "$(security cms -D -i "$PP_PATH")")
+          cp "$PP_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"$UUID".mobileprovision
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build iOS
+        run: |
+          flutter build ipa --release \
+            --export-options-plist=ios/ExportOptions.plist || \
+          flutter build ipa --release
+
+      - name: Rename artifact
+        run: |
+          VERSION="${{ steps.version.outputs.tag }}"
+          mkdir -p artifacts
+          IPA=$(find build/ios/ipa -name "*.ipa" | head -1)
+          if [ -n "$IPA" ]; then
+            cp "$IPA" artifacts/${APP_NAME}_v${VERSION}.ipa
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios
+          path: artifacts/*
+
+  # ─────────────────────────────────────────────
+  # STEP 2c: Build macOS
+  # ─────────────────────────────────────────────
+  build-macos:
+    name: macOS
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Extract version
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Install Apple certificate (macOS)
+        if: env.APPLE_CERTIFICATE_BASE64 != ''
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 20)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          CERT_PATH=$RUNNER_TEMP/certificate.p12
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
+          security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: \
+            -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build macOS
+        run: flutter build macos --release
+
+      - name: Create DMG
+        run: |
+          VERSION="${{ steps.version.outputs.tag }}"
+          mkdir -p artifacts
+
+          hdiutil create -volname "ICD360S Mail Client" \
+            -srcfolder build/macos/Build/Products/Release/icd360s_mail_client.app \
+            -ov -format UDZO \
+            artifacts/${APP_NAME}_v${VERSION}.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: artifacts/*
+
+  # ─────────────────────────────────────────────
+  # STEP 2d: Build Windows + Inno Setup
+  # ─────────────────────────────────────────────
+  build-windows:
+    name: Windows
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Extract version
+        id: version
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build Windows
+        run: flutter build windows --release
+
+      - name: Build Inno Setup installer
+        run: |
+          iscc windows/installer.iss
+        shell: cmd
+
+      - name: Rename artifact
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.tag }}"
+          mkdir -p artifacts
+          cp build/installer/*.exe artifacts/${APP_NAME}_Setup_v${VERSION}.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: artifacts/*
+
+  # ─────────────────────────────────────────────
+  # STEP 2e: Build Linux (.deb, .rpm, .zip)
+  # ─────────────────────────────────────────────
+  build-linux:
+    name: Linux
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ninja-build cmake clang libgtk-3-dev \
+            rpm dpkg-dev
+
+      - name: Extract version
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build Linux
+        run: flutter build linux --release
+
+      - name: Create .zip
+        run: |
+          VERSION="${{ steps.version.outputs.tag }}"
+          mkdir -p artifacts
+          cd build/linux/x64/release/bundle
+          zip -r ../../../../../artifacts/${APP_NAME}_v${VERSION}_linux_x64.zip .
+
+      - name: Create .deb
+        run: |
+          VERSION="${{ steps.version.outputs.tag }}"
+          PKG_NAME="icd360s-mail-client"
+          DEB_ROOT="/tmp/deb-build/${PKG_NAME}_${VERSION}_amd64"
+
+          # Directory structure
+          mkdir -p "${DEB_ROOT}/DEBIAN"
+          mkdir -p "${DEB_ROOT}/opt/icd360s-mail-client"
+          mkdir -p "${DEB_ROOT}/usr/share/applications"
+          mkdir -p "${DEB_ROOT}/usr/bin"
+
+          # Copy app files
+          cp -r build/linux/x64/release/bundle/* "${DEB_ROOT}/opt/icd360s-mail-client/"
+
+          # Control file
+          cat > "${DEB_ROOT}/DEBIAN/control" << EOF
+          Package: ${PKG_NAME}
+          Version: ${VERSION}
+          Section: mail
+          Priority: optional
+          Architecture: amd64
+          Depends: libgtk-3-0, libblkid1, liblzma5
+          Maintainer: ICD360S e.V. <dev@icd360s.de>
+          Description: ICD360S Mail Client
+           Modern email client with mTLS security and threat detection.
+          Homepage: https://icd360s.de
+          EOF
+          # Remove leading spaces from control file
+          sed -i 's/^          //' "${DEB_ROOT}/DEBIAN/control"
+
+          # Desktop entry
+          cat > "${DEB_ROOT}/usr/share/applications/icd360s-mail-client.desktop" << EOF
+          [Desktop Entry]
+          Type=Application
+          Name=ICD360S Mail Client
+          Comment=Secure email client with mTLS
+          Exec=/opt/icd360s-mail-client/icd360s_mail_client
+          Icon=/opt/icd360s-mail-client/data/flutter_assets/assets/logo.png
+          Terminal=false
+          Categories=Network;Email;
+          MimeType=x-scheme-handler/mailto;
+          EOF
+
+          # Symlink
+          ln -sf /opt/icd360s-mail-client/icd360s_mail_client "${DEB_ROOT}/usr/bin/icd360s-mail-client"
+
+          # Build .deb
+          dpkg-deb --build "${DEB_ROOT}"
+          cp "${DEB_ROOT}.deb" "artifacts/${PKG_NAME}_${VERSION}_amd64.deb"
+
+      - name: Create .rpm
+        run: |
+          VERSION="${{ steps.version.outputs.tag }}"
+          PKG_NAME="icd360s-mail-client"
+
+          mkdir -p ~/rpmbuild/{SPECS,SOURCES,BUILD,RPMS,SRPMS}
+
+          # Create tarball
+          TARDIR="${PKG_NAME}-${VERSION}"
+          mkdir -p "/tmp/${TARDIR}"
+          cp -r build/linux/x64/release/bundle/* "/tmp/${TARDIR}/"
+          tar czf ~/rpmbuild/SOURCES/${TARDIR}.tar.gz -C /tmp "${TARDIR}"
+
+          # Spec file
+          cat > ~/rpmbuild/SPECS/${PKG_NAME}.spec << SPEC
+          Name:           ${PKG_NAME}
+          Version:        ${VERSION}
+          Release:        1%{?dist}
+          Summary:        ICD360S Mail Client - Secure email with mTLS
+          License:        Proprietary
+          URL:            https://icd360s.de
+          Source0:        %{name}-%{version}.tar.gz
+
+          Requires:       gtk3, libblkid, xz-libs
+
+          %description
+          Modern email client with mTLS security and threat detection.
+
+          %prep
+          %setup -q
+
+          %install
+          mkdir -p %{buildroot}/opt/icd360s-mail-client
+          cp -r * %{buildroot}/opt/icd360s-mail-client/
+
+          mkdir -p %{buildroot}/usr/bin
+          ln -sf /opt/icd360s-mail-client/icd360s_mail_client %{buildroot}/usr/bin/icd360s-mail-client
+
+          mkdir -p %{buildroot}/usr/share/applications
+          cat > %{buildroot}/usr/share/applications/icd360s-mail-client.desktop << DESKTOP
+          [Desktop Entry]
+          Type=Application
+          Name=ICD360S Mail Client
+          Comment=Secure email client with mTLS
+          Exec=/opt/icd360s-mail-client/icd360s_mail_client
+          Icon=/opt/icd360s-mail-client/data/flutter_assets/assets/logo.png
+          Terminal=false
+          Categories=Network;Email;
+          MimeType=x-scheme-handler/mailto;
+          DESKTOP
+
+          %files
+          /opt/icd360s-mail-client/
+          /usr/bin/icd360s-mail-client
+          /usr/share/applications/icd360s-mail-client.desktop
+          SPEC
+
+          # Build RPM
+          rpmbuild -bb ~/rpmbuild/SPECS/${PKG_NAME}.spec
+          cp ~/rpmbuild/RPMS/x86_64/*.rpm "artifacts/${PKG_NAME}-${VERSION}-1.x86_64.rpm"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: artifacts/*
+
+  # ─────────────────────────────────────────────
+  # STEP 3: Deploy to Server + GitHub Release
+  # ─────────────────────────────────────────────
+  deploy:
+    name: Deploy
+    needs: [build-android, build-ios, build-macos, build-windows, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract version
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: all-artifacts
+
+      - name: List all artifacts
+        run: find all-artifacts -type f | sort
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p 36000 mail.icd360s.de >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Create directories & deploy
+        env:
+          SSH_CMD: ssh -i ~/.ssh/deploy_key -p 36000 -o StrictHostKeyChecking=accept-new root@mail.icd360s.de
+          SCP_CMD: scp -i ~/.ssh/deploy_key -P 36000 -o StrictHostKeyChecking=accept-new
+        run: |
+          VERSION="${{ steps.version.outputs.tag }}"
+
+          # Create directory structure on server
+          $SSH_CMD "mkdir -p /var/www/html/download/{android/{universal,playstore,samsung,huawei},ios,macos,windows,linux/{deb,rpm,zip}}"
+
+          # ── Android ──
+          for flavor in universal playstore samsung huawei; do
+            APK=$(find all-artifacts/android-${flavor} -name "*.apk" 2>/dev/null | head -1)
+            if [ -n "$APK" ]; then
+              $SCP_CMD "$APK" root@mail.icd360s.de:/var/www/html/download/android/${flavor}/
+            fi
+          done
+
+          # AAB (playstore)
+          AAB=$(find all-artifacts/android-playstore -name "*.aab" 2>/dev/null | head -1)
+          if [ -n "$AAB" ]; then
+            $SCP_CMD "$AAB" root@mail.icd360s.de:/var/www/html/download/android/playstore/
+          fi
+
+          # ── iOS ──
+          IPA=$(find all-artifacts/ios -name "*.ipa" 2>/dev/null | head -1)
+          if [ -n "$IPA" ]; then
+            $SCP_CMD "$IPA" root@mail.icd360s.de:/var/www/html/download/ios/
+          fi
+
+          # ── macOS ──
+          DMG=$(find all-artifacts/macos -name "*.dmg" 2>/dev/null | head -1)
+          if [ -n "$DMG" ]; then
+            $SCP_CMD "$DMG" root@mail.icd360s.de:/var/www/html/download/macos/
+          fi
+
+          # ── Windows ──
+          EXE=$(find all-artifacts/windows -name "*.exe" 2>/dev/null | head -1)
+          if [ -n "$EXE" ]; then
+            $SCP_CMD "$EXE" root@mail.icd360s.de:/var/www/html/download/windows/
+          fi
+
+          # ── Linux ──
+          DEB=$(find all-artifacts/linux -name "*.deb" 2>/dev/null | head -1)
+          RPM=$(find all-artifacts/linux -name "*.rpm" 2>/dev/null | head -1)
+          ZIP=$(find all-artifacts/linux -name "*.zip" 2>/dev/null | head -1)
+
+          [ -n "$DEB" ] && $SCP_CMD "$DEB" root@mail.icd360s.de:/var/www/html/download/linux/deb/
+          [ -n "$RPM" ] && $SCP_CMD "$RPM" root@mail.icd360s.de:/var/www/html/download/linux/rpm/
+          [ -n "$ZIP" ] && $SCP_CMD "$ZIP" root@mail.icd360s.de:/var/www/html/download/linux/zip/
+
+      - name: Update version.json on server
+        env:
+          SSH_CMD: ssh -i ~/.ssh/deploy_key -p 36000 -o StrictHostKeyChecking=accept-new root@mail.icd360s.de
+        run: |
+          VERSION="${{ steps.version.outputs.tag }}"
+          BASE="https://mail.icd360s.de/download"
+
+          $SSH_CMD "cat > /var/www/html/updates/version.json << 'VEOF'
+          {
+            \"version\": \"${VERSION}\",
+            \"download_url\": \"${BASE}/windows/${APP_NAME}_Setup_v${VERSION}.exe\",
+            \"download_url_macos\": \"${BASE}/macos/${APP_NAME}_v${VERSION}.dmg\",
+            \"download_url_android\": \"${BASE}/android/universal/${APP_NAME}_v${VERSION}_universal.apk\",
+            \"download_url_linux_deb\": \"${BASE}/linux/deb/icd360s-mail-client_${VERSION}_amd64.deb\",
+            \"download_url_linux_rpm\": \"${BASE}/linux/rpm/icd360s-mail-client-${VERSION}-1.x86_64.rpm\",
+            \"download_url_linux_zip\": \"${BASE}/linux/zip/${APP_NAME}_v${VERSION}_linux_x64.zip\",
+            \"download_url_ios\": \"${BASE}/ios/${APP_NAME}_v${VERSION}.ipa\",
+            \"changelog\": \"Release v${VERSION}\"
+          }
+          VEOF"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.tag }}"
+
+          # Collect all artifacts into one folder
+          mkdir -p release-assets
+          find all-artifacts -type f -exec cp {} release-assets/ \;
+
+          # Create release with all assets
+          gh release create "v${VERSION}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "v${VERSION}" \
+            --generate-notes \
+            release-assets/*
