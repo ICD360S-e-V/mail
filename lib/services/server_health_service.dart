@@ -110,8 +110,21 @@ class ServerHealthService {
   /// Check IP blacklist
   Future<HealthCheckResult> _checkIpBlacklistAsync(bool isIpv4) async {
     try {
-      // Hardcoded server IPs
-      final ip = isIpv4 ? '49.13.174.172' : '2a01:4f8:c0c:fd22::1';
+      // Resolve server IP dynamically via DNS
+      final addresses = await InternetAddress.lookup('mail.$domain');
+      final ip = addresses
+          .where((a) => isIpv4
+              ? a.type == InternetAddressType.IPv4
+              : a.type == InternetAddressType.IPv6)
+          .map((a) => a.address)
+          .firstOrNull;
+      if (ip == null) {
+        return HealthCheckResult(
+          status: 'ERROR',
+          color: 'Orange',
+          message: 'No ${isIpv4 ? "IPv4" : "IPv6"} address found for mail.$domain',
+        );
+      }
 
       final blacklists = isIpv4
           ? [
