@@ -366,9 +366,9 @@ jobs:
           cp -r build/ios/iphoneos/Runner.app build/ios/Payload/
           cd build/ios && zip -r ../icd360s-mail.ipa Payload/
 
-      - name: Disable macOS code signing
+      - name: Configure macOS signing for CI
         run: |
-          # Disable code signing in project.pbxproj for CI
+          # Set manual signing without team (ad-hoc will be applied post-build)
           sed -i '' 's/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g' macos/Runner.xcodeproj/project.pbxproj
           sed -i '' 's/"CODE_SIGN_IDENTITY\[sdk=macosx\*\]" = "Apple Development"/"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-"/g' macos/Runner.xcodeproj/project.pbxproj
           sed -i '' 's/DEVELOPMENT_TEAM = B42ZX94AKL/DEVELOPMENT_TEAM = ""/g' macos/Runner.xcodeproj/project.pbxproj
@@ -376,6 +376,10 @@ jobs:
       - name: Build macOS
         run: |
           flutter build macos --release
+
+      - name: Ad-hoc sign macOS app
+        run: |
+          codesign --force --deep --sign - build/macos/Build/Products/Release/icd360s_mail_client.app
 
       - name: Create macOS .dmg
         run: |
