@@ -76,9 +76,14 @@ class UpdateService {
 
   /// Download and install update automatically with progress
   static Future<bool> downloadAndInstallAuto(UpdateInfo updateInfo) async {
-    // On mobile platforms, open download URL in browser for native install
-    if (Platform.isAndroid || Platform.isIOS) {
+    // iOS: no self-update possible, open browser
+    if (Platform.isIOS) {
       return _updateViaBrowser(updateInfo);
+    }
+
+    // Android: download APK then trigger system installer
+    if (Platform.isAndroid) {
+      return _installAndroid(updateInfo);
     }
 
     try {
@@ -261,7 +266,51 @@ class UpdateService {
     }
   }
 
-  /// Update on Android/iOS: open the download URL in browser for native APK install
+  /// Android: Download APK to Downloads, then open system installer via content URI
+  static Future<bool> _installAndroid(UpdateInfo updateInfo) async {
+    try {
+      final l10nService = LocalizationService.instance;
+      LoggerService.log('UPDATE', 'Downloading APK for Android: ${updateInfo.downloadUrl}');
+
+      // Download APK
+      final downloadedFile = await _downloadWithProgress(updateInfo, l10nService);
+      if (downloadedFile == null) return false;
+
+      // Move APK to a location accessible by the system installer
+      // Use external storage Downloads directory
+      final downloadsDir = Directory('/storage/emulated/0/Download');
+      final apkName = 'ICD360S_MailClient_v${updateInfo.version}.apk';
+      final apkDest = File('${downloadsDir.path}/$apkName');
+      await downloadedFile.copy(apkDest.path);
+      await downloadedFile.delete();
+
+      LoggerService.log('UPDATE', 'APK saved to ${apkDest.path}');
+
+      onProgress?.call(100, 100, l10nService.getText(
+        (l10n) => l10n.updateInstalling,
+        'Opening installer... Please tap Install when prompted.'
+      ));
+
+      // Open APK with system installer via content:// URI
+      // Using url_launcher with file:// won't work on Android 7+ (needs FileProvider)
+      // Instead, use intent via Process to trigger install
+      await Process.run('am', [
+        'start', '-a', 'android.intent.action.VIEW',
+        '-t', 'application/vnd.android.package-archive',
+        '-d', 'file://${apkDest.path}',
+        '--grant-read-uri-permission',
+      ]);
+
+      LoggerService.log('UPDATE', 'Triggered APK installer for ${apkDest.path}');
+      return true;
+    } catch (ex, stackTrace) {
+      LoggerService.logError('UPDATE', ex, stackTrace);
+      // Fallback to browser download
+      return _updateViaBrowser(updateInfo);
+    }
+  }
+
+  /// Update on iOS: open the download URL in browser (no self-update possible)
   static Future<bool> _updateViaBrowser(UpdateInfo updateInfo) async {
     try {
       LoggerService.log('UPDATE', 'Opening update URL in browser: ${updateInfo.downloadUrl}');
