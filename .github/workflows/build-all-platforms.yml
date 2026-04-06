@@ -276,12 +276,13 @@ jobs:
 
       - name: Create key.properties
         run: |
-          cat > android/key.properties << EOF
+          cat > android/key.properties <<'KEYEOF'
           storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
           keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
-          storeFile=upload-keystore.jks
-          EOF
+          storeFile=../upload-keystore.jks
+          KEYEOF
+          sed -i 's/^          //' android/key.properties
 
       - name: Build Android ${{ matrix.flavor }} ${{ matrix.format }}
         run: |
