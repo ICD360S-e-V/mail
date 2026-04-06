@@ -1,7 +1,7 @@
 # ICD360S Mail Client - Documentatie
 
 **Actualizat:** 6 Aprilie 2026
-**Versiune Curenta:** 2.17.11 (Cross-Platform)
+**Versiune Curenta:** 2.18.0 (Cross-Platform)
 
 ---
 
@@ -410,6 +410,7 @@ openssl x509 -in /etc/ssl/icd360s-user-certs/<USERNAME>/cert.pem -noout -dates -
 
 | Versiune | Data | Highlights |
 |----------|------|------------|
+| 2.18.0 | 6 Apr 2026 | Security Audit Release: certificate API authentication, TLS exact DN validation, mandatory SHA-256 updates, CSPRNG salt, rate limiting, ProGuard/R8, certificate pinning, info disclosure cleanup, CLAUDE.md redacted |
 | 2.17.11 | 6 Apr 2026 | Security audit fixes: TLS validation, salt CSPRNG, rate limiting, ProGuard, certificate pinning, info disclosure cleanup |
 | 2.17.2 | 4 Apr 2026 | GrapheneOS Fix: locale fallback, l10nOf() helper, CupertinoLocalizations |
 | 2.17.1 | 4 Apr 2026 | GrapheneOS Compatibility: Impeller dezactivat (Skia), edge-to-edge display |
@@ -440,7 +441,7 @@ openssl x509 -in /etc/ssl/icd360s-user-certs/<USERNAME>/cert.pem -noout -dates -
 - [ ] Android/iOS testing si polish
 - [ ] Localizare completa German/Russian/Ukrainian (.arb files)
 - [ ] Enable macOS App Sandbox cu entitlements corecte
-- [ ] Adauga autentificare la Certificate API (nu doar username)
+- [x] Adauga autentificare la Certificate API (Dovecot backend, 6 Apr 2026)
 
 ---
 
