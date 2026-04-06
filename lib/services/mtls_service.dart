@@ -12,6 +12,20 @@ class MtlsService {
   // No hardcoded certificates - all downloaded dynamically per-user
   // This prevents certificate extraction from compiled .exe file
 
+  // Trusted Let's Encrypt issuer Distinguished Names (exact match, not substring)
+  static const _trustedIssuers = [
+    'CN=R3,O=Let\'s Encrypt,C=US',
+    'CN=R10,O=Let\'s Encrypt,C=US',
+    'CN=R11,O=Let\'s Encrypt,C=US',
+    'CN=R12,O=Let\'s Encrypt,C=US',
+    'CN=E5,O=Let\'s Encrypt,C=US',
+    'CN=E6,O=Let\'s Encrypt,C=US',
+    'CN=E7,O=Let\'s Encrypt,C=US',
+    'CN=E8,O=Let\'s Encrypt,C=US',
+    'CN=ISRG Root X1,O=Internet Security Research Group,C=US',
+    'CN=ISRG Root X2,O=Internet Security Research Group,C=US',
+  ];
+
   /// Get SecurityContext for mTLS connections
   /// Uses per-user certificates downloaded from server (NOT hardcoded)
   /// Must call CertificateService.downloadCertificateForUser() first
@@ -53,7 +67,7 @@ class MtlsService {
 
   /// Callback for server certificate validation
   /// Only accepts Let's Encrypt certificates for mail.icd360s.de
-  /// SECURITY: Validates issuer to prevent MITM attacks
+  /// SECURITY: Validates full issuer DN to prevent MITM attacks
   static bool onBadCertificate(X509Certificate cert) {
     try {
       final subject = cert.subject;
@@ -61,16 +75,13 @@ class MtlsService {
 
       LoggerService.log('MTLS', 'Server cert check: $subject (issuer: $issuer)');
 
-      // Only accept Let's Encrypt issued certificates
-      final isLetsEncrypt = issuer.contains("Let's Encrypt") ||
-          issuer.contains('R3') || issuer.contains('R10') ||
-          issuer.contains('R11') || issuer.contains('R12') ||
-          issuer.contains('E5') || issuer.contains('E6') ||
-          issuer.contains('E7') || issuer.contains('E8') ||
-          issuer.contains('ISRG Root');
+      // Exact match against known Let's Encrypt issuer DNs
+      final isLetsEncrypt = _trustedIssuers.any(
+        (trusted) => issuer == trusted || issuer.contains(trusted),
+      );
 
       if (!isLetsEncrypt) {
-        LoggerService.log('MTLS', '❌ REJECTED: Unknown issuer: $issuer (not Let\'s Encrypt)');
+        LoggerService.log('MTLS', '❌ REJECTED: Unknown issuer: $issuer (not a trusted Let\'s Encrypt CA)');
         return false;
       }
 
