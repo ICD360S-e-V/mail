@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'logger_service.dart';
 import 'update_service.dart';
@@ -12,19 +13,37 @@ class LogUploadService {
   static String? _deviceId;
   static bool _loggingEnabled = false;
 
-  /// Get or create device ID
+  // Trusted Let's Encrypt issuer DNs
+  static const _trustedIssuers = [
+    'CN=R3,O=Let\'s Encrypt,C=US',
+    'CN=R10,O=Let\'s Encrypt,C=US',
+    'CN=R11,O=Let\'s Encrypt,C=US',
+    'CN=R12,O=Let\'s Encrypt,C=US',
+    'CN=E5,O=Let\'s Encrypt,C=US',
+    'CN=E6,O=Let\'s Encrypt,C=US',
+    'CN=E7,O=Let\'s Encrypt,C=US',
+    'CN=E8,O=Let\'s Encrypt,C=US',
+    'CN=ISRG Root X1,O=Internet Security Research Group,C=US',
+    'CN=ISRG Root X2,O=Internet Security Research Group,C=US',
+  ];
+
+  /// Validate server certificate
+  static bool _validateCertificate(X509Certificate cert, String host, int port) {
+    if (host != 'mail.icd360s.de') return false;
+    final issuer = cert.issuer;
+    return _trustedIssuers.any(
+      (trusted) => issuer == trusted || issuer.contains(trusted),
+    );
+  }
+
+  /// Get or create device ID (using CSPRNG, not PII)
   static Future<String> getDeviceId() async {
     if (_deviceId != null) return _deviceId!;
 
     try {
-      // Generate device ID based on computer name + username (cross-platform)
-      final platform = PlatformService.instance;
-      final computerName = platform.computerName;
-      final username = platform.username;
-      final combined = '$computerName-$username-${DateTime.now().millisecondsSinceEpoch}';
-
-      // Hash to create unique ID
-      final bytes = utf8.encode(combined);
+      // Generate anonymous device ID using secure random
+      final random = Random.secure();
+      final bytes = List<int>.generate(16, (_) => random.nextInt(256));
       final hash = sha256.convert(bytes);
       _deviceId = hash.toString().substring(0, 16);
 
@@ -67,8 +86,7 @@ class LogUploadService {
       LoggerService.log('LOG_UPLOAD', 'Uploading ${logs.length} log entries to server');
 
       final client = HttpClient()
-        ..badCertificateCallback = (cert, host, port) =>
-            host == 'mail.icd360s.de' && (cert.issuer.contains("Let's Encrypt") || cert.issuer.contains('ISRG Root'));
+        ..badCertificateCallback = _validateCertificate;
       try {
         final request = await client.postUrl(Uri.parse(uploadUrl));
         request.headers.set('Content-Type', 'application/json; charset=utf-8');
