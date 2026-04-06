@@ -12,6 +12,7 @@ concurrency:
 env:
   FLUTTER_VERSION: "3.41.4"
   JAVA_VERSION: "17"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   # ============================================================
@@ -657,7 +658,7 @@ jobs:
           ls -lah release/
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v2.3.2
         with:
           files: release/*
           generate_release_notes: true
