@@ -132,7 +132,7 @@ class _MainWindowState extends State<MainWindow> {
     // Re-download certificates for all accounts
     for (final account in emailProvider.accounts) {
       try {
-        final success = await CertificateService.downloadCertificateForUser(account.username);
+        final success = await CertificateService.downloadCertificateForUser(account.username, password: account.password ?? '');
         if (success) {
           LoggerService.log('SECURITY', '✓ Certificate re-downloaded for ${account.username}');
         } else {
