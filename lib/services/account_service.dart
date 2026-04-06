@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path/path.dart' as p;
@@ -81,11 +82,21 @@ class AccountService {
     }
   }
 
-  /// Derive encryption key from machine-specific info
+  /// Derive encryption key from a per-installation random secret
+  /// Falls back to machine info if secret doesn't exist yet (legacy compat)
   List<int> _deriveKey() {
-    final platform = PlatformService.instance;
-    final seed = '${platform.computerName}-${platform.username}-icd360s-key';
-    return sha256.convert(utf8.encode(seed)).bytes;
+    // Try to read stored random key
+    final keyFile = File(p.join(p.dirname(_passwordsFallbackPath!), '.enc_key'));
+    if (keyFile.existsSync()) {
+      final storedKey = keyFile.readAsStringSync().trim();
+      return sha256.convert(utf8.encode(storedKey)).bytes;
+    }
+    // First run or migration: generate random key and store it
+    final random = Random.secure();
+    final randomBytes = List<int>.generate(32, (_) => random.nextInt(256));
+    final randomKey = base64Encode(randomBytes);
+    keyFile.writeAsStringSync(randomKey);
+    return sha256.convert(utf8.encode(randomKey)).bytes;
   }
 
   /// Save password to fallback file
