@@ -435,7 +435,6 @@ class EmailProvider with ChangeNotifier {
 
         // Update folder count
         account.folderCounts['INBOX'] = newEmails.length;
-        notifyListeners();
       } catch (ex, stackTrace) {
         LoggerService.logError('AUTO_CHECK', ex, stackTrace);
         // Check if it's a network error - abort remaining accounts
@@ -447,6 +446,9 @@ class EmailProvider with ChangeNotifier {
         }
       }
     }
+
+    // Batch UI update: notify once after all accounts processed (not per-account)
+    notifyListeners();
   }
 
   /// Send email
