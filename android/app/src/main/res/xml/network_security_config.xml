@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Block all cleartext (HTTP) traffic -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- Certificate pinning for mail server -->
+    <domain-config>
+        <domain includeSubdomains="true">mail.icd360s.de</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+        <!-- Pin Let's Encrypt ISRG Root X1 and intermediate R3/R10 -->
+        <pin-set expiration="2027-01-01">
+            <!-- ISRG Root X1 -->
+            <pin digest="SHA-256">C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M=</pin>
+            <!-- Let's Encrypt R3 -->
+            <pin digest="SHA-256">jQJTbIh0grw0/1TkHSumWb+Fs0Ggogr621gT3PvPKG0=</pin>
+            <!-- Let's Encrypt R10 (newer intermediate) -->
+            <pin digest="SHA-256">e0IRz5Tio3GA1Xs6lUhB3aEQ6yz3qnYJpHKqJQAQnKY=</pin>
+        </pin-set>
+    </domain-config>
+</network-security-config>
