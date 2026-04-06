@@ -32,9 +32,8 @@ jobs:
       - name: Compute platform hashes
         id: hashes
         run: |
-          # Hash shared code (lib/, pubspec.*, assets/) + enough_mail_fork submodule ref
-          FORK_REF=$(git ls-tree HEAD enough_mail_fork 2>/dev/null | awk '{print $3}' || echo "none")
-          SHARED_HASH=$(echo "$FORK_REF" | cat - <(find lib/ pubspec.yaml pubspec.lock assets/ -type f 2>/dev/null | sort | xargs cat 2>/dev/null) | sha256sum | cut -d' ' -f1)
+          # Hash shared code (lib/, pubspec.*, assets/, enough_mail_fork/)
+          SHARED_HASH=$(find lib/ pubspec.yaml pubspec.lock assets/ enough_mail_fork/ -type f 2>/dev/null | sort | xargs cat 2>/dev/null | sha256sum | cut -d' ' -f1)
           echo "shared_hash=$SHARED_HASH" >> "$GITHUB_OUTPUT"
 
           # Hash platform-specific dirs
@@ -206,7 +205,7 @@ jobs:
         if: success()
         id: hashes
         run: |
-          SHARED_HASH=$(find lib/ pubspec.yaml pubspec.lock assets/ -type f 2>/dev/null | sort | xargs cat 2>/dev/null | sha256sum | cut -d' ' -f1)
+          SHARED_HASH=$(find lib/ pubspec.yaml pubspec.lock assets/ enough_mail_fork/ -type f 2>/dev/null | sort | xargs cat 2>/dev/null | sha256sum | cut -d' ' -f1)
           LINUX_HASH=$(find linux/ -type f | sort | xargs cat | sha256sum | cut -d' ' -f1)
           echo "linux_hash=${SHARED_HASH:0:16}${LINUX_HASH:0:16}" >> "$GITHUB_OUTPUT"
 
@@ -318,7 +317,7 @@ jobs:
       - name: Compute Android hash
         id: hashes
         run: |
-          SHARED_HASH=$(find lib/ pubspec.yaml pubspec.lock assets/ -type f 2>/dev/null | sort | xargs cat 2>/dev/null | sha256sum | cut -d' ' -f1)
+          SHARED_HASH=$(find lib/ pubspec.yaml pubspec.lock assets/ enough_mail_fork/ -type f 2>/dev/null | sort | xargs cat 2>/dev/null | sha256sum | cut -d' ' -f1)
           ANDROID_HASH=$(find android/ -type f | sort | xargs cat | sha256sum | cut -d' ' -f1)
           echo "android_hash=${SHARED_HASH:0:16}${ANDROID_HASH:0:16}" >> "$GITHUB_OUTPUT"
 
@@ -403,7 +402,7 @@ jobs:
         if: success()
         id: hashes
         run: |
-          SHARED_HASH=$(find lib/ pubspec.yaml pubspec.lock assets/ -type f 2>/dev/null | sort | xargs cat 2>/dev/null | sha256sum | cut -d' ' -f1)
+          SHARED_HASH=$(find lib/ pubspec.yaml pubspec.lock assets/ enough_mail_fork/ -type f 2>/dev/null | sort | xargs cat 2>/dev/null | sha256sum | cut -d' ' -f1)
           APPLE_HASH=$(find ios/ macos/ -type f | sort | xargs cat | sha256sum | cut -d' ' -f1)
           echo "apple_hash=${SHARED_HASH:0:16}${APPLE_HASH:0:16}" >> "$GITHUB_OUTPUT"
 
@@ -459,7 +458,7 @@ jobs:
         id: hashes
         shell: bash
         run: |
-          SHARED_HASH=$(find lib/ pubspec.yaml pubspec.lock assets/ -type f 2>/dev/null | sort | xargs cat 2>/dev/null | sha256sum | cut -d' ' -f1)
+          SHARED_HASH=$(find lib/ pubspec.yaml pubspec.lock assets/ enough_mail_fork/ -type f 2>/dev/null | sort | xargs cat 2>/dev/null | sha256sum | cut -d' ' -f1)
           WINDOWS_HASH=$(find windows/ -type f | sort | xargs cat | sha256sum | cut -d' ' -f1)
           echo "windows_hash=${SHARED_HASH:0:16}${WINDOWS_HASH:0:16}" >> "$GITHUB_OUTPUT"
 
@@ -495,14 +494,14 @@ jobs:
         run: |
           DEPLOY_DIR="deploy/downloads/mail"
 
-          # Android - per flavor directories
+          # Android - per flavor directories (split-per-abi generates multiple APKs)
           for flavor in universal fdroid googleplay samsung huawei; do
             mkdir -p "${DEPLOY_DIR}/android/${flavor}"
             if [ -d "artifacts/android-${flavor}-apk" ]; then
-              APK=$(find "artifacts/android-${flavor}-apk" -name "*.apk" | head -1)
-              if [ -n "$APK" ]; then
-                cp "$APK" "${DEPLOY_DIR}/android/${flavor}/icd360s-mail.apk"
-              fi
+              find "artifacts/android-${flavor}-apk" -name "*.apk" | while read APK; do
+                BASENAME=$(basename "$APK")
+                cp "$APK" "${DEPLOY_DIR}/android/${flavor}/${BASENAME}"
+              done
             fi
           done
 
@@ -571,6 +570,10 @@ jobs:
           # Create directory structure on server
           ssh -i ~/.ssh/vps_key -p 36000 root@mail.icd360s.de \
             "mkdir -p /var/www/html/downloads/mail/{android/{universal,fdroid,googleplay,samsung,huawei},linux,windows,macos,ios}"
+
+          # Clean old APKs before uploading new ones
+          ssh -i ~/.ssh/vps_key -p 36000 root@mail.icd360s.de \
+            "find /var/www/html/downloads/mail/android -name '*.apk' -delete 2>/dev/null; true"
 
           # Upload all files
           scp -i ~/.ssh/vps_key -P 36000 -r deploy/downloads/mail/* root@mail.icd360s.de:/var/www/html/downloads/mail/
