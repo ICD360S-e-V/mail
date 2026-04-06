@@ -85,7 +85,21 @@ class _ChangelogWindowState extends State<ChangelogWindow> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSection(theme, '🆕 Version 2.17.11 - 6 Apr 2026', [
+          _buildSection(theme, '🆕 Version 2.18.0 - 6 Apr 2026', [
+            'Security - Certificate API now requires password authentication (Dovecot backend)',
+            'Security - TLS certificate validation: exact issuer DN matching (prevents MITM)',
+            'Security - Auto-update: SHA-256 hash verification mandatory, TLS issuer validation',
+            'Security - Master password: CSPRNG salt (Random.secure) + rate limiting (5 attempts, 60s lockout)',
+            'Security - Android: allowBackup=false, network_security_config with certificate pinning, R8/ProGuard enabled',
+            'Security - Fallback password storage: per-install random key instead of predictable XOR',
+            'Security - Server health: DNS lookup instead of hardcoded IPs',
+            'Security - Log upload: anonymous device ID (no PII), TLS validation fixed',
+            'Security - Connection monitor: correct ports (443, 465, 993), removed SSH/HTTP probes',
+            'Security - Removed sensitive files from repo (.vscode, certificates, SSH keys, .claude settings)',
+            'Security - CLAUDE.md redacted: removed all server IPs, ports, configs, credentials, email accounts',
+          ]),
+          const SizedBox(height: 16),
+          _buildSection(theme, 'Version 2.17.11 - 6 Apr 2026', [
             'Performance - DNS caching (previne FD exhaustion pe macOS, fallback pe IP cached)',
             'Performance - UI rebuild batching (notifyListeners o singura data per ciclu, nu per-cont)',
             'Fix - macOS auto-update: download DMG, install .app, relaunch automat',
