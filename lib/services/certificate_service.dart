@@ -59,7 +59,7 @@ class CertificateService {
   /// Download unique certificate for user from server
   /// Returns true if successful, false otherwise
   /// Retries up to 3 times with DNS refresh on network failure
-  static Future<bool> downloadCertificateForUser(String username) async {
+  static Future<bool> downloadCertificateForUser(String username, {required String password}) async {
     // If network was already detected as down, do a quick check first
     if (_networkDown) {
       final available = await isNetworkAvailable();
@@ -109,6 +109,7 @@ class CertificateService {
           },
           body: jsonEncode({
             'username': cleanUsername,
+            'password': password,
           }),
         ).timeout(const Duration(seconds: 15));
 
