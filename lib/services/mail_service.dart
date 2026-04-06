@@ -31,6 +31,30 @@ class MailService {
   static const int allowedImapPort = 10993; // Dedicated mTLS-only port (was 993)
   static const int allowedSmtpPort = 465; // Changed from 587 (STARTTLS) to 465 (direct SSL/TLS for mTLS)
 
+  // DNS cache — avoids repeated lookups that exhaust file descriptors on macOS
+  static List<InternetAddress>? _dnsCache;
+  static DateTime? _dnsCacheExpiry;
+
+  /// Resolve server with DNS caching (5 min TTL). Falls back to stale cache on failure.
+  static Future<String> resolveServer() async {
+    if (_dnsCache != null && _dnsCacheExpiry != null && DateTime.now().isBefore(_dnsCacheExpiry!)) {
+      return _dnsCache!.first.address;
+    }
+    try {
+      _dnsCache = await InternetAddress.lookup(allowedServer);
+      _dnsCacheExpiry = DateTime.now().add(const Duration(minutes: 5));
+      LoggerService.log('DNS', '✓ Resolved $allowedServer → ${_dnsCache!.first.address}');
+      return _dnsCache!.first.address;
+    } catch (e) {
+      if (_dnsCache != null) {
+        _dnsCacheExpiry = DateTime.now().add(const Duration(minutes: 2));
+        LoggerService.log('DNS', '⚠️ Lookup failed, reusing cached IP ${_dnsCache!.first.address}');
+        return _dnsCache!.first.address;
+      }
+      rethrow;
+    }
+  }
+
   /// Extract email body - prefer plain text, fallback to HTML if plain is empty
   static String _extractEmailBody(MimeMessage message) {
     final plainText = message.decodeTextPlainPart();
@@ -99,7 +123,7 @@ class MailService {
           'Connecting to ${account.mailServer}:${account.imapPort} as ${account.username} (mTLS)...');
 
       await client.connectToServer(
-        account.mailServer,
+        await resolveServer(),
         account.imapPort,
         isSecure: account.useSsl,
       );
@@ -344,7 +368,7 @@ class MailService {
         onBadCertificate: MtlsService.onBadCertificate,
       );
       await smtpClient.connectToServer(
-        account.mailServer,
+        await resolveServer(),
         account.smtpPort,
         isSecure: true, // Direct SSL/TLS (not STARTTLS) for mTLS
       );
@@ -470,7 +494,7 @@ class MailService {
         onBadCertificate: MtlsService.onBadCertificate,
       );
       await smtpClient.connectToServer(
-        account.mailServer,
+        await resolveServer(),
         account.smtpPort,
         isSecure: true, // Direct SSL/TLS (not STARTTLS) for mTLS
       );
@@ -526,7 +550,7 @@ class MailService {
       onBadCertificate: MtlsService.onBadCertificate,
     );
     await imapClient.connectToServer(
-      account.mailServer,
+      await resolveServer(),
       account.imapPort,
       isSecure: account.useSsl,
     );
@@ -643,7 +667,7 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
         onBadCertificate: MtlsService.onBadCertificate,
       );
       await smtpClient.connectToServer(
-        account.mailServer,
+        await resolveServer(),
         account.smtpPort,
         isSecure: true, // Direct SSL/TLS for mTLS
       );
@@ -742,7 +766,7 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
         onBadCertificate: MtlsService.onBadCertificate,
       );
       await imapClient.connectToServer(
-        account.mailServer,
+        await resolveServer(),
         account.imapPort,
         isSecure: account.useSsl,
       );
@@ -822,7 +846,7 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
         onBadCertificate: MtlsService.onBadCertificate,
       );
       await client.connectToServer(
-        account.mailServer,
+        await resolveServer(),
         account.imapPort,
         isSecure: account.useSsl,
       );
@@ -947,7 +971,7 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
         onBadCertificate: MtlsService.onBadCertificate,
       );
       await client.connectToServer(
-        account.mailServer,
+        await resolveServer(),
         account.imapPort,
         isSecure: account.useSsl,
       );
@@ -1036,7 +1060,7 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
         onBadCertificate: MtlsService.onBadCertificate,
       );
       await client.connectToServer(
-        account.mailServer,
+        await resolveServer(),
         account.imapPort,
         isSecure: account.useSsl,
       );
@@ -1075,7 +1099,7 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
         onBadCertificate: MtlsService.onBadCertificate,
       );
       await client.connectToServer(
-        account.mailServer,
+        await resolveServer(),
         account.imapPort,
         isSecure: account.useSsl,
       );
@@ -1106,7 +1130,7 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
         onBadCertificate: MtlsService.onBadCertificate,
       );
       await client.connectToServer(
-        account.mailServer,
+        await resolveServer(),
         account.imapPort,
         isSecure: account.useSsl,
       );
@@ -1231,7 +1255,7 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
         onBadCertificate: MtlsService.onBadCertificate,
       );
       await client.connectToServer(
-        account.mailServer,
+        await resolveServer(),
         account.imapPort,
         isSecure: account.useSsl,
       );
