@@ -36,29 +36,24 @@ class ConnectionMonitor {
     }
   }
 
-  /// Check all mail server ports (IMAP, SMTP, SSH, HTTP, HTTPS)
+  /// Check all mail server ports (IMAP, SMTP, HTTPS)
+  /// Uses the actual ports the application connects to
   Future<ConnectionStatus> checkAllPortsAsync(String server) async {
     final status = ConnectionStatus();
 
     try {
-      // Check SSH (22)
-      status.sshStatus = await checkPortAsync(server, 22, 'SSH');
-
-      // Check HTTP (80)
-      status.httpStatus = await checkPortAsync(server, 80, 'HTTP');
-
-      // Check HTTPS (443)
+      // Check HTTPS (443) — web/API
       status.httpsStatus = await checkPortAsync(server, 443, 'HTTPS');
 
-      // Check SMTP (587)
-      status.smtpStatus = await checkPortAsync(server, 587, 'SMTP');
+      // Check SMTP (465) — submission over TLS
+      status.smtpStatus = await checkPortAsync(server, 465, 'SMTP');
 
-      // Check IMAP (993)
+      // Check IMAP (993) — IMAP over TLS
       status.imapStatus = await checkPortAsync(server, 993, 'IMAP');
 
       LoggerService.log('PORTS',
-          'SSH:22=${status.sshStatus.status}, HTTP:80=${status.httpStatus.status}, '
-          'HTTPS:443=${status.httpsStatus.status}, SMTP:587=${status.smtpStatus.status}, '
+          'HTTPS:443=${status.httpsStatus.status}, '
+          'SMTP:465=${status.smtpStatus.status}, '
           'IMAP:993=${status.imapStatus.status}');
     } catch (ex, stackTrace) {
       LoggerService.logError('PORTS', ex, stackTrace);
@@ -72,20 +67,14 @@ class ConnectionMonitor {
 class ConnectionStatus {
   PortStatus imapStatus;
   PortStatus smtpStatus;
-  PortStatus sshStatus;
-  PortStatus httpStatus;
   PortStatus httpsStatus;
 
   ConnectionStatus({
     PortStatus? imapStatus,
     PortStatus? smtpStatus,
-    PortStatus? sshStatus,
-    PortStatus? httpStatus,
     PortStatus? httpsStatus,
   })  : imapStatus = imapStatus ?? PortStatus(),
         smtpStatus = smtpStatus ?? PortStatus(),
-        sshStatus = sshStatus ?? PortStatus(),
-        httpStatus = httpStatus ?? PortStatus(),
         httpsStatus = httpsStatus ?? PortStatus();
 }
 
