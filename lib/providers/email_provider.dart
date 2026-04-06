@@ -131,10 +131,8 @@ class EmailProvider with ChangeNotifier {
 
       // Log comprehensive diagnostics summary (sent to server for remote diagnosis)
       LoggerService.log('DIAGNOSTICS',
-          'SSH:22=${_connectionStatus!.sshStatus.status}, '
-          'HTTP:80=${_connectionStatus!.httpStatus.status}, '
           'HTTPS:443=${_connectionStatus!.httpsStatus.status}, '
-          'SMTP:587=${_connectionStatus!.smtpStatus.status}, '
+          'SMTP:465=${_connectionStatus!.smtpStatus.status}, '
           'IMAP:993=${_connectionStatus!.imapStatus.status}');
       notifyListeners();
     } catch (ex, stackTrace) {
