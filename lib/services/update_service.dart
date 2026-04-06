@@ -15,6 +15,29 @@ class UpdateService {
   // Progress callback for UI updates
   static Function(int downloaded, int total, String status)? onProgress;
 
+  // Trusted Let's Encrypt issuer DNs (same as MtlsService)
+  static const _trustedIssuers = [
+    'CN=R3,O=Let\'s Encrypt,C=US',
+    'CN=R10,O=Let\'s Encrypt,C=US',
+    'CN=R11,O=Let\'s Encrypt,C=US',
+    'CN=R12,O=Let\'s Encrypt,C=US',
+    'CN=E5,O=Let\'s Encrypt,C=US',
+    'CN=E6,O=Let\'s Encrypt,C=US',
+    'CN=E7,O=Let\'s Encrypt,C=US',
+    'CN=E8,O=Let\'s Encrypt,C=US',
+    'CN=ISRG Root X1,O=Internet Security Research Group,C=US',
+    'CN=ISRG Root X2,O=Internet Security Research Group,C=US',
+  ];
+
+  /// Validate server certificate — only accept trusted Let's Encrypt issuers
+  static bool _validateCertificate(X509Certificate cert, String host, int port) {
+    if (host != 'mail.icd360s.de') return false;
+    final issuer = cert.issuer;
+    return _trustedIssuers.any(
+      (trusted) => issuer == trusted || issuer.contains(trusted),
+    );
+  }
+
   /// Check if update is available
   static Future<UpdateInfo?> checkForUpdates() async {
     try {
@@ -22,8 +45,7 @@ class UpdateService {
 
       // Download version.json from server
       final client = HttpClient()
-        ..badCertificateCallback = (cert, host, port) =>
-            host == 'mail.icd360s.de' && (cert.issuer.contains("Let's Encrypt") || cert.issuer.contains('ISRG Root'));
+        ..badCertificateCallback = _validateCertificate;
       try {
         final request = await client.getUrl(Uri.parse(updateUrl));
         final response = await request.close();
@@ -71,8 +93,6 @@ class UpdateService {
 
     return null;
   }
-
-  // Progress message constants - removed (now using LocalizationService)
 
   /// Download and install update automatically with progress
   static Future<bool> downloadAndInstallAuto(UpdateInfo updateInfo) async {
@@ -126,10 +146,17 @@ class UpdateService {
     return true;
   }
 
-  /// Download update file with progress and SHA-256 verification
+  /// Download update file with progress and mandatory SHA-256 verification
   static Future<File?> _downloadWithProgress(UpdateInfo updateInfo, LocalizationService l10nService) async {
+    // SECURITY: SHA-256 hash is mandatory — reject updates without integrity verification
+    if (updateInfo.sha256Hash == null || updateInfo.sha256Hash!.isEmpty) {
+      LoggerService.log('UPDATE', '❌ REJECTED: No SHA-256 hash in version.json — cannot verify update integrity');
+      onProgress?.call(0, 0, 'Update rejected: missing integrity hash');
+      return null;
+    }
+
     final client = HttpClient()
-      ..badCertificateCallback = (cert, host, port) => host == 'mail.icd360s.de';
+      ..badCertificateCallback = _validateCertificate;
     try {
       final request = await client.getUrl(Uri.parse(updateInfo.downloadUrl));
       final response = await request.close();
@@ -166,19 +193,15 @@ class UpdateService {
 
       LoggerService.log('UPDATE', 'Downloaded $downloaded bytes to ${updateFile.path}');
 
-      // SHA-256 verification
+      // SHA-256 verification (mandatory)
       final fileHash = sha256.convert(allBytes).toString();
-      if (updateInfo.sha256Hash != null && updateInfo.sha256Hash!.isNotEmpty) {
-        if (fileHash != updateInfo.sha256Hash) {
-          LoggerService.log('UPDATE', '❌ HASH MISMATCH! Expected: ${updateInfo.sha256Hash}, Got: $fileHash');
-          await updateFile.delete();
-          onProgress?.call(0, 0, 'Update verification failed - file corrupted');
-          return null;
-        }
-        LoggerService.log('UPDATE', '✓ SHA-256 hash verified: $fileHash');
-      } else {
-        LoggerService.log('UPDATE', '⚠️ No hash in version.json, skipping verification (hash: $fileHash)');
+      if (fileHash != updateInfo.sha256Hash) {
+        LoggerService.log('UPDATE', '❌ HASH MISMATCH! Expected: ${updateInfo.sha256Hash}, Got: $fileHash');
+        await updateFile.delete();
+        onProgress?.call(0, 0, 'Update verification failed - file corrupted or tampered');
+        return null;
       }
+      LoggerService.log('UPDATE', '✓ SHA-256 hash verified: $fileHash');
 
       return updateFile;
     } finally {
@@ -216,7 +239,6 @@ class UpdateService {
 
     // Determine install location (where current app is running from, or /Applications)
     final currentExe = Platform.resolvedExecutable;
-    // resolvedExecutable is like /Applications/icd360s_mail_client.app/Contents/MacOS/icd360s_mail_client
     final appBundlePath = currentExe.contains('.app/')
         ? currentExe.substring(0, currentExe.indexOf('.app/') + 4)
         : '/Applications/${path.basename(apps.first.path)}';
@@ -244,22 +266,17 @@ class UpdateService {
     final ext = path.extension(updateFile.path).toLowerCase();
 
     if (ext == '.appimage') {
-      // Replace current AppImage with new one
       final currentExe = Platform.resolvedExecutable;
-      final isAppImage = Platform.environment.containsKey('APPIMAGE');
       final appImagePath = Platform.environment['APPIMAGE'] ?? currentExe;
 
-      // Copy new AppImage over the old one
       await updateFile.copy(appImagePath);
       await Process.run('chmod', ['+x', appImagePath]);
       LoggerService.log('UPDATE', 'Replaced AppImage at $appImagePath');
 
-      // Relaunch
       await Process.start(appImagePath, [], mode: ProcessStartMode.detached);
       LoggerService.log('UPDATE', 'Relaunching AppImage');
       exit(0);
     } else {
-      // For .deb/.rpm, open in browser for manual install
       return _updateViaBrowser(UpdateInfo(
         version: '', downloadUrl: updateFile.path, changelog: '',
       ));
@@ -272,12 +289,9 @@ class UpdateService {
       final l10nService = LocalizationService.instance;
       LoggerService.log('UPDATE', 'Downloading APK for Android: ${updateInfo.downloadUrl}');
 
-      // Download APK
       final downloadedFile = await _downloadWithProgress(updateInfo, l10nService);
       if (downloadedFile == null) return false;
 
-      // Move APK to a location accessible by the system installer
-      // Use external storage Downloads directory
       final downloadsDir = Directory('/storage/emulated/0/Download');
       final apkName = 'ICD360S_MailClient_v${updateInfo.version}.apk';
       final apkDest = File('${downloadsDir.path}/$apkName');
@@ -291,9 +305,6 @@ class UpdateService {
         'Opening installer... Please tap Install when prompted.'
       ));
 
-      // Open APK with system installer via content:// URI
-      // Using url_launcher with file:// won't work on Android 7+ (needs FileProvider)
-      // Instead, use intent via Process to trigger install
       await Process.run('am', [
         'start', '-a', 'android.intent.action.VIEW',
         '-t', 'application/vnd.android.package-archive',
@@ -305,7 +316,6 @@ class UpdateService {
       return true;
     } catch (ex, stackTrace) {
       LoggerService.logError('UPDATE', ex, stackTrace);
-      // Fallback to browser download
       return _updateViaBrowser(updateInfo);
     }
   }
