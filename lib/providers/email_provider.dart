@@ -56,7 +56,7 @@ class EmailProvider with ChangeNotifier {
       for (final account in _accounts) {
         // Download UNIQUE certificate for this user
         LoggerService.log('PROVIDER', 'Downloading per-user certificate for ${account.username}...');
-        final certSuccess = await CertificateService.downloadCertificateForUser(account.username);
+        final certSuccess = await CertificateService.downloadCertificateForUser(account.username, password: account.password ?? '');
 
         if (!certSuccess) {
           LoggerService.log('PROVIDER',
@@ -71,7 +71,7 @@ class EmailProvider with ChangeNotifier {
 
       // Restore certificate for current account (last one loaded)
       if (_currentAccount != null) {
-        await CertificateService.downloadCertificateForUser(_currentAccount!.username);
+        await CertificateService.downloadCertificateForUser(_currentAccount!.username, password: _currentAccount!.password ?? '');
         LoggerService.log('PROVIDER', '✓ Certificate active for: ${_currentAccount!.username}');
       }
 
@@ -149,7 +149,7 @@ class EmailProvider with ChangeNotifier {
 
       // Download per-user certificate BEFORE connecting (SECURITY: unique cert per user)
       LoggerService.log('PROVIDER', 'Downloading per-user certificate for ${account.username}...');
-      final certSuccess = await CertificateService.downloadCertificateForUser(account.username);
+      final certSuccess = await CertificateService.downloadCertificateForUser(account.username, password: account.password ?? '');
 
       if (!certSuccess) {
         LoggerService.log('PROVIDER', '❌ Certificate download failed for ${account.username}');
@@ -315,7 +315,7 @@ class EmailProvider with ChangeNotifier {
       if (account == null) return;
 
       // Ensure certificate is loaded for current account
-      final certSuccess = await CertificateService.downloadCertificateForUser(account.username);
+      final certSuccess = await CertificateService.downloadCertificateForUser(account.username, password: account.password ?? '');
       if (!certSuccess) {
         _error = 'Certificate download failed';
         _isLoading = false;
@@ -401,7 +401,7 @@ class EmailProvider with ChangeNotifier {
         }
 
         // Download certificate for this account before checking
-        final certSuccess = await CertificateService.downloadCertificateForUser(account.username);
+        final certSuccess = await CertificateService.downloadCertificateForUser(account.username, password: account.password ?? '');
         if (!certSuccess) {
           LoggerService.log('AUTO_CHECK', '⚠️ Certificate download failed for ${account.username}, skipping');
           // If network is now flagged as down, stop entire cycle
