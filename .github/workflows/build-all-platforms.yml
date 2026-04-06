@@ -2,7 +2,6 @@ name: Build All Platforms
 
 on:
   push:
-    branches: [main]
     tags: ['v*']
   workflow_dispatch:
 
@@ -486,7 +485,7 @@ jobs:
   deploy:
     name: Deploy to VPS
     needs: [build-linux, build-android, android-cache-save, build-apple, build-windows]
-    if: always() && github.ref == 'refs/heads/main' && !cancelled()
+    if: always() && !cancelled()
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
