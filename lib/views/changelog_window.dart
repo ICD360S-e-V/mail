@@ -85,7 +85,15 @@ class _ChangelogWindowState extends State<ChangelogWindow> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSection(theme, '🆕 Version 2.17.10 - 6 Apr 2026', [
+          _buildSection(theme, '🆕 Version 2.17.11 - 6 Apr 2026', [
+            'Performance - DNS caching (previne FD exhaustion pe macOS, fallback pe IP cached)',
+            'Performance - UI rebuild batching (notifyListeners o singura data per ciclu, nu per-cont)',
+            'Fix - macOS auto-update: download DMG, install .app, relaunch automat',
+            'Fix - Linux auto-update: download AppImage, replace executabil, relaunch automat',
+            'Fix - Android auto-update: download APK, deschide system installer direct',
+          ]),
+          const SizedBox(height: 16),
+          _buildSection(theme, 'Version 2.17.10 - 6 Apr 2026', [
             'Fix - macOS Keychain access: ad-hoc signing + keychain-access-groups entitlement (fixes -34018)',
             'Fix - Windows installer: WizardIsTaskSelected, eliminat Quick Launch deprecated',
             'Fix - Android: deploy toate arhitecturile split-per-abi (arm64, armeabi, x86_64)',
