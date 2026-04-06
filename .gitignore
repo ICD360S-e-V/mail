@@ -18,10 +18,8 @@ migrate_working_dir/
 *.iws
 .idea/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
+# VS Code
+.vscode/
 
 # Flutter/Dart/Pub related
 **/doc/api/
@@ -53,9 +51,17 @@ certificates/*.pem
 certificates/*.key
 certificates/*.p12
 certificates/*.p8
+certificates/*.srl
 
 # SSH keys
 vps_*.de
+vps_*.pub
 
 # Backup directories
 backup_*/
+
+# Stale/temp files
+version_temp.json
+
+# Claude settings (may contain sensitive commands)
+.claude/settings.local.json
