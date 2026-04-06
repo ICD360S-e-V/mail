@@ -48,7 +48,6 @@ Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
-Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 Name: "pintotaskbar"; Description: "Pin to Windows Taskbar (recommended)"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
@@ -66,7 +65,6 @@ Source: "redist\vc_redist.x64.exe"; DestDir: "{tmp}"; Flags: ignoreversion delet
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
-Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: quicklaunchicon
 
 [Run]
 ; Install VC++ Redistributable silently (skip if already installed)
@@ -122,7 +120,7 @@ begin
   if CurStep = ssPostInstall then
   begin
     // Pin to taskbar if selected
-    if IsTaskSelected('pintotaskbar') then
+    if WizardIsTaskSelected('pintotaskbar') then
     begin
       Exec('powershell.exe',
         '-Command "$shell = New-Object -ComObject Shell.Application; ' +
