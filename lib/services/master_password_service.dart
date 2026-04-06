@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 import 'logger_service.dart';
@@ -8,6 +9,12 @@ import 'platform_service.dart';
 /// Master password service for app authentication (cross-platform)
 class MasterPasswordService {
   static String? _passwordHashFilePath;
+
+  // Rate limiting: max 5 attempts, then lockout for 60 seconds
+  static int _failedAttempts = 0;
+  static DateTime? _lockoutUntil;
+  static const int _maxAttempts = 5;
+  static const Duration _lockoutDuration = Duration(seconds: 60);
 
   /// Initialize service and get password hash file path
   static Future<void> initialize() async {
@@ -33,6 +40,24 @@ class MasterPasswordService {
     return await file.exists();
   }
 
+  /// Check if account is currently locked out
+  static bool isLockedOut() {
+    if (_lockoutUntil == null) return false;
+    if (DateTime.now().isAfter(_lockoutUntil!)) {
+      _lockoutUntil = null;
+      _failedAttempts = 0;
+      return false;
+    }
+    return true;
+  }
+
+  /// Get remaining lockout seconds
+  static int get remainingLockoutSeconds {
+    if (_lockoutUntil == null) return 0;
+    final remaining = _lockoutUntil!.difference(DateTime.now()).inSeconds;
+    return remaining > 0 ? remaining : 0;
+  }
+
   /// Set master password (first-time setup)
   static Future<void> setMasterPassword(String password) async {
     await initialize();
@@ -42,9 +67,15 @@ class MasterPasswordService {
     LoggerService.log('AUTH', 'Master password set');
   }
 
-  /// Verify master password
+  /// Verify master password with rate limiting
   static Future<bool> verifyMasterPassword(String password) async {
     await initialize();
+
+    // Check rate limiting
+    if (isLockedOut()) {
+      LoggerService.log('AUTH', '✗ Account locked — too many failed attempts');
+      return false;
+    }
 
     if (!await hasMasterPassword()) {
       return false;
@@ -60,7 +91,20 @@ class MasterPasswordService {
         // Salted hash — use same salt to verify
         final inputHash = _hashPassword(password, salt: salt);
         final isValid = savedHash == inputHash;
-        LoggerService.log('AUTH', isValid ? '✓ Password correct' : '✗ Password incorrect');
+
+        if (isValid) {
+          _failedAttempts = 0;
+          _lockoutUntil = null;
+          LoggerService.log('AUTH', '✓ Password correct');
+        } else {
+          _failedAttempts++;
+          if (_failedAttempts >= _maxAttempts) {
+            _lockoutUntil = DateTime.now().add(_lockoutDuration);
+            LoggerService.log('AUTH', '✗ Password incorrect — account locked for ${_lockoutDuration.inSeconds}s');
+          } else {
+            LoggerService.log('AUTH', '✗ Password incorrect (${_maxAttempts - _failedAttempts} attempts remaining)');
+          }
+        }
         return isValid;
       } else {
         // Legacy unsalted SHA-256 — verify and migrate to salted
@@ -69,12 +113,20 @@ class MasterPasswordService {
         final isValid = savedHash == legacyHash;
 
         if (isValid) {
+          _failedAttempts = 0;
+          _lockoutUntil = null;
           // Migrate to salted hash
           final newHash = _hashPassword(password);
           await file.writeAsString(newHash);
           LoggerService.log('AUTH', '✓ Password correct + migrated to salted hash');
         } else {
-          LoggerService.log('AUTH', '✗ Password incorrect');
+          _failedAttempts++;
+          if (_failedAttempts >= _maxAttempts) {
+            _lockoutUntil = DateTime.now().add(_lockoutDuration);
+            LoggerService.log('AUTH', '✗ Password incorrect — account locked for ${_lockoutDuration.inSeconds}s');
+          } else {
+            LoggerService.log('AUTH', '✗ Password incorrect');
+          }
         }
         return isValid;
       }
@@ -100,11 +152,11 @@ class MasterPasswordService {
     return '$useSalt:$hash';
   }
 
-  /// Generate a random salt
+  /// Generate a cryptographically secure random salt
   static String _generateSalt() {
-    final random = DateTime.now().microsecondsSinceEpoch;
-    final bytes = utf8.encode('$random-icd360s-salt');
-    return sha256.convert(bytes).toString().substring(0, 16);
+    final random = Random.secure();
+    final saltBytes = List<int>.generate(16, (_) => random.nextInt(256));
+    return sha256.convert(saltBytes).toString().substring(0, 16);
   }
 
   /// Extract salt from stored hash
