@@ -17,6 +17,29 @@ class CertificateService {
   /// Track if network is down to avoid spamming all accounts
   static bool _networkDown = false;
 
+  // Trusted Let's Encrypt issuer DNs for certificate validation
+  static const _trustedIssuers = [
+    'CN=R3,O=Let\'s Encrypt,C=US',
+    'CN=R10,O=Let\'s Encrypt,C=US',
+    'CN=R11,O=Let\'s Encrypt,C=US',
+    'CN=R12,O=Let\'s Encrypt,C=US',
+    'CN=E5,O=Let\'s Encrypt,C=US',
+    'CN=E6,O=Let\'s Encrypt,C=US',
+    'CN=E7,O=Let\'s Encrypt,C=US',
+    'CN=E8,O=Let\'s Encrypt,C=US',
+    'CN=ISRG Root X1,O=Internet Security Research Group,C=US',
+    'CN=ISRG Root X2,O=Internet Security Research Group,C=US',
+  ];
+
+  /// Validate server certificate — only accept trusted Let's Encrypt issuers
+  static bool _validateCertificate(X509Certificate cert, String host, int port) {
+    if (host != 'mail.icd360s.de') return false;
+    final issuer = cert.issuer;
+    return _trustedIssuers.any(
+      (trusted) => issuer == trusted || issuer.contains(trusted),
+    );
+  }
+
   /// Check if network/DNS is working before batch operations
   static Future<bool> isNetworkAvailable() async {
     try {
@@ -76,8 +99,7 @@ class CertificateService {
         ioClient = HttpClient()
           ..connectionTimeout = const Duration(seconds: 10)
           ..idleTimeout = const Duration(seconds: 1);
-        ioClient.badCertificateCallback = (cert, host, port) =>
-            host == 'mail.icd360s.de' && (cert.issuer.contains("Let's Encrypt") || cert.issuer.contains('ISRG Root'));
+        ioClient.badCertificateCallback = _validateCertificate;
         client = IOClient(ioClient);
 
         final response = await client.post(
