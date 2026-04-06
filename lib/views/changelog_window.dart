@@ -85,7 +85,14 @@ class _ChangelogWindowState extends State<ChangelogWindow> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSection(theme, '🆕 Version 2.17.9 - 5 Apr 2026', [
+          _buildSection(theme, '🆕 Version 2.17.10 - 6 Apr 2026', [
+            'Fix - macOS Keychain access: ad-hoc signing + keychain-access-groups entitlement (fixes -34018)',
+            'Fix - Windows installer: WizardIsTaskSelected, eliminat Quick Launch deprecated',
+            'Fix - Android: deploy toate arhitecturile split-per-abi (arm64, armeabi, x86_64)',
+            'Fix - Linux: adaugat libsecret-1-dev pentru flutter_secure_storage',
+          ]),
+          const SizedBox(height: 16),
+          _buildSection(theme, 'Version 2.17.9 - 5 Apr 2026', [
             'UI - Android FAB compose button (+ jos-dreapta, stil Gmail/Outlook)',
             'UI - Compose mutat din titleBar pe mobil (mai mult spatiu)',
             'UI - Buton albastru cu shadow, rounded corners',
