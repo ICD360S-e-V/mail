@@ -85,7 +85,44 @@ class _ChangelogWindowState extends State<ChangelogWindow> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSection(theme, '🆕 Version 2.17.2 - 4 Apr 2026', [
+          _buildSection(theme, '🆕 Version 2.17.9 - 5 Apr 2026', [
+            'UI - Android FAB compose button (+ jos-dreapta, stil Gmail/Outlook)',
+            'UI - Compose mutat din titleBar pe mobil (mai mult spatiu)',
+            'UI - Buton albastru cu shadow, rounded corners',
+          ]),
+          const SizedBox(height: 16),
+          _buildSection(theme, 'Version 2.17.8 - 5 Apr 2026', [
+            'UI - Android: hamburger menu button vizibil in titleBar',
+            'UI - Sidebar toggle expand/compact pe mobil',
+            'UI - Dialog actualizare cu changelog pe Android/iOS',
+            'Security - GDPR consent opt-in (checkbox-uri nebifate default)',
+            'Security - Permisiuni native notificari: Android 13+ POST_NOTIFICATIONS, iOS, macOS',
+            'Compatibility - PaneDisplayMode.auto pe desktop, compact/expanded pe mobil',
+          ]),
+          const SizedBox(height: 16),
+          _buildSection(theme, 'Version 2.17.7 - 5 Apr 2026', [
+            'Bugfix - Small fixes',
+          ]),
+          const SizedBox(height: 16),
+          _buildSection(theme, 'Version 2.17.6 - 5 Apr 2026', [
+            'Bugfix - Small fixes',
+          ]),
+          const SizedBox(height: 16),
+          _buildSection(theme, 'Version 2.17.5 - 4 Apr 2026', [
+            'Bugfix - Small fixes',
+          ]),
+          const SizedBox(height: 16),
+          _buildSection(theme, 'Version 2.17.4 - 4 Apr 2026', [
+            'Bugfix - Small fixes',
+          ]),
+          const SizedBox(height: 16),
+          _buildSection(theme, 'Version 2.17.3 - 4 Apr 2026', [
+            'UI - Android sidebar: minimal mode (hamburger menu) in loc de compact',
+            'UI - Numele conturilor si folderele se vad complet pe ecrane mici',
+            'UI - Sidebar se deschide ca drawer overlay cand apesi hamburger icon',
+          ]),
+          const SizedBox(height: 16),
+          _buildSection(theme, 'Version 2.17.2 - 4 Apr 2026', [
             'Compatibility - GrapheneOS: locale fallback (AppLocalizations null pe custom ROMs = ecran gri)',
             'Compatibility - l10nOf() helper cu English fallback in toate cele 12 views',
             'Compatibility - GlobalCupertinoLocalizations.delegate adaugat',
