@@ -131,8 +131,6 @@ class MailService {
 
       // Authenticate
       LoggerService.log('IMAP', 'Authenticating...');
-      final passwordLength = account.password?.length ?? 0;
-      LoggerService.log('IMAP', 'Password length: $passwordLength chars');
       try {
         await client.login(_getAuthUsername(account.username), account.password ?? '');
         LoggerService.log('IMAP', '✓ Authenticated as ${account.username}');
