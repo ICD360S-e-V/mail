@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
+import 'account_service.dart';
 import 'logger_service.dart';
 import 'platform_service.dart';
 
@@ -136,6 +137,9 @@ class MasterPasswordService {
     _failedAttempts = 0;
     _lockoutUntil = null;
     await _saveRateLimitState();
+    // Unlock the credential session: derives the AES key used to decrypt
+    // fallback storage. Without this, fallback passwords are inaccessible.
+    await AccountService.unlockSession(password);
     LoggerService.log('AUTH', 'Master password set');
   }
 
@@ -182,6 +186,10 @@ class MasterPasswordService {
         _failedAttempts = 0;
         _lockoutUntil = null;
         await _saveRateLimitState();
+        // Unlock the credential session: derives the AES key used to
+        // encrypt/decrypt fallback storage. The key is held in memory only
+        // until lockSession() is called (auto-lock or explicit logout).
+        await AccountService.unlockSession(password);
         LoggerService.log('AUTH', '✓ Password correct');
       } else {
         _failedAttempts++;
@@ -234,3 +242,4 @@ class MasterPasswordService {
     return null; // Legacy unsalted hash
   }
 }
+
