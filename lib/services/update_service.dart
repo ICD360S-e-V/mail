@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
 import 'package:url_launcher/url_launcher.dart';
 import 'logger_service.dart';
@@ -14,6 +15,58 @@ class UpdateService {
 
   // Progress callback for UI updates
   static Function(int downloaded, int total, String status)? onProgress;
+
+  /// SHA-256 of the DER-encoded X.509 signing certificate used to sign all
+  /// official ICD360S Mail Client APKs (the keystore lives in GitHub Secrets,
+  /// alias `upload`, organization `ICD360S e.V.`).
+  ///
+  /// SECURITY: Before self-installing an Android update, MainActivity.kt
+  /// extracts the signing cert from the downloaded APK via PackageManager
+  /// and computes its SHA-256. If it does not match this value, the install
+  /// is refused — even if the APK passed SHA-256 file integrity check.
+  ///
+  /// This defends against a scenario where the update server (or any
+  /// intermediate) is compromised and serves a malicious APK signed by a
+  /// different key: the file hash would match (attacker rewrites version.json),
+  /// but the cert hash would NOT match this hardcoded value.
+  ///
+  /// To rotate this value: extract the new cert with
+  ///   openssl x509 -in cert.pem -outform DER | sha256sum
+  /// and update both this constant and a new release.
+  static const String _expectedApkCertSha256 =
+      'ff9c4a92347693745a06a20cc15310e897145dad6b719cbe724eda093a6195b5';
+
+  static const MethodChannel _apkVerifyChannel =
+      MethodChannel('de.icd360s.mailclient/apk_verify');
+
+  /// Verify an APK's signing certificate against the expected hash.
+  /// Calls into MainActivity.kt via MethodChannel.
+  /// Returns `true` only if the cert SHA-256 matches the hardcoded value.
+  static Future<bool> _verifyApkCert(String apkPath) async {
+    if (!Platform.isAndroid) return true; // not applicable
+    try {
+      final result = await _apkVerifyChannel.invokeMethod<Map<dynamic, dynamic>>(
+        'verifyApkSignature',
+        {
+          'apkPath': apkPath,
+          'expectedCertSha256': _expectedApkCertSha256,
+        },
+      );
+      final verified = result?['verified'] == true;
+      final actualHash = result?['actualHash'] as String?;
+      final reason = result?['reason'] as String?;
+      if (verified) {
+        LoggerService.log('UPDATE', '✓ APK signature verified (cert SHA-256 match)');
+      } else {
+        LoggerService.log('UPDATE',
+            '❌ APK signature verification FAILED — reason=$reason actual=$actualHash expected=$_expectedApkCertSha256');
+      }
+      return verified;
+    } catch (ex, stackTrace) {
+      LoggerService.logError('UPDATE', ex, stackTrace);
+      return false;
+    }
+  }
 
   // Trusted Let's Encrypt issuer DNs (same as MtlsService)
   static const _trustedIssuers = [
@@ -283,7 +336,7 @@ class UpdateService {
     }
   }
 
-  /// Android: Download APK to Downloads, then open system installer via content URI
+  /// Android: Download APK to Downloads, verify signing cert, then open system installer
   static Future<bool> _installAndroid(UpdateInfo updateInfo) async {
     try {
       final l10nService = LocalizationService.instance;
@@ -299,6 +352,18 @@ class UpdateService {
       await downloadedFile.delete();
 
       LoggerService.log('UPDATE', 'APK saved to ${apkDest.path}');
+
+      // SECURITY: Verify the APK's signing certificate matches the expected
+      // hash BEFORE handing it to the system installer. Even if the file SHA-256
+      // matched (which is required upstream), the cert check ensures the APK
+      // was signed by our keystore — defense against a compromised update server
+      // serving a tampered (re-signed) APK with a matching version.json hash.
+      final certVerified = await _verifyApkCert(apkDest.path);
+      if (!certVerified) {
+        await apkDest.delete();
+        onProgress?.call(0, 0, 'Update rejected: signature verification failed');
+        return false;
+      }
 
       onProgress?.call(100, 100, l10nService.getText(
         (l10n) => l10n.updateInstalling,
