@@ -26,6 +26,7 @@ dependencies:
   # Utilities
   intl: 0.20.2  # Date formatting (pinned by Flutter SDK)
   crypto: ^3.0.0  # SHA-256 hashing for master password
+  pointycastle: ^4.0.0  # AES-256-GCM for encrypted credential fallback storage (M4)
   path: ^1.9.0  # Path manipulation
   flutter_secure_storage: ^10.0.0  # Secure password storage (Keychain/Credential Manager)
   http: ^1.2.0  # HTTP client for certificate download API
