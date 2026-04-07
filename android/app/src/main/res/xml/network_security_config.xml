@@ -7,20 +7,53 @@
         </trust-anchors>
     </base-config>
 
-    <!-- Certificate pinning for mail server -->
+    <!--
+        Certificate pinning for mail.icd360s.de.
+
+        SECURITY: Per RFC 7469, a pin set MUST contain at least one BACKUP pin
+        (an SPKI not currently in the served chain) so the app can recover if
+        the active CA chain is compromised, rotated, or revoked. Without a
+        backup pin, a single CA event would brick all installed clients —
+        including the auto-update mechanism that connects to mail.icd360s.de
+        (the very server you'd need to push a fix). This is the "bricked in
+        your own trap" scenario.
+
+        Active pins (currently in the served chain):
+          - ISRG Root X1 (RSA root, current)
+          - ISRG Root X2 (ECDSA root, planned future replacement, already
+            deployed by Let's Encrypt as a parallel root)
+
+        Cold backup pin (NOT in the served chain — held offline):
+          - ICD360S backup ECDSA P-384 key. The matching private key is stored
+            offline (not in the repo, not on the mail server, not in CI). To
+            recover from a CA emergency: generate a CSR with the backup key,
+            obtain a cert (from any CA), deploy on mail.icd360s.de. Existing
+            clients will accept it instantly because the SPKI matches.
+
+        Pins removed in this version:
+          - Let's Encrypt R3 (expired Sep 2024, no longer in any chain)
+          - Let's Encrypt R10 (was never in our chain — we use E8 intermediate)
+
+        Why we don't pin intermediates (E8, etc.):
+          Let's Encrypt rotates intermediates more frequently than roots.
+          Pinning an intermediate creates a fragile dependency on LE's
+          rotation schedule. Pinning roots is the standard recommendation.
+
+        Expiration extended to 2028-01-01 to give plenty of headroom for
+        publishing a release with rotated pins before the safety net expires.
+    -->
     <domain-config>
         <domain includeSubdomains="true">mail.icd360s.de</domain>
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
-        <!-- Pin Let's Encrypt ISRG Root X1 and intermediate R3/R10 -->
-        <pin-set expiration="2027-01-01">
-            <!-- ISRG Root X1 -->
+        <pin-set expiration="2028-01-01">
+            <!-- ACTIVE: ISRG Root X1 (RSA, current root in served chain) -->
             <pin digest="SHA-256">C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M=</pin>
-            <!-- Let's Encrypt R3 -->
-            <pin digest="SHA-256">jQJTbIh0grw0/1TkHSumWb+Fs0Ggogr621gT3PvPKG0=</pin>
-            <!-- Let's Encrypt R10 (newer intermediate) -->
-            <pin digest="SHA-256">e0IRz5Tio3GA1Xs6lUhB3aEQ6yz3qnYJpHKqJQAQnKY=</pin>
+            <!-- ACTIVE: ISRG Root X2 (ECDSA, planned future root, already deployed by LE) -->
+            <pin digest="SHA-256">diGVwiVYbubAI3RW4hB9xU8e/CH2GnkuvVFZE8zmgzI=</pin>
+            <!-- BACKUP (offline): ICD360S backup ECDSA P-384 key, NOT in any current cert -->
+            <pin digest="SHA-256">Av62R4GaV3MhXb533nhIRyJHzbmei4Fa60QqvOBVYeA=</pin>
         </pin-set>
     </domain-config>
 </network-security-config>
