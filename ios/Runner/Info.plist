@@ -47,5 +47,51 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!--
+		SECURITY: Certificate pinning for mail.icd360s.de via NSPinnedDomains
+		(iOS 14+). Apple enforces this at the URLSession layer for all HTTPS
+		traffic that goes through standard system APIs. This is the iOS
+		equivalent of android/app/src/main/res/xml/network_security_config.xml
+		and uses the SAME 3 SPKI hashes for parity:
+
+		  - ISRG Root X1 (RSA root, current Let's Encrypt root in chain)
+		  - ISRG Root X2 (ECDSA root, planned future replacement)
+		  - ICD360S backup ECDSA P-384 key (offline RFC 7469 backup pin)
+
+		See network_security_config.xml for full pin set rationale and the
+		recovery procedure if all pins must be rotated.
+
+		NOTE: NSPinnedDomains requires iOS 14.0+. Pre-iOS-14 clients receive
+		default ATS validation only (TLS 1.2+ via system trust store), no pin.
+		Podfile and project.pbxproj enforce iOS 15.0+ deployment target so
+		every supported install benefits from pinning.
+	-->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSPinnedDomains</key>
+		<dict>
+			<key>mail.icd360s.de</key>
+			<dict>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSPinnedCAIdentities</key>
+				<array>
+					<dict>
+						<key>SPKI-SHA256-BASE64</key>
+						<string>C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M=</string>
+					</dict>
+					<dict>
+						<key>SPKI-SHA256-BASE64</key>
+						<string>diGVwiVYbubAI3RW4hB9xU8e/CH2GnkuvVFZE8zmgzI=</string>
+					</dict>
+					<dict>
+						<key>SPKI-SHA256-BASE64</key>
+						<string>Av62R4GaV3MhXb533nhIRyJHzbmei4Fa60QqvOBVYeA=</string>
+					</dict>
+				</array>
+			</dict>
+		</dict>
+	</dict>
 </dict>
 </plist>
+
