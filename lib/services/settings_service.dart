@@ -9,7 +9,17 @@ import 'platform_service.dart';
 class SettingsService {
   static const String _settingsFileName = 'settings.json';
   static String? _settingsPath;
-  static Completer<void>? _writeLock;
+
+  /// Write serialization chain: every saveSettings call appends its work to
+  /// this future so concurrent saves are processed in order. The chain is
+  /// updated atomically because Dart's event loop is single-threaded — there
+  /// is no `await` between reading and writing _writeChain.
+  ///
+  /// SECURITY/CORRECTNESS (L2): The previous Completer-based lock had a
+  /// classic check-then-set race — two concurrent saves could both pass the
+  /// `while (_writeLock != null)` guard before either set the lock, causing
+  /// one save to be silently lost.
+  static Future<void> _writeChain = Future.value();
 
   /// Get settings file path
   static String _getSettingsPath() {
@@ -49,32 +59,34 @@ class SettingsService {
     String? theme,
     String? language,
   }) async {
-    // Wait for any pending write to complete
-    while (_writeLock != null) {
-      await _writeLock!.future;
-    }
-    _writeLock = Completer<void>();
+    // Append our write to the serialization chain. The previous future is
+    // captured and our new work is queued after it. Updating _writeChain to
+    // include our future ensures the next caller waits for us, in order.
+    // This is atomic because no await separates the read and the assignment.
+    final previous = _writeChain;
+    final ourTurn = previous.then((_) async {
+      try {
+        // Load existing settings first to preserve other fields
+        final existing = await loadSettings();
+        existing['autoUpdateEnabled'] = autoUpdateEnabled;
+        existing['loggingEnabled'] = loggingEnabled;
+        existing['notificationsEnabled'] = notificationsEnabled ?? existing['notificationsEnabled'] ?? true;
+        existing['theme'] = theme ?? existing['theme'] ?? 'light';
+        existing['language'] = language ?? existing['language'];
+        existing['lastUpdated'] = DateTime.now().toIso8601String();
 
-    try {
-      // Load existing settings first to preserve other fields
-      final existing = await loadSettings();
-      existing['autoUpdateEnabled'] = autoUpdateEnabled;
-      existing['loggingEnabled'] = loggingEnabled;
-      existing['notificationsEnabled'] = notificationsEnabled ?? existing['notificationsEnabled'] ?? true;
-      existing['theme'] = theme ?? existing['theme'] ?? 'light';
-      existing['language'] = language ?? existing['language'];
-      existing['lastUpdated'] = DateTime.now().toIso8601String();
+        final path = _getSettingsPath();
+        await File(path).writeAsString(jsonEncode(existing));
 
-      final path = _getSettingsPath();
-      await File(path).writeAsString(jsonEncode(existing));
-
-      LoggerService.log('SETTINGS', 'Settings saved: auto-update=$autoUpdateEnabled, logging=$loggingEnabled, notifications=${notificationsEnabled ?? true}, theme=${theme ?? "light"}, language=$language');
-    } catch (ex, stackTrace) {
-      LoggerService.logError('SETTINGS', ex, stackTrace);
-    } finally {
-      _writeLock!.complete();
-      _writeLock = null;
-    }
+        LoggerService.log('SETTINGS', 'Settings saved: auto-update=$autoUpdateEnabled, logging=$loggingEnabled, notifications=${notificationsEnabled ?? true}, theme=${theme ?? "light"}, language=$language');
+      } catch (ex, stackTrace) {
+        LoggerService.logError('SETTINGS', ex, stackTrace);
+      }
+    });
+    // Swallow errors when the chain is consumed by the next caller — we
+    // don't want one failed write to block all future writes.
+    _writeChain = ourTurn.catchError((_) {});
+    return ourTurn;
   }
 
   /// Load settings
@@ -131,3 +143,4 @@ class SettingsService {
     return settings['language'] as String?;
   }
 }
+
