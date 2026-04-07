@@ -85,7 +85,34 @@ class _ChangelogWindowState extends State<ChangelogWindow> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSection(theme, '🆕 Version 2.19.0 - 7 Apr 2026', [
+          _buildSection(theme, '🆕 Version 2.20.0 - 7 Apr 2026', [
+            'Security - IMAP injection fix: SUBJECT and Message-ID search now properly quoted (RFC 3501)',
+            'Security - Drafts deleted by UID after send (no more SUBJECT search)',
+            'Security - Path traversal fix: attachment filenames sanitized (basename + Windows reserved checks)',
+            'Security - Master password rate limit persisted to disk + exponential lockout (1m → 5m → 1h → 24h)',
+            'Security - Android: APK signing certificate verified before self-install (MethodChannel)',
+            'Security - Android: ProGuard rules narrowed (no more blanket io.flutter.** keep)',
+            'Security - Android: V1 signing disabled, minSdk 24, defeats Janus CVE-2017-13156',
+            'Security - Android: certificate pinning with backup pin (RFC 7469 compliant), removed dead R3/R10',
+            'Security - iOS: NSPinnedDomains for mail.icd360s.de (parity with Android)',
+            'Security - iOS: minimum deployment target raised to iOS 15 (out of EOL)',
+            'Security - Update download URL pinned to https://mail.icd360s.de (defense vs version.json compromise)',
+            'Security - Fallback credential storage: AES-256-GCM keyed by master password (was XOR)',
+            'Security - In-memory session key wiped on app lock; mTLS certs cleared too',
+            'Security - Factory Reset moved off lock screen, requires typed DELETE confirmation',
+            'Security - GitHub Actions all pinned to commit SHAs (supply chain defense + Dependabot)',
+            'Security - VC++ Redistributable downloaded fresh from Microsoft with SHA-256 pin (no longer in repo)',
+            'Security - Linux .deb/.rpm declare libsecret runtime dep (system keyring on Linux)',
+            'Security - Linux AppImage GPG-signed with ED25519 key (verifiable with appimagetool --validate)',
+            'Security - CI/CD: secrets passed via env vars not heredoc interpolation (prevents injection)',
+            'Security - changelog_service: exact DN issuer match instead of substring',
+            'Security - SettingsService: atomic future chain replaces racy check-then-set lock',
+            'Security - Auth error matching tightened (no more "no"/"bad" substring false positives)',
+            'Security - .gitignore: csr/crt/cer/env/firebase configs/notes blocked',
+            'Security - SMTP MX probe removed (was leaking user IP cleartext to recipient servers)',
+          ]),
+          const SizedBox(height: 16),
+          _buildSection(theme, 'Version 2.19.0 - 7 Apr 2026', [
             'Security - CI/CD: non-root deploy user with restricted rrsync (write-only to downloads dir)',
             'Security - CI/CD: SSH host key pinned (eliminates ssh-keyscan TOFU/MITM bypass)',
             'Security - CI/CD: production environment with required reviewer for deploys',
@@ -271,3 +298,4 @@ class _ChangelogWindowState extends State<ChangelogWindow> {
     );
   }
 }
+
