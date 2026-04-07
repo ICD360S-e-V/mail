@@ -156,27 +156,47 @@ class MailService {
         await client.login(_getAuthUsername(account.username), account.password ?? '');
         LoggerService.log('IMAP', '✓ Authenticated as ${account.username}');
       } catch (authEx) {
+        // L3 fix: only treat as auth error if the message contains a specific
+        // IMAP/SMTP authentication error phrase. The previous list of broad
+        // keywords ('no', 'bad', 'user') matched almost any error message and
+        // misclassified network/server errors as wrong credentials.
+        //
+        // The phrases below are RFC 3501 (IMAP) auth-specific error patterns
+        // and common server response strings. Network errors (timeouts, DNS
+        // failures, connection refused) will fall through to rethrow and be
+        // surfaced as their actual cause.
         final errorMsg = authEx.toString().toLowerCase();
-        // Check if it's an authentication error
-        if (errorMsg.contains('authentication') ||
-            errorMsg.contains('login') ||
-            errorMsg.contains('invalid') ||
-            errorMsg.contains('credentials') ||
-            errorMsg.contains('password') ||
-            errorMsg.contains('user') ||
-            errorMsg.contains('no') ||
-            errorMsg.contains('bad')) {
-          // Log detailed authentication error
+        const authErrorPhrases = [
+          'authentication failed',
+          'authentication failure',
+          'authenticationfailed', // ImapException class name used by enough_mail
+          'login failed',
+          'invalid credentials',
+          'invalid username',
+          'invalid password',
+          'incorrect password',
+          'incorrect username',
+          'bad credentials',
+          'bad username or password',
+          'wrong password',
+          'permission denied',
+          'auth=plain failed',
+          'authenticate failed',
+          'sasl authentication',
+        ];
+        final isAuthError = authErrorPhrases.any(errorMsg.contains);
+
+        if (isAuthError) {
           LoggerService.log('AUTH_ERROR', '❌ AUTHENTICATION FAILED for ${account.username}');
           LoggerService.log('AUTH_ERROR', 'Server response: $authEx');
-          LoggerService.log('AUTH_ERROR', 'Possible causes: wrong username or password');
 
-          // Determine if it's more likely a password or username error
           final isPasswordError = errorMsg.contains('password') ||
                                    errorMsg.contains('invalid credentials') ||
                                    errorMsg.contains('authentication failed');
-          final isUsernameError = errorMsg.contains('user') &&
-                                   (errorMsg.contains('not found') || errorMsg.contains('unknown'));
+          final isUsernameError = errorMsg.contains('invalid username') ||
+                                   errorMsg.contains('incorrect username') ||
+                                   (errorMsg.contains('user') &&
+                                    (errorMsg.contains('not found') || errorMsg.contains('unknown')));
 
           final l10nService = LocalizationService.instance;
           throw AuthenticationException(
@@ -188,6 +208,7 @@ class MailService {
             isLikelyUsernameError: isUsernameError,
           );
         }
+        // Not an auth error — let the real exception (network, TLS, etc.) propagate
         rethrow;
       }
 
@@ -1386,4 +1407,5 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
     return deletedCount;
   }
 }
+
 
