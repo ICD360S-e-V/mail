@@ -46,12 +46,27 @@ app.*.map.json
 android/key.properties
 android/upload-keystore.jks
 
-# Certificates and private keys
+# Certificates and private keys (broad — never commit cryptographic material)
 certificates/*.pem
 certificates/*.key
 certificates/*.p12
 certificates/*.p8
 certificates/*.srl
+certificates/*.csr
+certificates/*.crt
+certificates/*.cer
+certificates/*.pfx
+certificates/*.jks
+*.pfx
+*.p12
+*.pem
+*.key
+*.csr
+*.crt
+
+# But DO allow public-ish stuff that's intentionally shipped
+!linux/icd360s-appimage-pubkey.asc
+!android/app/src/main/res/xml/network_security_config.xml
 
 # SSH keys
 vps_*.de
@@ -69,3 +84,36 @@ version_temp.json
 # Windows installer redistributables (downloaded fresh in CI from Microsoft with SHA-256 pin)
 windows/redist/*.exe
 windows/redist/*.msi
+
+# Environment & secrets files (NEVER commit)
+.env
+.env.*
+.envrc
+secrets.json
+*.secret
+*.secrets
+
+# Mobile provisioning profiles (iOS code signing)
+*.mobileprovision
+*.provisionprofile
+
+# Firebase config (often contain API keys)
+**/google-services.json
+**/GoogleService-Info.plist
+
+# Editor backup files
+*~
+*.bak
+*.orig
+
+# Local notes / scratchpads (use private docs instead)
+notes.txt
+todo.txt
+idee.txt
+TODO.txt
+
+# GPG temporary files
+.gnupg/
+*.gpg
+*.asc.tmp
+
