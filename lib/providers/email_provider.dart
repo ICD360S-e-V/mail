@@ -499,14 +499,18 @@ class EmailProvider with ChangeNotifier {
     String bcc,
     String subject,
     String body,
-    List<dynamic> attachments,
-  ) async {
+    List<dynamic> attachments, {
+    int? draftUid,
+  }) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      await _mailService.sendEmailWithAttachmentsAsync(account, to, cc, bcc, subject, body, attachments);
+      await _mailService.sendEmailWithAttachmentsAsync(
+        account, to, cc, bcc, subject, body, attachments,
+        draftUid: draftUid,
+      );
       _error = null;
       LoggerService.log('PROVIDER', '✓ Email sent from ${account.username} to $to (CC: $cc, BCC: $bcc) with ${attachments.length} attachments');
     } catch (ex, stackTrace) {
