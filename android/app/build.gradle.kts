@@ -31,9 +31,14 @@ android {
 
     defaultConfig {
         applicationId = "de.icd360s.mailclient"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // SECURITY (L5): minSdk 24 (Android 7 Nougat, 2016) — required to
+        // safely disable V1 (JAR) signing and rely solely on APK Signature
+        // Scheme v2/v3/v4. V1 signing is vulnerable to CVE-2017-13156 (Janus)
+        // on devices running Android 5 or 6. Modern signing schemes verify
+        // entire APK content blocks, not just individual ZIP entries.
+        // Anyone still on Android <7 is on a device with massive unpatched
+        // vulnerabilities and should not be a target for new app updates.
+        minSdk = 24
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -69,7 +74,11 @@ android {
             keyPassword = keystoreProperties["keyPassword"] as String?
             storeFile = keystoreProperties["storeFile"]?.let { file(it as String) }
             storePassword = keystoreProperties["storePassword"] as String?
-            enableV1Signing = true
+            // SECURITY (L5): V1 (JAR) signing DISABLED to defeat CVE-2017-13156
+            // (Janus), which only applies to devices that fall back to V1.
+            // We require minSdk = 24 (Android 7+) so V2 signature scheme is
+            // always available — see defaultConfig.minSdk above.
+            enableV1Signing = false
             enableV2Signing = true
             enableV3Signing = true
             enableV4Signing = true
