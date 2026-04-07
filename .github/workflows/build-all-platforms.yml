@@ -185,7 +185,26 @@ jobs:
             build/linux/x64/release/bundle/=/opt/icd360s-mail-client/ \
             linux/icd360s-mail-client.desktop=/usr/share/applications/icd360s-mail-client.desktop
 
-      - name: Build AppImage
+      # SECURITY (M10): Import the GPG signing key into a temporary keyring
+      # so appimagetool can sign the AppImage. The private key is stored in
+      # GitHub Secrets and never written to disk in the workflow source.
+      # The temporary keyring is wiped in the cleanup step regardless of
+      # success/failure.
+      - name: Import AppImage GPG signing key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.APPIMAGE_GPG_PRIVATE_KEY }}
+        run: |
+          export GNUPGHOME="$RUNNER_TEMP/gnupg"
+          mkdir -p "$GNUPGHOME"
+          chmod 700 "$GNUPGHOME"
+          printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
+          gpg --list-secret-keys --keyid-format LONG
+          # Persist GNUPGHOME for the next steps
+          echo "GNUPGHOME=$GNUPGHOME" >> "$GITHUB_ENV"
+
+      - name: Build AppImage (signed)
+        env:
+          GPG_KEY_ID: ${{ secrets.APPIMAGE_GPG_KEY_ID }}
         run: |
           # Download appimagetool
           wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
@@ -200,8 +219,18 @@ jobs:
           cp assets/logo.png AppDir/icd360s_mail_client.png
           cp assets/logo.png AppDir/usr/share/icons/hicolor/256x256/apps/icd360s_mail_client.png
 
-          # Build AppImage
-          ARCH=x86_64 ./appimagetool --no-appstream AppDir ICD360S-Mail-Client-x86_64.AppImage
+          # Build AppImage with embedded GPG signature
+          # --sign           — embed signature in AppImage Signing Block
+          # --sign-key KEYID — use the imported key
+          ARCH=x86_64 ./appimagetool --no-appstream --sign --sign-key "$GPG_KEY_ID" AppDir ICD360S-Mail-Client-x86_64.AppImage
+
+      - name: Cleanup GPG keyring
+        if: always()
+        run: |
+          if [ -n "$GNUPGHOME" ] && [ -d "$GNUPGHOME" ]; then
+            shred -uvz "$GNUPGHOME"/*/* 2>/dev/null || true
+            rm -rf "$GNUPGHOME"
+          fi
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
@@ -734,6 +763,7 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
+
 
 
 
