@@ -8,6 +8,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:path/path.dart' as p;
 import '../generated/app_localizations.dart';
 import '../utils/l10n_helper.dart';
+import '../utils/safe_filename.dart';
 import '../services/logger_service.dart';
 import '../services/notification_service.dart';
 import '../services/platform_service.dart';
@@ -189,13 +190,17 @@ class _AttachmentViewerWindowState extends State<AttachmentViewerWindow> {
       final platform = PlatformService.instance;
       final downloadsPath = platform.downloadsPath;
 
-      final file = File(p.join(downloadsPath, widget.fileName));
+      // SECURITY: Sanitize the filename — it comes from attacker-controlled
+      // MIME headers and could otherwise be an absolute path or contain
+      // `..` traversal sequences (path traversal vulnerability).
+      final safeName = safeAttachmentFileName(widget.fileName);
+      final file = File(p.join(downloadsPath, safeName));
       await file.writeAsBytes(widget.fileData);
       NotificationService.showSuccessToast(
         l10n.attachmentViewerSuccessDownloaded,
         l10n.attachmentViewerSuccessSavedTo(file.path),
       );
-      LoggerService.log('VIEWER', 'Downloaded: ${widget.fileName}');
+      LoggerService.log('VIEWER', 'Downloaded: $safeName (original: ${widget.fileName})');
     } catch (ex) {
       NotificationService.showErrorToast(l10n.attachmentViewerErrorDownload, ex.toString());
     }
@@ -242,3 +247,4 @@ class _AttachmentViewerWindowState extends State<AttachmentViewerWindow> {
     }
   }
 }
+
