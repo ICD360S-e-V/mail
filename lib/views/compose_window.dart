@@ -439,7 +439,9 @@ class _ComposeWindowState extends State<ComposeWindow> {
     try {
       LoggerService.log('COMPOSE', 'Sending email from ${_selectedAccount!.username} to ${recipients.length} TO, ${ccRecipients.length} CC, ${bccRecipients.length} BCC with ${_attachments.length} attachments ($totalSizeMB MB)');
 
-      // Send using selected account with attachments
+      // Send using selected account with attachments.
+      // Pass _lastDraftUid so the just-sent draft can be deleted by UID
+      // (avoids the previous SUBJECT search, which was vulnerable to IMAP injection).
       await emailProvider.sendEmailFromAccountWithAttachments(
         _selectedAccount!,
         _toController.text,
@@ -448,6 +450,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
         _subjectController.text,
         _bodyController.text,
         _attachments,
+        draftUid: _lastDraftUid,
       );
 
       if (mounted) {
@@ -873,3 +876,4 @@ class _ComposeWindowState extends State<ComposeWindow> {
     );
   }
 }
+
