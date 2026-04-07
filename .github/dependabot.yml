@@ -1,0 +1,52 @@
+# Dependabot configuration
+#
+# SECURITY: All GitHub Actions in our workflows are pinned to commit SHAs
+# (not floating tags like @v5) to defend against supply-chain attacks where
+# a compromised maintainer could re-point a tag to malicious code.
+#
+# Dependabot watches the upstream repos and opens PRs with updated SHAs
+# when new versions are released, so we get the security/maintenance benefits
+# of staying current WITHOUT giving up the immutability guarantee.
+#
+# Each PR shows the SHA diff — review the upstream changelog before merging.
+
+version: 2
+updates:
+  # GitHub Actions used by .github/workflows/*.yml
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    # Group all minor/patch updates into a single PR per week to reduce noise
+    groups:
+      github-actions-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Flutter / Dart packages
+  - package-ecosystem: "pub"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "dart"
+    groups:
+      pub-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
