@@ -91,6 +91,27 @@ class UpdateService {
     );
   }
 
+  /// Verify that an update download URL is allowed: must be HTTPS and pointed
+  /// at mail.icd360s.de.
+  ///
+  /// SECURITY: version.json is served from our server, but the `download_url`
+  /// field inside it is JSON data that an attacker who compromised the server
+  /// (or any future intermediate write path) could redirect to:
+  ///   - http://attacker.com/...   — cleartext, leaks user IP, no TLS check
+  ///   - https://github.com/.../release.exe — bypasses our domain pinning
+  ///
+  /// This check rejects both. Combined with the mandatory SHA-256 hash check
+  /// after download (and APK cert verification on Android, see H4), this
+  /// makes the update path defense-in-depth secure.
+  static bool _isAllowedDownloadUrl(String url) {
+    try {
+      final uri = Uri.parse(url);
+      return uri.scheme == 'https' && uri.host == 'mail.icd360s.de';
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Check if update is available
   static Future<UpdateInfo?> checkForUpdates() async {
     try {
@@ -126,6 +147,14 @@ class UpdateService {
           }
 
           LoggerService.log('UPDATE', 'Latest version: $latestVersion (current: $currentVersion)');
+
+          // SECURITY: Reject any download_url that is not HTTPS to mail.icd360s.de.
+          // Defense against a compromised version.json that points elsewhere.
+          if (!_isAllowedDownloadUrl(downloadUrl)) {
+            LoggerService.log('UPDATE',
+                '❌ REJECTED: download_url is not HTTPS to mail.icd360s.de: $downloadUrl');
+            return null;
+          }
 
           // Compare versions
           if (_isNewerVersion(latestVersion, currentVersion)) {
@@ -201,6 +230,16 @@ class UpdateService {
 
   /// Download update file with progress and mandatory SHA-256 verification
   static Future<File?> _downloadWithProgress(UpdateInfo updateInfo, LocalizationService l10nService) async {
+    // SECURITY (defense in depth): re-validate the URL host even though
+    // checkForUpdates already filtered it. Catches any code path that
+    // constructs an UpdateInfo manually.
+    if (!_isAllowedDownloadUrl(updateInfo.downloadUrl)) {
+      LoggerService.log('UPDATE',
+          '❌ REJECTED: download_url is not HTTPS to mail.icd360s.de: ${updateInfo.downloadUrl}');
+      onProgress?.call(0, 0, 'Update rejected: invalid download URL');
+      return null;
+    }
+
     // SECURITY: SHA-256 hash is mandatory — reject updates without integrity verification
     if (updateInfo.sha256Hash == null || updateInfo.sha256Hash!.isEmpty) {
       LoggerService.log('UPDATE', '❌ REJECTED: No SHA-256 hash in version.json — cannot verify update integrity');
@@ -455,3 +494,4 @@ class UpdateInfo {
     this.sha256Hash,
   });
 }
+
