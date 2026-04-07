@@ -13,6 +13,7 @@ import '../services/notification_service.dart';
 import '../services/update_service.dart';
 import '../services/logger_service.dart';
 import '../services/settings_service.dart';
+import '../services/account_service.dart';
 import '../services/master_password_service.dart';
 import '../services/certificate_service.dart';
 import '../services/trash_tracker_service.dart';
@@ -105,6 +106,13 @@ class _MainWindowState extends State<MainWindow> {
     _updateCheckTimer?.cancel();
     _pingTimer?.cancel();
     LoggerService.log('SECURITY', 'All timers stopped (app locked)');
+
+    // SECURITY (M4): Wipe the in-memory AES key used for fallback credential
+    // storage. While locked, the .passwords file becomes unreadable.
+    AccountService.lockSession();
+    // Also clear in-memory mTLS certificates so a memory dump while locked
+    // cannot recover them. They are re-downloaded on unlock.
+    CertificateService.clearCertificates();
 
     setState(() => _isLocked = true);
     LoggerService.log('SECURITY', 'Application locked');
