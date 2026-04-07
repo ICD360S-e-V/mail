@@ -450,6 +450,33 @@ jobs:
           flutter pub get
           flutter build windows --release
 
+      # SECURITY: Download VC++ Redistributable from Microsoft with pinned SHA-256.
+      # Previously this binary was committed to the repo (windows/redist/vc_redist.x64.exe),
+      # which created a supply-chain risk: anyone who could push to the repo could
+      # replace it with a trojanized version that the installer would silently run
+      # with admin privileges on every user's machine.
+      #
+      # Now we fetch it fresh from Microsoft and verify the SHA-256. If the hash
+      # changes (Microsoft publishes a new build), this step fails — update the
+      # hash here AFTER auditing the new binary.
+      - name: Download VC++ Redistributable (verified)
+        shell: pwsh
+        run: |
+          $expectedHash = "cc0ff0eb1dc3f5188ae6300faef32bf5beeba4bdd6e8e445a9184072096b713b"
+          $url = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
+          $dest = "windows/redist/vc_redist.x64.exe"
+          New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
+          Write-Host "Downloading $url ..."
+          Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
+          $actualHash = (Get-FileHash $dest -Algorithm SHA256).Hash.ToLower()
+          Write-Host "Expected: $expectedHash"
+          Write-Host "Actual:   $actualHash"
+          if ($actualHash -ne $expectedHash) {
+            Write-Error "VC++ Redistributable hash mismatch! Microsoft may have published a new build. Audit the new binary and update the expected hash in build-all-platforms.yml."
+            exit 1
+          }
+          Write-Host "✓ VC++ Redistributable verified"
+
       - name: Build Inno Setup installer
         run: |
           choco install innosetup -y --no-progress
@@ -685,5 +712,6 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
+
 
 
