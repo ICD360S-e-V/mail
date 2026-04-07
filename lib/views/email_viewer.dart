@@ -10,6 +10,7 @@ import 'package:printing/printing.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../utils/l10n_helper.dart';
+import '../utils/safe_filename.dart';
 import '../models/models.dart';
 import '../providers/email_provider.dart';
 import '../services/notification_service.dart';
@@ -578,7 +579,11 @@ ${email.attachments.isNotEmpty ? '\nAttachments (${email.attachments.length}): $
                 final platform = PlatformService.instance;
                 final downloadsPath = platform.downloadsPath;
 
-                final file = File(p.join(downloadsPath, attachment.fileName));
+                // SECURITY: Sanitize the filename — it comes from attacker-controlled
+                // MIME headers. Without this, an absolute path or `..` traversal
+                // could overwrite arbitrary files.
+                final safeName = safeAttachmentFileName(attachment.fileName);
+                final file = File(p.join(downloadsPath, safeName));
                 if (attachment.data != null) {
                   await file.writeAsBytes(attachment.data!);
                   if (!ctx.mounted) return;
@@ -587,7 +592,7 @@ ${email.attachments.isNotEmpty ? '\nAttachments (${email.attachments.length}): $
                     l10nDownload.successDownloaded,
                     l10nDownload.successSavedTo(file.path),
                   );
-                  LoggerService.log('EMAIL_VIEWER', 'Downloaded attachment: ${attachment.fileName}');
+                  LoggerService.log('EMAIL_VIEWER', 'Downloaded attachment: $safeName (original: ${attachment.fileName})');
                 }
               } catch (ex) {
                 if (!ctx.mounted) return;
@@ -607,3 +612,4 @@ ${email.attachments.isNotEmpty ? '\nAttachments (${email.attachments.length}): $
     return ['pdf', 'jpg', 'jpeg', 'png'].contains(ext);
   }
 }
+
