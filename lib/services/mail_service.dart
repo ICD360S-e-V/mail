@@ -453,7 +453,7 @@ class MailService {
 
       // Save to Sent folder (awaited to ensure it completes)
       try {
-        await _saveToSentFolder(account, mimeMessage, subject);
+        await _saveToSentFolder(account, mimeMessage, subject, draftUid: draftUid);
       } catch (sentEx) {
         LoggerService.logWarning('SMTP', '⚠ Email sent but could not save to Sent folder: $sentEx');
       }
@@ -470,8 +470,9 @@ class MailService {
     EmailAccount account,
     String to,
     String subject,
-    String body,
-  ) async {
+    String body, {
+    int? draftUid,
+  }) async {
     // SECURITY: Validate server before connecting
     _validateAccount(account);
 
@@ -550,7 +551,7 @@ class MailService {
 
       // Save to Sent folder (awaited to ensure it completes)
       try {
-        await _saveToSentFolder(account, mimeMessage, subject);
+        await _saveToSentFolder(account, mimeMessage, subject, draftUid: draftUid);
       } catch (sentEx) {
         LoggerService.logWarning('SMTP', '⚠ Email sent but could not save to Sent folder: $sentEx');
       }
@@ -561,7 +562,12 @@ class MailService {
   }
 
   /// Save message to Sent folder and delete drafts
-  Future<void> _saveToSentFolder(EmailAccount account, MimeMessage mimeMessage, String subject) async {
+  Future<void> _saveToSentFolder(
+    EmailAccount account,
+    MimeMessage mimeMessage,
+    String subject, {
+    int? draftUid,
+  }) async {
     LoggerService.log('IMAP-SENT', 'Saving email to Sent folder for ${account.username}...');
 
     final imapClient = ImapClient(
@@ -1380,3 +1386,4 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
     return deletedCount;
   }
 }
+
