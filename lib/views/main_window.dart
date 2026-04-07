@@ -21,6 +21,7 @@ import '../utils/l10n_helper.dart';
 import 'compose_window.dart';
 import 'email_viewer.dart';
 import 'add_account_dialog.dart';
+import 'factory_reset_dialog.dart';
 import 'log_viewer_window.dart';
 import 'changelog_window.dart';
 
@@ -475,6 +476,20 @@ class _MainWindowState extends State<MainWindow> {
 
             // Spacer to push buttons to far right
             const Spacer(),
+
+            // Factory Reset button (requires typed "DELETE" confirmation).
+            // SECURITY (M6): Only accessible post-login, not on the lock screen.
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: IconButton(
+                icon: const Icon(FluentIcons.delete, size: 16),
+                onPressed: () async {
+                  LoggerService.log('SECURITY', 'User clicked factory reset button');
+                  _resetAutoLockTimer();
+                  await FactoryResetDialog.show(context);
+                },
+              ),
+            ),
 
             // Lock Button
             Padding(
