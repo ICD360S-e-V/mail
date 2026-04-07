@@ -65,3 +65,7 @@ version_temp.json
 
 # Claude settings (may contain sensitive commands)
 .claude/settings.local.json
+
+# Windows installer redistributables (downloaded fresh in CI from Microsoft with SHA-256 pin)
+windows/redist/*.exe
+windows/redist/*.msi
