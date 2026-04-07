@@ -77,6 +77,27 @@ class MailService {
     return email;
   }
 
+  /// Quote a string for use in an IMAP command (RFC 3501 quoted-string).
+  ///
+  /// SECURITY: Prevents IMAP injection when interpolating attacker-controlled
+  /// values (e.g. Message-ID headers from received mail, subject lines from
+  /// forwarded/replied emails) into SEARCH criteria.
+  ///
+  /// RFC 3501 quoted-string rules:
+  /// - CR, LF, NUL are NOT allowed in quoted strings (throws ArgumentError)
+  /// - " and \ must be backslash-escaped
+  /// - Any other 7-bit character is allowed literally
+  ///
+  /// Returns the value surrounded by double quotes, safe to drop into an
+  /// IMAP command string.
+  String _imapQuote(String value) {
+    if (value.contains('\r') || value.contains('\n') || value.contains('\x00')) {
+      throw ArgumentError('IMAP quoted string cannot contain CR, LF, or NUL');
+    }
+    final escaped = value.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+    return '"$escaped"';
+  }
+
   /// Validate account server and ports (security check)
   void _validateAccount(EmailAccount account) {
     if (account.mailServer != allowedServer) {
@@ -600,8 +621,10 @@ class MailService {
 
       if (draftsMailbox != null) {
         await imapClient.selectMailbox(draftsMailbox);
+        // SECURITY: _imapQuote() escapes attacker-controllable content
+        // (e.g. forwarded/replied subjects) to prevent IMAP injection.
         final searchResult = await imapClient.searchMessages(
-          searchCriteria: 'SUBJECT "$subject"',
+          searchCriteria: 'SUBJECT ${_imapQuote(subject)}',
         );
 
         if (searchResult.matchingSequence?.isNotEmpty ?? false) {
@@ -888,8 +911,10 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
         }
       } else {
         // Fallback: Search by MessageId header
+        // SECURITY: messageId comes from received-mail headers (attacker-controlled).
+        // _imapQuote() prevents IMAP injection via crafted Message-ID values.
         final searchResult = await client.searchMessages(
-          searchCriteria: 'HEADER Message-ID "$messageId"',
+          searchCriteria: 'HEADER Message-ID ${_imapQuote(messageId)}',
         );
         sequence = searchResult.matchingSequence;
       }
@@ -997,8 +1022,10 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
           }
         }
       } else {
+        // SECURITY: messageId is attacker-controlled (from received headers).
+        // _imapQuote() prevents IMAP injection.
         final searchResult = await client.searchMessages(
-          searchCriteria: 'HEADER Message-ID "$messageId"',
+          searchCriteria: 'HEADER Message-ID ${_imapQuote(messageId)}',
         );
         sequence = searchResult.matchingSequence;
       }
