@@ -274,19 +274,33 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
+      # SECURITY (M7): Pass secrets via env vars so they are never interpolated
+      # directly into the shell script body. A secret containing special chars,
+      # a newline, or the heredoc marker itself cannot break out of the
+      # command/heredoc this way — bash reads the value from the environment
+      # as a literal string.
       - name: Decode keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/upload-keystore.jks
+          printf '%s' "$KEYSTORE_B64" | base64 -d > android/upload-keystore.jks
 
       - name: Create key.properties
+        env:
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
-          cat > android/key.properties <<'KEYEOF'
-          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
-          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
-          storeFile=../upload-keystore.jks
-          KEYEOF
-          sed -i 's/^          //' android/key.properties
+          # Use printf instead of a heredoc so there is no risk of a marker
+          # collision. Env vars are expanded by bash (not by the Actions
+          # template engine), so they are treated as literal strings.
+          {
+            printf 'storePassword=%s\n' "$STORE_PASSWORD"
+            printf 'keyPassword=%s\n' "$KEY_PASSWORD"
+            printf 'keyAlias=%s\n' "$KEY_ALIAS"
+            printf 'storeFile=../upload-keystore.jks\n'
+          } > android/key.properties
+          chmod 600 android/key.properties
 
       - name: Build Android ${{ matrix.flavor }} ${{ matrix.format }}
         run: |
@@ -712,6 +726,7 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
+
 
 
 
