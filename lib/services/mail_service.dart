@@ -299,8 +299,9 @@ class MailService {
     String bcc,
     String subject,
     String body,
-    List<dynamic> attachments,
-  ) async {
+    List<dynamic> attachments, {
+    int? draftUid,
+  }) async {
     // SECURITY: Validate server before connecting
     _validateAccount(account);
 
@@ -607,38 +608,37 @@ class MailService {
       throw Exception('Sent mailbox not found on server');
     }
 
-    // Delete drafts with same subject
-    try {
-      Mailbox? draftsMailbox;
-      for (final box in mailboxes) {
-        if (box.hasFlag(MailboxFlag.drafts) ||
-            box.name.toLowerCase() == 'drafts' ||
-            box.path.toLowerCase().contains('drafts')) {
-          draftsMailbox = box;
-          break;
+    // Delete the draft this email was composed from (by UID — no search needed).
+    // SECURITY: Using the UID returned from saveDraftAsync eliminates the need
+    // to search the Drafts folder by SUBJECT, which previously interpolated
+    // attacker-influenceable content into the IMAP command.
+    if (draftUid != null) {
+      try {
+        Mailbox? draftsMailbox;
+        for (final box in mailboxes) {
+          if (box.hasFlag(MailboxFlag.drafts) ||
+              box.name.toLowerCase() == 'drafts' ||
+              box.path.toLowerCase().contains('drafts')) {
+            draftsMailbox = box;
+            break;
+          }
         }
-      }
 
-      if (draftsMailbox != null) {
-        await imapClient.selectMailbox(draftsMailbox);
-        // SECURITY: _imapQuote() escapes attacker-controllable content
-        // (e.g. forwarded/replied subjects) to prevent IMAP injection.
-        final searchResult = await imapClient.searchMessages(
-          searchCriteria: 'SUBJECT ${_imapQuote(subject)}',
-        );
-
-        if (searchResult.matchingSequence?.isNotEmpty ?? false) {
-          await imapClient.store(
-            searchResult.matchingSequence!,
+        if (draftsMailbox != null) {
+          await imapClient.selectMailbox(draftsMailbox);
+          final sequence = MessageSequence();
+          sequence.add(draftUid);
+          await imapClient.uidStore(
+            sequence,
             [MessageFlags.deleted],
             action: StoreAction.add,
           );
           await imapClient.expunge();
-          LoggerService.log('IMAP', '✓ Deleted ${searchResult.matchingSequence!.length} draft(s) after sending');
+          LoggerService.log('IMAP', '✓ Deleted draft UID $draftUid after sending');
         }
+      } catch (draftEx) {
+        LoggerService.log('IMAP-DRAFT', 'Could not delete draft UID $draftUid: $draftEx');
       }
-    } catch (draftEx) {
-      LoggerService.log('IMAP-DRAFT', 'Could not delete drafts: $draftEx');
     }
 
     await imapClient.disconnect();
@@ -910,9 +910,13 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
           }
         }
       } else {
-        // Fallback: Search by MessageId header
+        // Fallback: Search by MessageId header (only when UID is unavailable —
+        // e.g. for older emails saved before the uid field was added to Email).
         // SECURITY: messageId comes from received-mail headers (attacker-controlled).
         // _imapQuote() prevents IMAP injection via crafted Message-ID values.
+        // The fallback should be rare; log it so we can monitor.
+        LoggerService.log('IMAP-MOVE',
+            '⚠ Using Message-ID search fallback (no UID available for $messageId)');
         final searchResult = await client.searchMessages(
           searchCriteria: 'HEADER Message-ID ${_imapQuote(messageId)}',
         );
@@ -1022,8 +1026,11 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
           }
         }
       } else {
+        // Fallback path — should be rare (UID is always set for modern Email instances).
         // SECURITY: messageId is attacker-controlled (from received headers).
         // _imapQuote() prevents IMAP injection.
+        LoggerService.log('IMAP-DELETE',
+            '⚠ Using Message-ID search fallback for permanent delete (no UID for $messageId)');
         final searchResult = await client.searchMessages(
           searchCriteria: 'HEADER Message-ID ${_imapQuote(messageId)}',
         );
