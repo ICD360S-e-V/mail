@@ -1240,62 +1240,31 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
   }
 
   /// Check target server max message size (SIZE extension)
+  /// Conservative SMTP attachment size limit used to pre-warn users before
+  /// they spend time composing a large email that the recipient's server
+  /// will reject. 25 MB is the de facto standard ceiling — Gmail, Outlook,
+  /// Yahoo, ProtonMail, and most providers accept up to that, very few
+  /// accept more.
+  ///
+  /// SECURITY (L7): The previous implementation contacted the recipient's
+  /// MX server on cleartext port 25, sent EHLO, and parsed the SIZE
+  /// extension. That:
+  ///   - Leaked the user's IP and "I'm about to email <domain>" intent to
+  ///     arbitrary attacker-controllable hosts.
+  ///   - Used cleartext SMTP (no STARTTLS), so any on-path observer saw
+  ///     the same metadata.
+  ///   - Performed a network operation per recipient, slowing compose UI.
+  ///
+  /// We now return a hardcoded conservative limit and let the actual SMTP
+  /// send produce a precise error if the receiving server is below that.
+  static const int _conservativeMaxSizeMB = 25;
+
+  /// Returns the conservative max attachment size for a recipient domain.
+  /// The `domain` argument is unused but kept for API compatibility with
+  /// existing callers.
+  // ignore: avoid_unused_parameter, prefer_function_declarations_over_variables
   Future<int?> checkTargetServerMaxSize(String domain) async {
-    try {
-      LoggerService.log('TARGET_SERVER', 'Looking up MX records for $domain...');
-
-      // Get MX record for domain (use nslookup)
-      final mxResult = await Process.run('nslookup', ['-type=MX', domain]);
-
-      if (mxResult.exitCode != 0) {
-        LoggerService.logWarning('TARGET_SERVER', 'MX lookup failed for $domain');
-        return null;
-      }
-
-      final output = mxResult.stdout.toString();
-      final mxPattern = RegExp(r'mail exchanger = (\S+)');
-      final match = mxPattern.firstMatch(output);
-
-      if (match == null) {
-        LoggerService.logWarning('TARGET_SERVER', 'No MX record found for $domain');
-        return null;
-      }
-
-      final mxServer = match.group(1)!.replaceAll(RegExp(r'\.$'), ''); // Remove trailing dot
-      LoggerService.log('TARGET_SERVER', 'MX server for $domain: $mxServer');
-
-      // Connect to SMTP and check SIZE
-      final smtpClient = SmtpClient(mxServer, isLogEnabled: false);
-      await smtpClient.connectToServer(
-        mxServer,
-        25, // Standard SMTP port
-        isSecure: false,
-      );
-
-      await smtpClient.ehlo();
-
-      // Parse SIZE extension
-      final sizeExtension = smtpClient.serverInfo.capabilities
-          .firstWhere((cap) => cap.toUpperCase().startsWith('SIZE'), orElse: () => '');
-
-      await smtpClient.disconnect();
-
-      if (sizeExtension.isNotEmpty) {
-        final parts = sizeExtension.split(' ');
-        if (parts.length > 1) {
-          final maxSizeBytes = int.tryParse(parts.last) ?? 0;
-          final maxSizeMB = (maxSizeBytes / (1024 * 1024)).round();
-          LoggerService.log('TARGET_SERVER', '$domain SIZE: $maxSizeMB MB');
-          return maxSizeMB;
-        }
-      }
-
-      LoggerService.log('TARGET_SERVER', '$domain does not advertise SIZE extension');
-      return null;
-    } catch (ex, stackTrace) {
-      LoggerService.logError('TARGET_SERVER', ex, stackTrace);
-      return null;
-    }
+    return _conservativeMaxSizeMB;
   }
 
   /// Clean Trash folder - permanently delete emails older than specified days
