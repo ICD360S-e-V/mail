@@ -148,6 +148,12 @@ jobs:
           flutter pub get
           flutter build linux --release
 
+      # SECURITY (M9): Declare libsecret-1-0 as a runtime dependency.
+      # flutter_secure_storage_linux requires libsecret to use the system
+      # keyring (gnome-keyring/KWallet via Secret Service API). Without it,
+      # the app silently degrades to the file-based fallback storage —
+      # which is now AES-GCM (M4) but still weaker than a system keyring
+      # tied to the user's login session.
       - name: Build .deb package
         run: |
           fpm -s dir -t deb \
@@ -158,6 +164,7 @@ jobs:
             --url "https://github.com/ICD360S-e-V/mail" \
             --license "Proprietary" \
             --depends libgtk-3-0 \
+            --depends libsecret-1-0 \
             --category mail \
             --deb-no-default-config-files \
             build/linux/x64/release/bundle/=/opt/icd360s-mail-client/ \
@@ -173,6 +180,7 @@ jobs:
             --url "https://github.com/ICD360S-e-V/mail" \
             --license "Proprietary" \
             --depends gtk3 \
+            --depends libsecret \
             --category "Applications/Internet" \
             build/linux/x64/release/bundle/=/opt/icd360s-mail-client/ \
             linux/icd360s-mail-client.desktop=/usr/share/applications/icd360s-mail-client.desktop
