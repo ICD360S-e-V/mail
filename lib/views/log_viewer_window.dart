@@ -3,6 +3,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 import '../utils/l10n_helper.dart';
 import '../services/logger_service.dart';
+import '../services/update_service.dart';
 
 /// Log viewer window for debugging
 class LogViewerWindow extends StatefulWidget {
@@ -48,7 +49,7 @@ class _LogViewerWindowState extends State<LogViewerWindow> {
     final l10n = l10nOf(context);
     final metadata = '''
 ${l10n.logViewerMetadataHeader}
-${l10n.logViewerMetadataVersion('2.5.0')}
+${l10n.logViewerMetadataVersion(UpdateService.currentVersion)}
 ${l10n.logViewerMetadataPlatform(Platform.operatingSystem, Platform.operatingSystemVersion)}
 ${l10n.logViewerMetadataTimestamp(DateTime.now().toString())}
 ${l10n.logViewerMetadataTotalEntries(_logs.length)}
@@ -150,3 +151,4 @@ ${l10n.logViewerMetadataSeparator}
     );
   }
 }
+
