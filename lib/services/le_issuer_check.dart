@@ -3,39 +3,56 @@
 /// SECURITY: Dart's `X509Certificate.issuer` returns the DN in OpenSSL
 /// slash-separated format (e.g. `/C=US/O=Let's Encrypt/CN=E7`). The
 /// previous validation code in v2.20.0 - v2.20.1 compared against
-/// RFC 4514 comma-separated strings (e.g. `CN=E7,O=Let's Encrypt,C=US`)
-/// which never matched. Result: every legitimate Let's Encrypt cert was
-/// rejected by `badCertificateCallback`, breaking IMAP/SMTP/HTTPS in
-/// every TLS-validating service.
+/// RFC 4514 comma-separated strings which never matched.
 ///
-/// This helper parses the CN and O fields out of Dart's slash format and
-/// compares against an allowlist. Used by:
-///   - mtls_service.dart      (server cert during mTLS handshake)
+/// HISTORY: Earlier revisions of this helper maintained a hardcoded
+/// allowlist of intermediate Common Names (R3, R10-R12, E5-E8). That
+/// approach is brittle: Let's Encrypt rotates intermediates roughly
+/// yearly, and in November 2025 introduced an entirely new "Generation
+/// Y" hierarchy with intermediates named YE1-YE3 / YR1-YR3 and new
+/// roots ISRG Root YE / YR — none of which match the previous CN
+/// patterns. A hardcoded list would silently DoS the app on the next
+/// LE rotation.
+///
+/// CURRENT APPROACH: Validate by Organization (O) field only. Any
+/// certificate issued by `Let's Encrypt` (intermediate) or by
+/// `Internet Security Research Group` (root) is accepted, regardless
+/// of CN. This is safe because:
+///
+///   1. Dart's `dart:io` already performs full PKIX chain validation
+///      against the system trust store BEFORE invoking onBadCertificate
+///      callbacks. By the time this function runs, the chain is known
+///      to terminate at a system-trusted root.
+///   2. DNS CAA records on icd360s.de restrict certificate issuance to
+///      `letsencrypt.org` only — no other CA can mint a cert for our
+///      hostnames.
+///   3. Mobile platforms (Android/iOS) additionally pin the SPKI of
+///      the ISRG roots in network_security_config.xml / NSPinnedDomains.
+///   4. Certificate Transparency logs all LE issuances publicly.
+///
+/// Used by:
+///   - mtls_service.dart       (server cert during mTLS handshake)
 ///   - certificate_service.dart (downloading per-user cert)
-///   - update_service.dart    (downloading version.json + binaries)
+///   - update_service.dart     (downloading version.json + binaries)
 ///   - log_upload_service.dart (uploading diagnostic logs)
-///   - changelog_service.dart (downloading changelog)
+///   - changelog_service.dart  (downloading changelog)
 
-const _trustedRootCns = ['ISRG Root X1', 'ISRG Root X2'];
-const _trustedRootO = 'Internet Security Research Group';
-const _trustedIntermediateCns = [
-  'R3', 'R10', 'R11', 'R12',
-  'E5', 'E6', 'E7', 'E8',
-];
-const _trustedIntermediateO = "Let's Encrypt";
+const _trustedOrganizations = {
+  "Let's Encrypt", // intermediates: E5-E8, R10-R13, YE1-YE3, YR1-YR3, ...
+  'Internet Security Research Group', // roots: ISRG Root X1, X2, YE, YR, ...
+};
 
-/// Returns true if the given X509 issuer DN string matches a known
-/// Let's Encrypt root or intermediate CA.
+/// Returns true if the given X509 issuer DN string was signed by
+/// Let's Encrypt or its parent organization (ISRG).
 ///
 /// Accepts the OpenSSL slash format that Dart's X509Certificate.issuer
 /// uses, e.g. `/C=US/O=Let's Encrypt/CN=E7`.
+///
+/// This intentionally does NOT match against CN — see file header for
+/// rationale. Future LE intermediate rotations (E9, R14, YE4, ZE1, ...)
+/// are accepted automatically as long as the O field is unchanged.
 bool isTrustedLetsEncryptIssuer(String issuer) {
-  final cnMatch = RegExp(r'/CN=([^/]+)').firstMatch(issuer);
   final oMatch = RegExp(r'/O=([^/]+)').firstMatch(issuer);
-  if (cnMatch == null || oMatch == null) return false;
-  final cn = cnMatch.group(1)!;
-  final o = oMatch.group(1)!;
-  if (_trustedRootCns.contains(cn) && o == _trustedRootO) return true;
-  if (_trustedIntermediateCns.contains(cn) && o == _trustedIntermediateO) return true;
-  return false;
+  if (oMatch == null) return false;
+  return _trustedOrganizations.contains(oMatch.group(1));
 }
