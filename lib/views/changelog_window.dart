@@ -85,7 +85,15 @@ class _ChangelogWindowState extends State<ChangelogWindow> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSection(theme, '🆕 Version 2.20.0 - 7 Apr 2026', [
+          _buildSection(theme, '🆕 Version 2.20.1 - 8 Apr 2026', [
+            'Bug fix - Migration: passwords from v2.5.x (hostname-XOR) now properly migrated to AES-GCM',
+            'Bug fix - Update download: throttle progress callback (no more UI rebuild flood)',
+            'Bug fix - Trash cleanup: skip silently if certificates not yet loaded (no more 20+ stack trace spam)',
+            'Bug fix - Localization: log not-initialized warning only once per session',
+            'Bug fix - Log header: use actual app version (was hardcoded 2.5.0)',
+          ]),
+          const SizedBox(height: 16),
+          _buildSection(theme, 'Version 2.20.0 - 7 Apr 2026', [
             'Security - IMAP injection fix: SUBJECT and Message-ID search now properly quoted (RFC 3501)',
             'Security - Drafts deleted by UID after send (no more SUBJECT search)',
             'Security - Path traversal fix: attachment filenames sanitized (basename + Windows reserved checks)',
@@ -298,4 +306,5 @@ class _ChangelogWindowState extends State<ChangelogWindow> {
     );
   }
 }
+
 
