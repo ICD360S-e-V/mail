@@ -32,6 +32,20 @@ class MainActivity : FlutterActivity() {
             window.attributes.layoutInDisplayCutoutMode =
                 WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         }
+
+        // SECURITY: FLAG_SECURE blocks screenshots, screen recording,
+        // recent-apps thumbnails, screen mirroring/casting, and prevents
+        // accessibility-service screen reading. Standard for apps that
+        // display sensitive content (banking, encrypted messaging, mail
+        // with private credentials and message bodies).
+        //
+        // Tradeoff: developers cannot take screenshots through normal UI
+        // for bug reports — use `adb exec-out screencap -p > out.png`
+        // instead, which bypasses FLAG_SECURE on debuggable builds.
+        window.setFlags(
+            WindowManager.LayoutParams.FLAG_SECURE,
+            WindowManager.LayoutParams.FLAG_SECURE,
+        )
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
