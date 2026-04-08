@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'le_issuer_check.dart';
 import 'logger_service.dart';
 
 /// Model for a changelog section (one version)
@@ -15,32 +16,11 @@ class ChangelogService {
   static const String changelogUrl =
       'https://mail.icd360s.de/updates/changelog.json';
 
-  // Trusted Let's Encrypt issuer DNs (same exact DN list as MtlsService,
-  // CertificateService, UpdateService, LogUploadService — keep in sync).
-  // SECURITY (L8): Replaces the previous loose `cert.issuer.contains("Let's
-  // Encrypt")` check that would accept any cert whose issuer string happened
-  // to mention Let's Encrypt anywhere.
-  static const _trustedIssuers = [
-    'CN=R3,O=Let\'s Encrypt,C=US',
-    'CN=R10,O=Let\'s Encrypt,C=US',
-    'CN=R11,O=Let\'s Encrypt,C=US',
-    'CN=R12,O=Let\'s Encrypt,C=US',
-    'CN=E5,O=Let\'s Encrypt,C=US',
-    'CN=E6,O=Let\'s Encrypt,C=US',
-    'CN=E7,O=Let\'s Encrypt,C=US',
-    'CN=E8,O=Let\'s Encrypt,C=US',
-    'CN=ISRG Root X1,O=Internet Security Research Group,C=US',
-    'CN=ISRG Root X2,O=Internet Security Research Group,C=US',
-  ];
-
-  /// Strict TLS validation: only accept certs for mail.icd360s.de signed by
-  /// a known Let's Encrypt issuer DN (exact match, not substring).
+  /// Strict TLS validation using shared LE issuer helper.
+  /// Only accept certs for mail.icd360s.de signed by a known LE CA.
   static bool _validateCertificate(X509Certificate cert, String host, int port) {
     if (host != 'mail.icd360s.de') return false;
-    final issuer = cert.issuer;
-    return _trustedIssuers.any(
-      (trusted) => issuer == trusted || issuer.contains(trusted),
-    );
+    return isTrustedLetsEncryptIssuer(cert.issuer);
   }
 
   /// Fetch structured changelog from server
@@ -81,3 +61,4 @@ class ChangelogService {
     return null;
   }
 }
+
