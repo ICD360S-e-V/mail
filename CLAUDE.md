@@ -237,78 +237,142 @@ flutter build ios --release
 
 ## 4. RELEASE WORKFLOW
 
-**Urmeaza pasii in ordine!**
+**Urmeaza pasii in ordine. NU sari peste niciunul.**
 
-### PASUL 0: Verifica versiunea curenta
+### Pre-flight checks (ÎNAINTE de a începe)
+
+```bash
+# 1. Asigura-te ca esti pe main si totul este sincronizat
+git status                    # working tree clean
+git pull origin main          # latest
+
+# 2. Verifica ca nu exista build-uri esuate recente pe main
+gh api repos/ICD360S-e-V/mail/actions/runs?branch=main\&per_page=1 --jq '.workflow_runs[0] | {status, conclusion}'
+
+# 3. Asigura-te ca cineva poate aproba environment-ul production
+#    (tu sau review-er-ul listed in Settings > Environments > production)
+
+# 4. Verifica versiunea ULTIMA deploy-ata pe server
+curl -sf https://mail.icd360s.de/updates/version.json | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])'
+```
+
+### PASUL 0: Verifica versiunea curenta in repo
 ```bash
 grep "version:" pubspec.yaml | head -1
 grep "currentVersion" lib/services/update_service.dart
 grep "mainWindowVersion" lib/views/main_window.dart
 grep "MyAppVersion" windows/installer.iss | head -1
 ```
-Toate 4 trebuie sa aiba ACEEASI versiune.
+Toate 4 trebuie sa aiba ACEEASI versiune. Daca nu, sincronizeaza-le inainte.
 
-### PASUL 1: Actualizeaza Changelog in Aplicatie
-```dart
-// lib/views/changelog_window.dart
-// Adauga noua versiune LA INCEPUT
-_buildSection(theme, 'Version X.Y.Z - DD Luna YYYY', [
-  'Feature noua',
-  'Bug fix',
-]),
-```
+### PASUL 1: Decide noua versiune (semver)
 
-**Prefix-uri changelog:** Feature | Bug | Refactor | Security | UI | Performance | Compatibility
+| Schimbare | Bump |
+|-----------|------|
+| Bug fix sau security patch | PATCH (X.Y.**Z+1**) |
+| Feature nou backwards-compatible | MINOR (X.**Y+1**.0) |
+| Breaking change | MAJOR (**X+1**.0.0) |
 
-### PASUL 2: Actualizeaza Versiunea (4 fisiere!)
+Exemplu: 2.20.3 → 2.20.4 (bug fix)
 
-**IMPORTANT:** Versiunea TREBUIE sa fie NOUA (mai mare decat cea curenta)!
+### PASUL 2: Bump versiune in 4 fisiere
+
+**IMPORTANT:** Versiunea TREBUIE sa fie NOUA (mai mare). Build-number+1 in pubspec.yaml.
 
 ```yaml
-# 1. pubspec.yaml - incrementeaza si BUILD number!
+# 1. pubspec.yaml
 version: X.Y.Z+BUILD
 ```
-
 ```dart
 // 2. lib/services/update_service.dart
 static const String currentVersion = 'X.Y.Z';
 ```
-
 ```dart
-// 3. lib/views/main_window.dart - cauta "mainWindowVersion"
+// 3. lib/views/main_window.dart (~linia 1362, cauta "mainWindowVersion")
 l10n.mainWindowVersion('X.Y.Z'),
 ```
-
 ```pascal
 // 4. windows/installer.iss
 #define MyAppVersion "X.Y.Z"
 ```
 
-### PASUL 3: Commit + Push toate modificarile
+### PASUL 3: Adauga entry in changelog_window.dart
+
+```dart
+// lib/views/changelog_window.dart
+// Adauga LA INCEPUT (cu emoji NEW), scoate emoji-ul de la versiunea anterioara
+_buildSection(theme, '🆕 Version X.Y.Z - DD MMM YYYY', [
+  'Bug fix - ...',
+  'Security - ...',
+]),
+const SizedBox(height: 16),
+_buildSection(theme, 'Version X.Y.Z-1 - DD MMM YYYY', [  // <- scoate 🆕
+  ...
+]),
+```
+
+**Prefix-uri:** Feature | Bug fix | Security | Refactor | UI | Performance | Compatibility
+
+### PASUL 4: Update CLAUDE.md
+- Schimba `**Versiune Curenta:** X.Y.Z` la inceputul fisierului
+- Adauga rand nou in tabelul `## 9. ISTORIC VERSIUNI` (insert LA INCEPUT, dupa header)
+
+### PASUL 5: Commit + Push toate modificarile
 ```bash
-git add pubspec.yaml lib/services/update_service.dart lib/views/main_window.dart windows/installer.iss lib/views/changelog_window.dart CLAUDE.md
+git add pubspec.yaml \
+        lib/services/update_service.dart \
+        lib/views/main_window.dart \
+        lib/views/changelog_window.dart \
+        windows/installer.iss \
+        CLAUDE.md
 git commit -m "release(X.Y.Z): bump version + changelog"
 git push origin main
 ```
 
-### PASUL 4: Creeaza tag-ul (declanseaza CI/CD automat)
+### PASUL 6: Creeaza tag-ul (declanseaza CI/CD automat)
+
+**CRITICAL:** Tag-ul TREBUIE creat DUPA push, altfel CI/CD construieste o versiune fara modificari.
+
 ```bash
+# Verifica ca commit-ul tau e ultimul pe main
+git log -1 --oneline
+
+# Creeaza tag-ul si push
 git tag vX.Y.Z
 git push origin vX.Y.Z
 ```
 
 Asta declanseaza `.github/workflows/build-all-platforms.yml` care:
-- Build complet pe toate platformele (Linux, Windows, macOS, iOS, Android x5 flavors + AAB)
-- Creeaza GitHub Release
-- Asteapta APROBARE manuala in environment `production`
+1. Build complet pe toate platformele (Linux, Windows, macOS, iOS, Android x5 flavors + AAB)
+2. Creeaza GitHub Release (tag-ul devine release public)
+3. Job `Deploy to VPS` asteapta APROBARE manuala in environment `production`
 
-### PASUL 5: Asteapta CI/CD sa termine + APROBA deploy-ul
+### PASUL 7: Asteapta CI/CD build sa termine
 ```bash
-# Verifica statusul build-ului:
-gh api repos/ICD360S-e-V/mail/actions/runs?per_page=1 --jq '.workflow_runs[0] | {id, status, conclusion}'
+# Get last run ID (probabil tag-ul tau)
+RUN_ID=$(gh api repos/ICD360S-e-V/mail/actions/runs?per_page=1 --jq '.workflow_runs[0].id')
+echo "Run: $RUN_ID"
 
-# Cand toate job-urile sunt success si Deploy to VPS este "waiting", APROBA:
-RUN_ID=<id-ul din output anterior>
+# Verifica statusul tuturor job-urilor:
+gh api repos/ICD360S-e-V/mail/actions/runs/$RUN_ID/jobs \
+  --jq '.jobs[] | "\(.name): \(.conclusion // .status)"'
+```
+
+Asteapta pana toate job-urile arata:
+- `Detect Changes: success`
+- `Linux: success`
+- `Windows: success`
+- `Apple (iOS + macOS): success`
+- `Android (universal/fdroid/googleplay/samsung/huawei + AAB): success` (×6)
+- `Android Cache Save: success`
+- `Release: success`
+- `Deploy to VPS: waiting` ← acum trebuie aprobat
+
+**Daca un job esueaza:** verifica log-ul cu `gh run view --repo ICD360S-e-V/mail --job=<job_id> --log-failed`. Repara codul, push, fortzeaza tag-ul la commit-ul nou (`git tag -f vX.Y.Z && git push -f origin vX.Y.Z`), re-trigger workflow.
+
+### PASUL 8: APROBA deploy-ul in environment `production`
+
+```bash
 ENV_ID=$(gh api repos/ICD360S-e-V/mail/actions/runs/$RUN_ID/pending_deployments --jq '.[0].environment.id')
 gh api repos/ICD360S-e-V/mail/actions/runs/$RUN_ID/pending_deployments -X POST \
   -F "environment_ids[]=$ENV_ID" \
@@ -316,23 +380,44 @@ gh api repos/ICD360S-e-V/mail/actions/runs/$RUN_ID/pending_deployments -X POST \
   -f comment="release vX.Y.Z"
 ```
 
-Sau aproba din GitHub UI: Settings > Environments > production > Review deployments.
+Sau din GitHub UI: **Actions tab → run-ul curent → Review deployments → production → Approve and deploy**.
 
-### PASUL 6: Calculeaza SHA-256 pentru TOATE platformele (de pe server!)
+### PASUL 9: Asteapta deploy-ul sa termine cu success
 
-**CRITICAL:** Hash-urile trebuie calculate pe binarele DEJA UPLOADATE pe server, NU pe build artifacts locali. CI/CD-ul deja a deploy-at fisierele dupa approval.
+**CRITICAL:** NU treci la PASUL 10 daca deploy-ul nu e success. Daca PASUL 10 ruleaza pe binare vechi, hash-urile vor fi GRESITE iar in-app updater-ul va respinge update-ul.
+
+```bash
+# Asteapta:
+while true; do
+  S=$(gh api repos/ICD360S-e-V/mail/actions/runs/$RUN_ID/jobs \
+    --jq '.jobs[] | select(.name == "Deploy to VPS") | "\(.status) \(.conclusion // "running")"')
+  echo "$(date +%H:%M:%S) Deploy: $S"
+  echo "$S" | grep -qE "completed (success|failure)" && break
+  sleep 15
+done
+```
+
+Trebuie sa vezi `completed success`. Daca `failure`, NU CONTINUA — verifica log-ul deploy-ului si rezolva.
+
+### PASUL 10: Calculeaza SHA-256 pentru TOATE platformele (de pe server!)
+
+**CRITICAL:** Hash-urile trebuie calculate pe binarele DEJA UPLOADATE pe server, NU pe build artifacts locali. CI/CD-ul deja a deploy-at fisierele dupa approval (PASUL 9).
 
 ```bash
 ssh -i <SSH_KEY> -p 36000 root@mail.icd360s.de "
-sha256sum /var/www/html/downloads/mail/windows/icd360s-mail-setup.exe
-sha256sum /var/www/html/downloads/mail/macos/icd360s-mail.dmg
-sha256sum /var/www/html/downloads/mail/android/universal/app-arm64-v8a-universal-release.apk
-sha256sum /var/www/html/downloads/mail/linux/icd360s-mail.AppImage
-sha256sum /var/www/html/downloads/mail/ios/icd360s-mail.ipa
+echo 'WIN:' \$(sha256sum /var/www/html/downloads/mail/windows/icd360s-mail-setup.exe | awk '{print \$1}')
+echo 'MAC:' \$(sha256sum /var/www/html/downloads/mail/macos/icd360s-mail.dmg | awk '{print \$1}')
+echo 'AND:' \$(sha256sum /var/www/html/downloads/mail/android/universal/app-arm64-v8a-universal-release.apk | awk '{print \$1}')
+echo 'LIN:' \$(sha256sum /var/www/html/downloads/mail/linux/icd360s-mail.AppImage | awk '{print \$1}')
+echo 'IOS:' \$(sha256sum /var/www/html/downloads/mail/ios/icd360s-mail.ipa | awk '{print \$1}')
+echo 'TIMESTAMPS:'
+ls -la /var/www/html/downloads/mail/macos/ /var/www/html/downloads/mail/windows/
 "
 ```
 
-### PASUL 7: Update version.json pe server cu HASH-URI PER PLATFORMA
+**Verifica timestamp-urile** — trebuie sa fie din ULTIMELE MINUTE (nu fisierele vechi). Daca timestamp-ul e vechi, deploy-ul nu a uploadat sau a esuat — NU continua.
+
+### PASUL 11: Update version.json pe server cu HASH-URI PER PLATFORMA
 
 **CRITICAL:** Trebuie OBLIGATORIU `sha256_macos`, `sha256_android`, `sha256_linux`, `sha256_ios` SEPARAT, nu doar `sha256` (care e folosit doar pentru Windows). Daca lipsesc, in-app updater-ul foloseste hash-ul Windows pentru toate platformele si toate update-urile non-Windows esueaza cu "file corrupted or tampered". Acest bug a fost introdus in v2.20.0 si fixat in v2.20.3.
 
@@ -355,9 +440,11 @@ ssh -i <SSH_KEY> -p 36000 root@mail.icd360s.de "cat > /var/www/html/updates/vers
 EOF"
 ```
 
-### PASUL 8: Update changelog.json pe Server
+### PASUL 12: Update changelog.json pe Server
 
-User-ii care apasa "View Changelog" in app citesc din `https://mail.icd360s.de/updates/changelog.json` (nu din `changelog_window.dart` hardcodat). TREBUIE actualizat aici dupa fiecare release, altfel utilizatorii nu vor vedea entry-ul nou.
+User-ii care apasa "View Changelog" in app citesc din `https://mail.icd360s.de/updates/changelog.json` (NU din `changelog_window.dart` hardcodat — acela e doar fallback offline). TREBUIE actualizat aici dupa fiecare release, altfel utilizatorii nu vor vedea entry-ul nou.
+
+**IMPORTANT:** Entry-ul aici trebuie sa fie IDENTIC (sau cel putin echivalent) cu cel din `changelog_window.dart` — aceeasi titlu, aceleasi bullet points. Inconsistenta confuzeaza user-ii.
 
 ```bash
 ssh -i <SSH_KEY> -p 36000 root@mail.icd360s.de "python3 << 'PYEOF'
@@ -377,27 +464,128 @@ with open('/var/www/html/updates/changelog.json', 'w') as f:
 PYEOF"
 ```
 
-### Checklist Release
-```
-[] 0. Verifica versiunea curenta in toate 4 fisierele (pubspec, update_service, main_window, installer.iss)
-[] 1. changelog_window.dart - adauga noua versiune LA INCEPUT (cu emoji NEW)
-[] 2. Bump versiune in 4 fisiere (pubspec.yaml, update_service.dart, main_window.dart, installer.iss)
-[] 3. CLAUDE.md - update "Versiune Curenta" + adauga in tabelul ISTORIC VERSIUNI
-[] 4. git commit + git push origin main
-[] 5. git tag vX.Y.Z + git push origin vX.Y.Z (declanseaza CI/CD)
-[] 6. Asteapta CI/CD - toate job-urile success
-[] 7. APROBA "Deploy to VPS" in environment production (din GitHub UI sau prin gh api)
-[] 8. Asteapta deploy-ul sa termine cu success
-[] 9. Calculeaza SHA-256 pentru TOATE 5 binarele de pe server (ssh + sha256sum)
-[] 10. Update /var/www/html/updates/version.json cu HASH-URI PER PLATFORMA (sha256_macos, sha256_android, sha256_linux, sha256_ios)
-[] 11. Update /var/www/html/updates/changelog.json pe server (nu doar in app)
+### PASUL 13: Verifica post-release (smoke test)
+
+```bash
+# 1. Server arata noua versiune in version.json
+curl -sf https://mail.icd360s.de/updates/version.json | python3 -c '
+import json,sys
+d = json.load(sys.stdin)
+print(f\"version: {d[\"version\"]}\")
+print(f\"sha256 (win): {d.get(\"sha256\", \"MISSING\")[:16]}...\")
+print(f\"sha256_macos: {d.get(\"sha256_macos\", \"MISSING\")[:16]}...\")
+print(f\"sha256_linux: {d.get(\"sha256_linux\", \"MISSING\")[:16]}...\")
+print(f\"sha256_android: {d.get(\"sha256_android\", \"MISSING\")[:16]}...\")
+print(f\"sha256_ios: {d.get(\"sha256_ios\", \"MISSING\")[:16]}...\")
+'
+
+# 2. Server arata noua versiune in changelog.json (primul element trebuie sa aiba 🆕 si versiunea noua)
+curl -sf https://mail.icd360s.de/updates/changelog.json | python3 -c '
+import json,sys
+d = json.load(sys.stdin)
+print(d["versions"][0]["title"])
+for e in d["versions"][0]["entries"][:3]:
+    print(f"  - {e}")
+'
+
+# 3. Hash-urile din version.json sunt valide vs binarele actuale (cross-check)
+ssh -i <SSH_KEY> -p 36000 root@mail.icd360s.de "
+SERVER_MAC=\$(sha256sum /var/www/html/downloads/mail/macos/icd360s-mail.dmg | awk '{print \$1}')
+JSON_MAC=\$(python3 -c 'import json; print(json.load(open(\"/var/www/html/updates/version.json\"))[\"sha256_macos\"])')
+[ \"\$SERVER_MAC\" = \"\$JSON_MAC\" ] && echo '✓ macOS hash match' || echo '❌ macOS hash MISMATCH'
+"
 ```
 
-**Common bugs din experienta:**
-- A) Daca uiti `sha256_macos` etc. → in-app update esueaza pe non-Windows cu "file corrupted or tampered" (v2.20.3 fix)
-- B) Daca uiti changelog.json pe server → user-ii vad doar versiunile vechi cand apasa "View Changelog" (v2.20.0 oversight)
-- C) Daca uiti sa aprobi environment → deploy ramane in "waiting" la nesfarsit
-- D) Daca tag-ezi inainte de a face commit → tag-ul pointeaza la commit-ul vechi, CI/CD construieste fara modificari
+Daca oricare dintre verificarile de mai sus esueaza → NU anunta release-ul, repara mai intai.
+
+### PASUL 14: Test in app (manual)
+
+1. **Pe device-ul tau cu app-ul vechi**: deschide app-ul, asteapta auto-update check (max 5 min) sau apasa Refresh.
+2. Confirma ca app-ul arata "New version available".
+3. Click Install update → urmareste log-ul: download, SHA-256 verify, install, restart.
+4. Dupa restart, verifica versiunea din footer arata X.Y.Z.
+5. Adauga un cont si verifica conexiunea IMAP/SMTP merge (cert mTLS chain valid).
+
+Daca update-ul esueaza pe device-ul tau → reverteste sau lanseaza un hotfix.
+
+---
+
+### Checklist Release (printable)
+```
+PRE-FLIGHT
+[] git status clean, pe main, sincronizat cu origin
+[] CI verde pe main (ultimul build)
+[] Reviewer-ul environment production e disponibil sa aprobe
+
+CODE
+[] 0. Versiunea curenta sincronizata in toate 4 fisierele
+[] 1. Decis bump (PATCH/MINOR/MAJOR)
+[] 2. Bump in 4 fisiere: pubspec.yaml, update_service.dart, main_window.dart, installer.iss
+[] 3. changelog_window.dart - entry nou LA INCEPUT (cu 🆕), scos 🆕 de la cea anterioara
+[] 4. CLAUDE.md - "Versiune Curenta" + tabel ISTORIC VERSIUNI updated
+
+GIT
+[] 5. git commit + git push origin main
+[] 6. git tag vX.Y.Z + git push origin vX.Y.Z
+
+CI/CD
+[] 7. Toate build job-urile success (gh api .../jobs)
+[] 8. APROBAT "Deploy to VPS" in environment production
+[] 9. Deploy completat cu success (NU doar started!)
+
+SERVER
+[] 10. SHA-256 calculate pentru TOATE 5 binarele DUPA deploy success
+[] 11. version.json updated cu HASH-URI PER PLATFORMA:
+       - sha256 (Windows)
+       - sha256_macos
+       - sha256_linux
+       - sha256_android
+       - sha256_ios
+[] 12. changelog.json updated pe server (intrare identica cu changelog_window.dart)
+
+VERIFICATION
+[] 13. curl version.json → versiune corecta + toate 5 hash-urile prezente
+[] 14. curl changelog.json → primul entry are 🆕 + versiunea noua
+[] 15. Cross-check: hash din version.json == sha256sum din binar real
+[] 16. Test in app: trigger update check → install → confirm versiune noua + IMAP merge
+```
+
+### Common bugs din experienta (lessons learned)
+
+| Bug | Cauza | Versiunea introdusa | Versiunea fix |
+|-----|-------|---------------------|----------------|
+| `file corrupted or tampered` la auto-update non-Windows | `version.json` are doar `sha256` (Windows), lipseste `sha256_macos`/`_linux`/`_android`/`_ios`. App-ul citea hash-ul Windows pentru toate platformele. | v2.20.0 | v2.20.3 |
+| User-ii vad doar versiuni vechi cand apasa "View Changelog" | Forgot to update `changelog.json` pe server (era doar in `changelog_window.dart` local) | v2.20.0 | v2.20.1 |
+| `Authentication failed` la cert API in app | `get-certificate.php` apela `doveadm` direct, dar PHP-FPM ruleaza ca apache user care n-are acces la auth-client socket Dovecot. Necesita sudoers + `sudo doveadm` | v2.20.0 | hotfix server-side |
+| `mTLS REJECTED: Certificate not for mail.icd360s.de` | `badCertificateCallback` e chemat pentru fiecare cert din chain, nu doar leaf. Codul respingea intermediate-ul. | v2.20.0 | v2.20.4 |
+| `mTLS Unknown issuer` | Compararea DN: codul folosea format RFC 4514 (`CN=R3,O=...`), Dart returneaza format slash (`/CN=R3/O=...`) | v2.18 | v2.20.2 |
+| Deploy stuck in "waiting" indefinit | Uitat sa aprobi environment-ul `production` | always | manual fix |
+| CI builds fara modificarile mele | Tag pushed inainte ca commit-ul sa fie pe origin/main | always | force-push tag dupa commit |
+| Connection refused la mail.icd360s.de:10993 din IPv6 | HAProxy `bind *:10993` se lega doar pe IPv4 in acest setup. Trebuie explicit `bind 0.0.0.0:10993,:::10993` | v2.20.1 | server config |
+| 17 conturi cu parole inaccesibile dupa upgrade v2.5→v2.20 | Migration logic doar pentru un format intermediate XOR, nu pentru hostname-XOR original | v2.20.0 | v2.20.1 (parțial — pasword garbage) |
+
+### Rollback (in caz de release stricat)
+
+Daca o versiune e deploy-ata si descopera dupa ca e bug-uita:
+
+```bash
+# 1. Revert la versiunea anterioara (X.Y.Z-1) in version.json pe server
+ssh -i <SSH_KEY> -p 36000 root@mail.icd360s.de "
+# Verifica daca exista backup
+ls /var/www/html/updates/version.json.bak* 2>/dev/null
+# Sau pune versiunea anterioara manual (cu hash-urile binarelor anterioare)
+"
+
+# 2. Daca binarele anterioare au fost suprascrise, trebuie reconstruite din git tag-ul anterior
+git checkout vX.Y.Z-1
+# Trigger workflow_dispatch pe acel tag
+gh api repos/ICD360S-e-V/mail/actions/workflows/build-all-platforms.yml/dispatches -X POST -f ref="vX.Y.Z-1"
+
+# 3. Notifica user-ii daca au facut deja update la versiunea bug-uita
+# (nu exista notification mechanism - manual prin email/in-app announcement)
+```
+
+**Lectie:** Pastreaza backup-uri pe server pentru ULTIMELE 2-3 binare per platforma, pentru a putea face rollback rapid fara rebuild.
 
 ---
 
@@ -574,6 +762,7 @@ flutter run -d <device-id> # Android/iOS
 - **Auto-update cu SHA-256 verification** — https://mail.icd360s.de/updates/version.json
 - **Certificat per-user:** Downloadat la login, stocat DOAR in memorie, unic per user
 - **Certificat validitate:** 90 zile (server auto-renews la < 30 zile remaining)
+
 
 
 
