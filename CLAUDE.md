@@ -1,7 +1,7 @@
 # ICD360S Mail Client - Documentatie
 
 **Actualizat:** 7 Aprilie 2026
-**Versiune Curenta:** 2.20.1 (Cross-Platform)
+**Versiune Curenta:** 2.20.2 (Cross-Platform)
 
 ---
 
@@ -410,6 +410,7 @@ openssl x509 -in /etc/ssl/icd360s-user-certs/<USERNAME>/cert.pem -noout -dates -
 
 | Versiune | Data | Highlights |
 |----------|------|------------|
+| 2.20.2 | 8 Apr 2026 | CRITICAL fix: TLS issuer DN format mismatch (slash vs comma) was rejecting all valid Let's Encrypt certs in v2.20.0/2.20.1, breaking IMAP/SMTP/HTTPS. Shared le_issuer_check helper. |
 | 2.20.1 | 8 Apr 2026 | Bug fixes: v2.5.x XOR-password migration, update progress throttle, trash cleanup spam, l10n warning spam, log header version |
 | 2.20.0 | 7 Apr 2026 | Mass Security Hardening (24 fixes): IMAP injection escape, path traversal sanitize, persisted rate limit + exponential lockout, APK signature verification, RFC 7469 backup pin, iOS NSPinnedDomains, AES-GCM credential storage, factory reset typed confirmation, GPG-signed AppImage, libsecret runtime dep, SHA-pinned actions, VC redist download verified, gitignore expansion, Janus mitigation |
 | 2.19.0 | 7 Apr 2026 | CI/CD Security: non-root deploy user, restricted rrsync, pinned SSH host key, production environment with required reviewer, workflow least-privilege permissions |
@@ -505,5 +506,6 @@ flutter run -d <device-id> # Android/iOS
 - **Auto-update cu SHA-256 verification** — https://mail.icd360s.de/updates/version.json
 - **Certificat per-user:** Downloadat la login, stocat DOAR in memorie, unic per user
 - **Certificat validitate:** 90 zile (server auto-renews la < 30 zile remaining)
+
 
 
