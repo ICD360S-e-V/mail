@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:enough_mail/enough_mail.dart';
 import '../models/models.dart';
+import 'certificate_service.dart';
 import 'logger_service.dart';
 import 'mtls_service.dart';
 import 'threat_intelligence_service.dart';
@@ -1274,6 +1275,18 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
     // SECURITY: Validate server before connecting
     _validateAccount(account);
 
+    // Skip silently if no certificate is available for this account.
+    // Trash cleanup runs on every startup for every account; logging a stack
+    // trace per account when certs aren't loaded yet (or auth failed) creates
+    // a flood of identical errors that hide real problems.
+    if (!CertificateService.hasCertificates ||
+        CertificateService.currentUsername != account.username) {
+      return 0;
+    }
+    if (account.password == null || account.password!.isEmpty) {
+      return 0;
+    }
+
     int deletedCount = 0;
 
     try {
@@ -1376,5 +1389,6 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
     return deletedCount;
   }
 }
+
 
 
