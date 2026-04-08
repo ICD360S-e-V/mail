@@ -128,7 +128,17 @@ class NotificationService {
     }
 
     try {
-      // Notification details for each platform
+      // Notification details for each platform.
+      //
+      // SECURITY (Android): visibility = private. On a secure lock
+      // screen the system replaces our title and body with the
+      // generic placeholder "Sensitive notification content is
+      // hidden", showing only the app icon and the count. After the
+      // user unlocks, the full title (sender) and body (subject) are
+      // revealed. This is the standard pattern for messaging apps
+      // (Signal, WhatsApp, ProtonMail) and protects against shoulder-
+      // surfing, casual observers and notification mirroring to
+      // smartwatches that don't share the device lock state.
       const androidDetails = AndroidNotificationDetails(
         'icd360s_mail_channel',
         'ICD360S Mail',
@@ -136,8 +146,19 @@ class NotificationService {
         importance: Importance.high,
         priority: Priority.high,
         ticker: 'New email',
+        visibility: NotificationVisibility.private,
       );
 
+      // SECURITY (iOS / macOS): Apple does NOT expose a public API
+      // for forcing lock-screen content redaction from the
+      // application side. The behaviour is controlled exclusively by
+      // the user via Settings → Notifications → ICD360S Mail →
+      // Show Previews → "When Unlocked" (recommended) or "Never".
+      // We therefore put the real subject in the body and rely on
+      // the user setting + the in-app blur overlay (M4) to keep the
+      // content private. Recommend the "When Unlocked" setting in
+      // user-facing documentation. (This matches Apple Mail.app
+      // behaviour.)
       const darwinDetails = DarwinNotificationDetails(
         presentAlert: true,
         presentBadge: true,
