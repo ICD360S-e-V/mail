@@ -1,5 +1,5 @@
 #define MyAppName "ICD360S Mail Client"
-#define MyAppVersion "2.20.3"
+#define MyAppVersion "2.20.4"
 #define MyAppPublisher "ICD360S e.V."
 #define MyAppURL "https://icd360s.de"
 #define MyAppExeName "icd360s_mail_client.exe"
@@ -131,5 +131,6 @@ begin
     end;
   end;
 end;
+
 
 
