@@ -85,7 +85,11 @@ class _ChangelogWindowState extends State<ChangelogWindow> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSection(theme, '🆕 Version 2.20.2 - 8 Apr 2026', [
+          _buildSection(theme, '🆕 Version 2.20.3 - 8 Apr 2026', [
+            'Bug fix - Update SHA-256 verification: read platform-specific hash field (sha256_macos / _linux / _android / _ios) instead of always reading the Windows sha256, which caused all non-Windows updates to fail with "file corrupted or tampered"',
+          ]),
+          const SizedBox(height: 16),
+          _buildSection(theme, 'Version 2.20.2 - 8 Apr 2026', [
             'CRITICAL Bug fix - TLS issuer validation parsed wrong DN format (slash vs comma) in v2.20.0/2.20.1, rejecting all legitimate Let\'s Encrypt certs and breaking IMAP/SMTP/HTTPS for every account',
             'Fix applied in 5 services: mtls, certificate_service, update_service, log_upload_service, changelog_service via shared le_issuer_check helper',
           ]),
