@@ -1302,19 +1302,41 @@ class ImapClient extends ClientBase {
     );
   }
 
+  /// Quotes an already-encoded mailbox path per RFC 3501 quoted-string
+  /// rules.
+  ///
+  /// Defense-in-depth against CRLF injection: rejects paths containing
+  /// CR/LF/NUL bytes (which could otherwise be used by a malicious or
+  /// compromised IMAP server to smuggle additional commands), and
+  /// escapes backslash and double-quote characters.
+  String _quoteEncodedMailboxPath(String encodedPath) {
+    if (encodedPath.contains('\r') ||
+        encodedPath.contains('\n') ||
+        encodedPath.contains('\x00')) {
+      throw ImapException(
+        this,
+        'Invalid mailbox path: contains forbidden control characters',
+      );
+    }
+    final escaped = encodedPath
+        .replaceAll(r'\', r'\\')
+        .replaceAll('"', r'\"');
+    return '"$escaped"';
+  }
+
   String _encodeMailboxPath(String path, [bool alwaysQuote = false]) {
     if (_serverInfo.supportsUtf8) {
       if (path.startsWith('\"')) {
         return path;
       }
 
-      return '"$path"';
+      return _quoteEncodedMailboxPath(path);
     }
     final pathSeparator = serverInfo.pathSeparator ?? '/';
     var encodedPath = Mailbox.encode(path, pathSeparator);
     if (encodedPath.contains(' ') ||
         (alwaysQuote && !encodedPath.startsWith('"'))) {
-      encodedPath = '"$encodedPath"';
+      encodedPath = _quoteEncodedMailboxPath(encodedPath);
     }
 
     return encodedPath;
@@ -1543,7 +1565,7 @@ class ImapClient extends ClientBase {
     bool enableCondStore = false,
     QResyncParameters? qresync,
   }) {
-    final path = '"${box.encodedPath}"';
+    final path = _quoteEncodedMailboxPath(box.encodedPath);
     final buffer = StringBuffer()
       ..write(command)
       ..write(' ')
@@ -2120,7 +2142,7 @@ class ImapClient extends ClientBase {
   ///  query that mailbox's status without deselecting the current
   ///  mailbox in the first IMAP4rev1 connection.
   Future<Mailbox> statusMailbox(Mailbox box, List<StatusFlags> flags) {
-    final path = '"${box.encodedPath}"';
+    final path = _quoteEncodedMailboxPath(box.encodedPath);
     final buffer = StringBuffer()
       ..write('STATUS ')
       ..write(path)
@@ -2204,7 +2226,7 @@ class ImapClient extends ClientBase {
   /// [box] the mailbox that should be renamed
   /// [newName] the desired future name of the mailbox
   Future<Mailbox> renameMailbox(Mailbox box, String newName) async {
-    final path = '"${box.encodedPath}"';
+    final path = _quoteEncodedMailboxPath(box.encodedPath);
 
     final cmd = Command(
       'RENAME $path ${_encodeMailboxPath(newName)}',
@@ -2244,7 +2266,7 @@ class ImapClient extends ClientBase {
       _sendMailboxCommand('UNSUBSCRIBE', box);
 
   Future<Mailbox> _sendMailboxCommand(String command, Mailbox box) async {
-    final path = '"${box.encodedPath}"';
+    final path = _quoteEncodedMailboxPath(box.encodedPath);
     final cmd = Command(
       '$command $path',
       writeTimeout: defaultWriteTimeout,
