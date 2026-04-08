@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'le_issuer_check.dart';
 import 'logger_service.dart';
 import 'localization_service.dart';
+import 'pinned_security_context.dart';
 
 /// Auto-update service for checking and installing updates
 class UpdateService {
@@ -103,7 +104,7 @@ class UpdateService {
       LoggerService.log('UPDATE', 'Checking for updates at $updateUrl');
 
       // Download version.json from server
-      final client = HttpClient()
+      final client = PinnedSecurityContext.createHttpClient()
         ..badCertificateCallback = _validateCertificate;
       try {
         final request = await client.getUrl(Uri.parse(updateUrl));
@@ -242,7 +243,7 @@ class UpdateService {
       return null;
     }
 
-    final client = HttpClient()
+    final client = PinnedSecurityContext.createHttpClient()
       ..badCertificateCallback = _validateCertificate;
     try {
       final request = await client.getUrl(Uri.parse(updateInfo.downloadUrl));
