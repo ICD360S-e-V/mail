@@ -33,8 +33,12 @@ String safeAttachmentFileName(String raw) {
     name = name.substring(lastSep + 1);
   }
 
-  // Step 3: remove control characters (0x00-0x1F, 0x7F) and null bytes
-  name = name.replaceAll(RegExp(r'[\x00-\x1F\x7F]'), '');
+  // Step 3: remove control characters (0x00-0x1F, 0x7F) and null bytes,
+  // plus Unicode bidirectional controls (Trojan Source / CVE-2021-42574)
+  name = name.replaceAll(
+    RegExp(r'[\x00-\x1F\x7F\u200E\u200F\u202A-\u202E\u2066-\u2069]'),
+    '',
+  );
 
   // Step 4: replace Windows-illegal filename chars
   name = name.replaceAll(RegExp(r'[<>:"|?*]'), '_');
