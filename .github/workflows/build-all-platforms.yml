@@ -652,6 +652,65 @@ jobs:
             echo "- ${f#deploy/} ($SIZE)" >> "$GITHUB_STEP_SUMMARY"
           done
 
+      # ============================================================
+      # H2: Generate UNSIGNED version.json.draft
+      #
+      # The H2 signing key is held offline on the dev host
+      # (alma-8gb-fsn1-1) and intentionally NEVER reaches GitHub
+      # Actions. This step writes a draft manifest with the freshly-
+      # computed SHA-256 of every newly-built binary; a cron job on
+      # the dev host polls /downloads/mail/version.json.draft, signs
+      # it with the offline ECDSA P-256 key, and atomically publishes
+      # version.json + version.json.sig to /updates/.
+      # ============================================================
+      - name: Generate version.json.draft (unsigned manifest for H2 signer)
+        run: |
+          set -euo pipefail
+          DEPLOY_DIR="deploy/downloads/mail"
+          VERSION="${GITHUB_REF_NAME#v}"
+
+          sha_of() {
+            local f="$1"
+            if [ -f "$f" ]; then
+              sha256sum "$f" | cut -d' ' -f1
+            else
+              echo ""
+            fi
+          }
+
+          ANDROID_HASH=$(sha_of "${DEPLOY_DIR}/android/universal/app-arm64-v8a-universal-release.apk")
+          WINDOWS_HASH=$(sha_of "${DEPLOY_DIR}/windows/icd360s-mail-setup.exe")
+          MACOS_HASH=$(sha_of "${DEPLOY_DIR}/macos/icd360s-mail.dmg")
+          LINUX_HASH=$(sha_of "${DEPLOY_DIR}/linux/icd360s-mail.AppImage")
+          IOS_HASH=$(sha_of "${DEPLOY_DIR}/ios/icd360s-mail.ipa")
+
+          CHANGELOG="Automated build for ${GITHUB_REF_NAME}. See https://github.com/${GITHUB_REPOSITORY}/releases/tag/${GITHUB_REF_NAME} for full release notes."
+
+          cat > "${DEPLOY_DIR}/version.json.draft" <<EOF
+          {
+            "version": "${VERSION}",
+            "download_url": "https://mail.icd360s.de/downloads/mail/windows/icd360s-mail-setup.exe",
+            "download_url_macos": "https://mail.icd360s.de/downloads/mail/macos/icd360s-mail.dmg",
+            "download_url_android": "https://mail.icd360s.de/downloads/mail/android/universal/app-arm64-v8a-universal-release.apk",
+            "download_url_linux": "https://mail.icd360s.de/downloads/mail/linux/icd360s-mail.AppImage",
+            "download_url_ios": "https://mail.icd360s.de/downloads/mail/ios/icd360s-mail.ipa",
+            "changelog": "${CHANGELOG}",
+            "sha256": "${WINDOWS_HASH}",
+            "sha256_macos": "${MACOS_HASH}",
+            "sha256_android": "${ANDROID_HASH}",
+            "sha256_linux": "${LINUX_HASH}",
+            "sha256_ios": "${IOS_HASH}"
+          }
+          EOF
+
+          # Validate JSON before letting it leave the runner
+          python3 -c "import json,sys; json.load(open(sys.argv[1]))" "${DEPLOY_DIR}/version.json.draft"
+
+          echo "## H2 draft manifest" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat "${DEPLOY_DIR}/version.json.draft" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
       - name: Setup SSH (pinned host key, non-root deploy user)
         env:
           DEPLOY_KEY: ${{ secrets.VPS_DEPLOY_KEY }}
