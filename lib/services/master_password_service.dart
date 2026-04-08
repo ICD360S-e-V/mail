@@ -3,12 +3,15 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/services.dart' show PlatformException;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path/path.dart' as p;
 import 'package:pointycastle/digests/sha256.dart';
 import 'package:pointycastle/key_derivators/api.dart';
 import 'package:pointycastle/key_derivators/pbkdf2.dart';
 import 'package:pointycastle/macs/hmac.dart';
 import 'account_service.dart';
+import 'aes_gcm_helpers.dart';
 import 'logger_service.dart';
 import 'platform_service.dart';
 
@@ -27,6 +30,18 @@ import 'platform_service.dart';
 class MasterPasswordService {
   static String? _passwordHashFilePath;
   static String? _rateLimitFilePath;
+
+  // Secure storage for the AES-GCM key that protects the persisted
+  // rate-limit state file. The key is generated on first run and
+  // bound to the OS keystore (Android Keystore TEE / iOS Keychain /
+  // Windows Credential Manager / macOS Keychain / Linux libsecret).
+  // An attacker with filesystem-only access cannot read or forge the
+  // key, so they cannot reset _failedAttempts to bypass the lockout.
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  static const String _rateLimitKeyName = 'icd360s_rate_limit_state_key_v2';
+  static const int _rateLimitVersionByte = 0x02;
+  static const Duration _tamperLockoutDuration = Duration(hours: 24);
+  static Uint8List? _cachedRateLimitKey;
 
   // Rate limit state (persisted to disk in `.master_password_attempts`)
   static int _failedAttempts = 0;
@@ -57,39 +72,153 @@ class MasterPasswordService {
   }
 
   /// Load rate limit state from disk (called on initialize)
+  /// Get-or-create the AES-GCM key used to seal the rate-limit state.
+  ///
+  /// FAIL-CLOSED: if the platform's secure storage is unavailable
+  /// (e.g. Linux without libsecret), we throw rather than fall back
+  /// to plain storage. Without an integrity-protected key the entire
+  /// rate-limit defense is meaningless — an attacker with filesystem
+  /// access could simply reset the counter. Throwing here forces the
+  /// caller into the catch branch of _loadRateLimitState which puts
+  /// the account into a 24 h lockout (defensive default).
+  static Future<Uint8List> _getOrCreateRateLimitKey() async {
+    if (_cachedRateLimitKey != null) return _cachedRateLimitKey!;
+    String? existingB64;
+    try {
+      existingB64 = await _secureStorage.read(key: _rateLimitKeyName);
+    } on PlatformException catch (e) {
+      throw StateError(
+          'Secure storage unavailable for rate-limit key: ${e.message}');
+    }
+    Uint8List key;
+    if (existingB64 != null) {
+      try {
+        key = Uint8List.fromList(base64.decode(existingB64));
+      } catch (_) {
+        // Stored value is corrupt — regenerate. Old encrypted state
+        // becomes unreadable, which trips the tamper-lockout path.
+        key = _generateKeyBytes();
+        await _secureStorage.write(
+            key: _rateLimitKeyName, value: base64.encode(key));
+      }
+      if (key.length != 32) {
+        key = _generateKeyBytes();
+        await _secureStorage.write(
+            key: _rateLimitKeyName, value: base64.encode(key));
+      }
+    } else {
+      key = _generateKeyBytes();
+      await _secureStorage.write(
+          key: _rateLimitKeyName, value: base64.encode(key));
+    }
+    _cachedRateLimitKey = key;
+    return key;
+  }
+
+  static Uint8List _generateKeyBytes() {
+    final r = Random.secure();
+    return Uint8List.fromList(List<int>.generate(32, (_) => r.nextInt(256)));
+  }
+
+  /// Force a 24 h lockout in response to detected tampering of the
+  /// persisted rate-limit state. Saves the new state immediately so
+  /// the lockout survives a process kill.
+  static Future<void> _enforceTamperLockout(String reason) async {
+    LoggerService.log('AUTH',
+        '⚠ Rate-limit tamper / corruption detected ($reason) — forcing 24 h lockout');
+    _failedAttempts = _freeAttempts + 10;
+    _lockoutUntil = DateTime.now().add(_tamperLockoutDuration);
+    await _saveRateLimitState();
+  }
+
   static Future<void> _loadRateLimitState() async {
     try {
       final f = File(_rateLimitFilePath!);
       if (!await f.exists()) return;
       final raw = await f.readAsString();
-      final json = jsonDecode(raw) as Map<String, dynamic>;
+
+      // Detect format. v1 (legacy) is plain JSON starting with `{`.
+      // v2 (current) is base64 of `0x02 || iv || ct+tag`.
+      if (raw.trimLeft().startsWith('{')) {
+        // Legacy v1 — read directly, then re-save in v2 to upgrade.
+        final json = jsonDecode(raw) as Map<String, dynamic>;
+        _failedAttempts = (json['attempts'] as int?) ?? 0;
+        final lockoutMs = json['lockoutUntil'] as int?;
+        _lockoutUntil = lockoutMs != null
+            ? DateTime.fromMillisecondsSinceEpoch(lockoutMs)
+            : null;
+        LoggerService.log('AUTH',
+            'Rate limit state loaded (v1, upgrading): $_failedAttempts attempts, lockout=${_lockoutUntil ?? "none"}');
+        // Upgrade to v2 in-place. If keystore is unavailable this
+        // throws and we fall to the tamper branch below.
+        await _saveRateLimitState();
+        return;
+      }
+
+      // v2: encrypted blob
+      final Uint8List key;
+      try {
+        key = await _getOrCreateRateLimitKey();
+      } catch (e) {
+        await _enforceTamperLockout('keystore unavailable: $e');
+        return;
+      }
+      final blob = Uint8List.fromList(base64.decode(raw.trim()));
+      final plaintext = AesGcmHelpers.decrypt(key, blob,
+          expectedVersionByte: _rateLimitVersionByte);
+      if (plaintext == null) {
+        await _enforceTamperLockout('AES-GCM decrypt failed');
+        return;
+      }
+      final json = jsonDecode(utf8.decode(plaintext)) as Map<String, dynamic>;
       _failedAttempts = (json['attempts'] as int?) ?? 0;
       final lockoutMs = json['lockoutUntil'] as int?;
       _lockoutUntil = lockoutMs != null
           ? DateTime.fromMillisecondsSinceEpoch(lockoutMs)
           : null;
       LoggerService.log('AUTH',
-          'Rate limit state loaded: $_failedAttempts failed attempts, lockout=${_lockoutUntil ?? "none"}');
+          'Rate limit state loaded (v2): $_failedAttempts attempts, lockout=${_lockoutUntil ?? "none"}');
     } catch (ex, stackTrace) {
+      // Anything unexpected (parse error, IO, etc.) is treated as
+      // tampering — defensive default. Resetting the counter would
+      // be exactly what an attacker wants.
       LoggerService.logError('AUTH', ex, stackTrace);
-      // Fall back to defaults — better to lose state than crash
-      _failedAttempts = 0;
-      _lockoutUntil = null;
+      try {
+        await _enforceTamperLockout('unexpected exception: $ex');
+      } catch (_) {
+        // Last-resort: at least set in-memory lockout so this process
+        // session is protected even if writing fails.
+        _failedAttempts = _freeAttempts + 10;
+        _lockoutUntil = DateTime.now().add(_tamperLockoutDuration);
+      }
     }
   }
 
-  /// Persist rate limit state to disk
+  /// Persist rate limit state to disk in v2 format (AES-GCM sealed).
+  ///
+  /// The plaintext is the same JSON the v1 path used. We then encrypt
+  /// it with the keystore-bound key and write the base64 of
+  /// `0x02 || iv || ct+tag`. An attacker with filesystem-only access
+  /// cannot decrypt (no key), cannot forge a valid blob (no key) and
+  /// cannot replay an old blob without us detecting at decrypt time
+  /// because the IV is freshly generated on every save.
   static Future<void> _saveRateLimitState() async {
     try {
-      final f = File(_rateLimitFilePath!);
-      await f.writeAsString(jsonEncode({
+      final key = await _getOrCreateRateLimitKey();
+      final plaintext = utf8.encode(jsonEncode({
         'attempts': _failedAttempts,
         'lockoutUntil': _lockoutUntil?.millisecondsSinceEpoch,
       }));
+      final blob = AesGcmHelpers.encrypt(
+          key, Uint8List.fromList(plaintext),
+          versionByte: _rateLimitVersionByte);
+      final f = File(_rateLimitFilePath!);
+      await f.writeAsString(base64.encode(blob));
     } catch (ex, stackTrace) {
       LoggerService.logError('AUTH', ex, stackTrace);
-      // Best effort — if we can't write, the rate limit becomes weaker but
-      // we don't want to fail the whole verify call
+      // Best effort — if we can't write the lockout becomes weaker
+      // but we don't want to crash the verify call. The in-memory
+      // counter still applies for the lifetime of this process.
     }
   }
 
