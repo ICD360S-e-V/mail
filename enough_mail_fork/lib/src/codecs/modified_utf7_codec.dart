@@ -221,14 +221,27 @@ class ModifiedUtf7Codec {
           shifted = false;
           bits = v = 0;
         } else if (codeUnit > 127) {
-          // invalid UTF-7
-          return text;
+          // SECURITY: invalid Modified UTF-7 sequence (RFC 3501 §5.1.3
+          // forbids non-ASCII bytes inside the base64 shift). Returning
+          // the raw text — as the upstream upstream did — leaks
+          // unprocessed bytes into mailbox names that downstream code
+          // treats as decoded UTF-16. Instead emit U+FFFD REPLACEMENT
+          // CHARACTER (Unicode TR#36 recommended pattern), reset the
+          // shift state, and continue decoding the remainder so the
+          // rest of the mailbox name is still usable.
+          decoded.writeCharCode(0xfffd);
+          shifted = false;
+          bits = v = 0;
         } else {
           final rank = _utf7Rank[codeUnit];
 
           if (rank == 0xff) {
-            // invalid UTF-7
-            return text;
+            // SECURITY: invalid base64 character inside modified UTF-7
+            // shift. Same recovery as above: U+FFFD + reset + continue.
+            decoded.writeCharCode(0xfffd);
+            shifted = false;
+            bits = v = 0;
+            continue;
           }
 
           v = (v << 6) | rank;
