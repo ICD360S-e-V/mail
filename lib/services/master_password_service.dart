@@ -12,6 +12,7 @@ import 'package:pointycastle/key_derivators/pbkdf2.dart';
 import 'package:pointycastle/macs/hmac.dart';
 import 'account_service.dart';
 import 'aes_gcm_helpers.dart';
+import 'certificate_service.dart';
 import 'logger_service.dart';
 import 'platform_service.dart';
 
@@ -350,6 +351,11 @@ class MasterPasswordService {
         // encrypt/decrypt fallback storage. The key is held in memory only
         // until lockSession() is called (auto-lock or explicit logout).
         await AccountService.unlockSession(password);
+        // SECURITY (M7): repopulate the in-memory mTLS cert cache
+        // from platform secure storage. This narrows the heap-dump
+        // window for the client private key from "the entire login
+        // session" down to "between unlock and the next lock".
+        await CertificateService.restoreFromSecureStorage();
         LoggerService.log('AUTH', '✓ Password correct');
       } else {
         _failedAttempts++;
