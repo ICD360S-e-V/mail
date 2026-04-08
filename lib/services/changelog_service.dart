@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'le_issuer_check.dart';
 import 'logger_service.dart';
+import 'pinned_security_context.dart';
 
 /// Model for a changelog section (one version)
 class ChangelogSection {
@@ -29,7 +30,7 @@ class ChangelogService {
     try {
       LoggerService.log('CHANGELOG', 'Fetching changelog from $changelogUrl');
 
-      final client = HttpClient()
+      final client = PinnedSecurityContext.createHttpClient()
         ..badCertificateCallback = _validateCertificate;
       try {
         final request = await client.getUrl(Uri.parse(changelogUrl));
