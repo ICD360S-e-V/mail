@@ -52,6 +52,10 @@
             <pin digest="SHA-256">C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M=</pin>
             <!-- ACTIVE: ISRG Root X2 (ECDSA, planned future root, already deployed by LE) -->
             <pin digest="SHA-256">diGVwiVYbubAI3RW4hB9xU8e/CH2GnkuvVFZE8zmgzI=</pin>
+            <!-- ACTIVE: ISRG Root YE (Generation Y ECDSA root, deployed Nov 2025) -->
+            <pin digest="SHA-256">sCkq5UWXjg+7mKu9lMhhYF5bGLsy7VI/UNW3tccdR7w=</pin>
+            <!-- ACTIVE: ISRG Root YR (Generation Y RSA root, deployed Nov 2025) -->
+            <pin digest="SHA-256">fk6IOKit1ild5647BH06ujSIq5XbCgqlbYl6ANhhi88=</pin>
             <!-- BACKUP (offline): ICD360S backup ECDSA P-384 key, NOT in any current cert -->
             <pin digest="SHA-256">Av62R4GaV3MhXb533nhIRyJHzbmei4Fa60QqvOBVYeA=</pin>
         </pin-set>
