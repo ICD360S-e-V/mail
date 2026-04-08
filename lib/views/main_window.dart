@@ -1359,7 +1359,7 @@ class _MainWindowState extends State<MainWindow> {
                 onPressed: _showChangelog,
                 builder: (context, states) {
                   return Text(
-                    l10n.mainWindowVersion('2.20.2'),
+                    l10n.mainWindowVersion('2.20.3'),
                     style: theme.typography.caption?.copyWith(
                       color: states.isHovered ? theme.accentColor.light : theme.accentColor,
                       fontWeight: FontWeight.bold,
