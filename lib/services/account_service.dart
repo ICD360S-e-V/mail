@@ -14,6 +14,7 @@ import 'package:pointycastle/key_derivators/pbkdf2.dart';
 import 'package:pointycastle/macs/hmac.dart';
 import '../models/models.dart';
 import 'aes_gcm_helpers.dart';
+import 'certificate_service.dart';
 import 'logger_service.dart';
 import 'localization_service.dart';
 import 'platform_service.dart';
@@ -286,6 +287,11 @@ class AccountService {
       _sessionKey = null;
       LoggerService.log('ACCOUNTS', 'Credential session locked (key wiped)');
     }
+    // SECURITY (M7): also clear the in-memory mTLS client certificate
+    // cache. The persistent copy in platform secure storage is left
+    // intact so the next unlock can re-restore without a network
+    // download. Heap dump captured between sessions reveals nothing.
+    CertificateService.lockCache();
   }
 
   /// Whether the credential session is unlocked.
