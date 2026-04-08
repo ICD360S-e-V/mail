@@ -15,6 +15,14 @@ class ImapResponseReader {
   ImapResponse? _currentResponse;
   ImapResponseLine? _currentLine;
 
+  /// Maximum allowed size for a single IMAP literal (in bytes).
+  ///
+  /// Defends against malicious or buggy servers that advertise a huge
+  /// `{N}` literal size, which would otherwise cause unbounded memory
+  /// allocation (DoS / OOM). 50 MiB accommodates legitimate large
+  /// attachments fetched via FETCH BODY while preventing abuse.
+  static const int maxLiteralSize = 50 * 1024 * 1024;
+
   /// Processes the given [data]
   void onData(Uint8List data) {
     _rawReader.add(data);
@@ -51,6 +59,15 @@ class ImapResponseReader {
   void _checkResponse(ImapResponse response, ImapResponseLine line) {
     final literal = line.literal;
     if (literal != null && literal > 0) {
+      if (literal > maxLiteralSize) {
+        // Reject oversized literal to prevent OOM/DoS via malicious server.
+        _currentResponse = null;
+        _currentLine = null;
+        throw FormatException(
+          'IMAP literal size $literal exceeds maximum allowed '
+          '($maxLiteralSize bytes)',
+        );
+      }
       if (_rawReader.isAvailable(literal)) {
         final rawLine = ImapResponseLine.raw(_rawReader.readBytes(literal));
         response.add(rawLine);
