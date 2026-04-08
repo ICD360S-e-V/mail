@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/io_client.dart';
 import 'le_issuer_check.dart';
 import 'logger_service.dart';
@@ -11,10 +12,27 @@ class CertificateService {
   static const String _apiUrl = 'https://mail.icd360s.de/api/get-certificate.php';
 
   /// Downloaded certificates (stored in memory only)
+  // SECURITY (M7): in-memory cache of the per-user mTLS certificate.
+  // This cache is populated at login (downloadCertificateForUser) and
+  // refilled from [_secureStorage] after each lock/unlock cycle. The
+  // cache is intentionally NOT static-final and IS cleared by
+  // [lockCache] so a process heap dump captured outside an active
+  // unlocked session does not reveal the private key. The
+  // authoritative copy lives in the platform's secure storage
+  // (Android Keystore-protected EncryptedSharedPreferences, iOS
+  // Keychain, Windows DPAPI Credential Manager, macOS Keychain,
+  // Linux libsecret) so it survives process restarts without ever
+  // being touched by the public filesystem.
   static String? _clientCert;
   static String? _clientKey;
   static String? _caCert;
   static String? _currentUsername;
+
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  static const String _kStorageClientCert = 'icd360s_mtls_client_cert';
+  static const String _kStorageClientKey = 'icd360s_mtls_client_key';
+  static const String _kStorageCaCert = 'icd360s_mtls_ca_cert';
+  static const String _kStorageUsername = 'icd360s_mtls_username';
 
   /// Track if network is down to avoid spamming all accounts
   static bool _networkDown = false;
@@ -125,6 +143,26 @@ class CertificateService {
           return false;
         }
 
+        // SECURITY (M7): write-through to secure storage so the
+        // certificate survives process restarts and lock/unlock
+        // cycles WITHOUT having to live in the Dart heap permanently.
+        try {
+          await _secureStorage.write(
+              key: _kStorageClientCert, value: _clientCert);
+          await _secureStorage.write(
+              key: _kStorageClientKey, value: _clientKey);
+          await _secureStorage.write(key: _kStorageCaCert, value: _caCert);
+          await _secureStorage.write(
+              key: _kStorageUsername, value: _currentUsername);
+          LoggerService.log('CERT-DOWNLOAD',
+              '✓ Certificate persisted to platform secure storage');
+        } catch (ex, st) {
+          LoggerService.logError('CERT-DOWNLOAD', ex, st);
+          // Best-effort: cache is still populated in memory so the
+          // current session works, but next unlock will need a
+          // fresh download.
+        }
+
         final validityDays = data['validity_days'] ?? 365;
         LoggerService.log('CERT-DOWNLOAD',
             '✓ Certificate downloaded for $username (valid $validityDays days)');
@@ -176,12 +214,75 @@ class CertificateService {
   static bool get hasCertificates =>
       _clientCert != null && _clientKey != null && _caCert != null;
 
-  /// Clear certificates from memory (on logout)
-  static void clearCertificates() {
+  /// Clear the in-memory certificate cache only (auto-lock path).
+  ///
+  /// SECURITY (M7): Called when the master-password session is
+  /// auto-locked. Removes references to the PEM strings so the next
+  /// garbage-collection cycle wipes them from the Dart heap. The
+  /// authoritative copy in [_secureStorage] is left alone so the
+  /// next [restoreFromSecureStorage] call after unlock can repopulate
+  /// the cache without re-downloading from the server.
+  static void lockCache() {
+    if (_clientCert == null && _clientKey == null && _caCert == null) {
+      return;
+    }
     _clientCert = null;
     _clientKey = null;
     _caCert = null;
     _currentUsername = null;
-    LoggerService.log('CERT-DOWNLOAD', 'Certificates cleared from memory');
+    LoggerService.log('CERT-DOWNLOAD',
+        'mTLS cert cache cleared from memory (lock)');
+  }
+
+  /// Repopulate the in-memory cache from [_secureStorage].
+  ///
+  /// SECURITY (M7): Called after a successful master-password verify
+  /// (see MasterPasswordService.verifyMasterPassword). If the
+  /// platform secure storage holds a previously-downloaded
+  /// certificate, the in-memory cache is filled from there so the
+  /// caller does not need to re-issue the network download. Returns
+  /// true if the cache is populated (either freshly restored or
+  /// already present), false otherwise.
+  static Future<bool> restoreFromSecureStorage() async {
+    if (hasCertificates) return true;
+    try {
+      final cert = await _secureStorage.read(key: _kStorageClientCert);
+      final key = await _secureStorage.read(key: _kStorageClientKey);
+      final ca = await _secureStorage.read(key: _kStorageCaCert);
+      final username = await _secureStorage.read(key: _kStorageUsername);
+      if (cert == null || key == null || ca == null) {
+        return false;
+      }
+      _clientCert = cert;
+      _clientKey = key;
+      _caCert = ca;
+      _currentUsername = username;
+      LoggerService.log('CERT-DOWNLOAD',
+          'mTLS cert cache restored from secure storage for $username');
+      return true;
+    } catch (ex, st) {
+      LoggerService.logError('CERT-DOWNLOAD', ex, st);
+      return false;
+    }
+  }
+
+  /// Clear certificates from BOTH memory cache AND persistent secure
+  /// storage (explicit logout / sign-out / factory reset).
+  ///
+  /// After this call, the next session must re-download the cert via
+  /// [downloadCertificateForUser]. Use [lockCache] for the auto-lock
+  /// path that should preserve the secure-storage copy.
+  static Future<void> clearCertificates() async {
+    lockCache();
+    try {
+      await _secureStorage.delete(key: _kStorageClientCert);
+      await _secureStorage.delete(key: _kStorageClientKey);
+      await _secureStorage.delete(key: _kStorageCaCert);
+      await _secureStorage.delete(key: _kStorageUsername);
+      LoggerService.log('CERT-DOWNLOAD',
+          'mTLS cert wiped from secure storage (explicit logout)');
+    } catch (ex, st) {
+      LoggerService.logError('CERT-DOWNLOAD', ex, st);
+    }
   }
 }
