@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/io_client.dart';
+import 'le_issuer_check.dart';
 import 'logger_service.dart';
 
 /// Service for downloading per-user certificates from server
@@ -17,27 +18,12 @@ class CertificateService {
   /// Track if network is down to avoid spamming all accounts
   static bool _networkDown = false;
 
-  // Trusted Let's Encrypt issuer DNs for certificate validation
-  static const _trustedIssuers = [
-    'CN=R3,O=Let\'s Encrypt,C=US',
-    'CN=R10,O=Let\'s Encrypt,C=US',
-    'CN=R11,O=Let\'s Encrypt,C=US',
-    'CN=R12,O=Let\'s Encrypt,C=US',
-    'CN=E5,O=Let\'s Encrypt,C=US',
-    'CN=E6,O=Let\'s Encrypt,C=US',
-    'CN=E7,O=Let\'s Encrypt,C=US',
-    'CN=E8,O=Let\'s Encrypt,C=US',
-    'CN=ISRG Root X1,O=Internet Security Research Group,C=US',
-    'CN=ISRG Root X2,O=Internet Security Research Group,C=US',
-  ];
-
-  /// Validate server certificate — only accept trusted Let's Encrypt issuers
+  /// Validate server certificate — only accept trusted Let's Encrypt issuers.
+  /// Uses the shared `isTrustedLetsEncryptIssuer` helper which parses the
+  /// slash-format DN that Dart returns from X509Certificate.issuer.
   static bool _validateCertificate(X509Certificate cert, String host, int port) {
     if (host != 'mail.icd360s.de') return false;
-    final issuer = cert.issuer;
-    return _trustedIssuers.any(
-      (trusted) => issuer == trusted || issuer.contains(trusted),
-    );
+    return isTrustedLetsEncryptIssuer(cert.issuer);
   }
 
   /// Check if network/DNS is working before batch operations
