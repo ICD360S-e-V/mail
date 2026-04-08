@@ -168,12 +168,12 @@ class MasterPasswordService {
       if (salt != null) {
         // Salted hash — use same salt to verify
         final inputHash = _hashPassword(password, salt: salt);
-        isValid = savedHash == inputHash;
+        isValid = _constantTimeEquals(savedHash, inputHash);
       } else {
         // Legacy unsalted SHA-256 — verify and migrate to salted
         final legacyBytes = utf8.encode(password);
         final legacyHash = sha256.convert(legacyBytes).toString();
-        isValid = savedHash == legacyHash;
+        isValid = _constantTimeEquals(savedHash, legacyHash);
         if (isValid) {
           // Migrate to salted hash
           final newHash = _hashPassword(password);
@@ -214,6 +214,20 @@ class MasterPasswordService {
 
   /// Hash password using PBKDF2-like iterated SHA-256 with salt
   /// Uses 100,000 iterations for brute-force resistance
+  /// Constant-time string comparison.
+  ///
+  /// Defends against timing side-channel attacks when comparing secret
+  /// values such as password hashes. Always inspects every byte of both
+  /// inputs (when lengths match) to avoid early-exit timing leaks.
+  static bool _constantTimeEquals(String a, String b) {
+    if (a.length != b.length) return false;
+    var diff = 0;
+    for (var i = 0; i < a.length; i++) {
+      diff |= a.codeUnitAt(i) ^ b.codeUnitAt(i);
+    }
+    return diff == 0;
+  }
+
   static String _hashPassword(String password, {String? salt}) {
     final useSalt = salt ?? _generateSalt();
     final saltedPassword = '$useSalt:$password';
