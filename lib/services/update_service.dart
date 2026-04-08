@@ -12,7 +12,7 @@ import 'localization_service.dart';
 /// Auto-update service for checking and installing updates
 class UpdateService {
   static const String updateUrl = 'https://mail.icd360s.de/updates/version.json';
-  static const String currentVersion = '2.20.2';
+  static const String currentVersion = '2.20.3';
 
   // Progress callback for UI updates
   static Function(int downloaded, int total, String status)? onProgress;
@@ -115,20 +115,30 @@ class UpdateService {
 
           final latestVersion = json['version'] as String;
           final changelog = json['changelog'] as String?;
-          final sha256Hash = json['sha256'] as String?;
 
-          // Pick the right download URL for the current platform
+          // Pick the right download URL AND SHA-256 for the current platform.
+          // Bug fix: previously the SHA-256 was always read from the
+          // generic 'sha256' field (Windows). On macOS/Linux/Android the
+          // hash mismatched the actual binary, causing every update to be
+          // rejected as "file corrupted or tampered".
           String downloadUrl;
+          String? sha256Hash;
           if (Platform.isAndroid) {
             downloadUrl = (json['download_url_android'] as String?) ?? json['download_url'] as String;
+            sha256Hash = (json['sha256_android'] as String?) ?? json['sha256'] as String?;
           } else if (Platform.isIOS) {
             downloadUrl = (json['download_url_ios'] as String?) ?? json['download_url'] as String;
+            sha256Hash = (json['sha256_ios'] as String?) ?? json['sha256'] as String?;
           } else if (Platform.isMacOS) {
             downloadUrl = (json['download_url_macos'] as String?) ?? json['download_url'] as String;
+            sha256Hash = (json['sha256_macos'] as String?) ?? json['sha256'] as String?;
           } else if (Platform.isLinux) {
             downloadUrl = (json['download_url_linux'] as String?) ?? json['download_url'] as String;
+            sha256Hash = (json['sha256_linux'] as String?) ?? json['sha256'] as String?;
           } else {
+            // Windows / fallback — use the generic 'sha256' field
             downloadUrl = json['download_url'] as String;
+            sha256Hash = json['sha256'] as String?;
           }
 
           LoggerService.log('UPDATE', 'Latest version: $latestVersion (current: $currentVersion)');
