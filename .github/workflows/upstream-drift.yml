@@ -1,0 +1,73 @@
+name: upstream-drift
+
+on:
+  schedule:
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.0
+
+      - name: Clone upstream (shallow)
+        run: git clone --depth=1 https://github.com/Enough-Software/enough_mail.git /tmp/upstream
+
+      - name: Diff fork vs upstream
+        id: diff
+        run: |
+          set -e
+          rm -rf /tmp/upstream/.git /tmp/upstream/.github
+          # File-by-file diff, ignore .git and generated files
+          diff -rq enough_mail_fork /tmp/upstream 2>/dev/null \
+            | grep -vE "(\.g\.dart|build/|\.dart_tool)" \
+            > /tmp/drift.txt || true
+          COUNT=$(wc -l < /tmp/drift.txt | tr -d ' ')
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "Drift entries: $COUNT"
+          head -50 /tmp/drift.txt || true
+
+      - name: Manage drift issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          TITLE="Upstream drift: enough_mail"
+          EXISTING=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')
+
+          if [ "${{ steps.diff.outputs.count }}" = "0" ]; then
+            if [ -n "$EXISTING" ]; then
+              gh issue close "$EXISTING" -c "No drift detected on $(date -u +%F). Closing automatically."
+            fi
+            echo "No drift."
+            exit 0
+          fi
+
+          {
+            echo "Detected differences between \`enough_mail_fork/\` and upstream [\`Enough-Software/enough_mail@main\`](https://github.com/Enough-Software/enough_mail/tree/main)."
+            echo
+            echo "**Run date:** $(date -u +%FT%TZ)"
+            echo "**Differing entries:** ${{ steps.diff.outputs.count }}"
+            echo
+            echo '## File-level diff (first 200 entries)'
+            echo
+            echo '```'
+            head -200 /tmp/drift.txt
+            echo '```'
+            echo
+            echo "Review manually and cherry-pick upstream changes if relevant (security fixes, bug fixes)."
+          } > /tmp/body.md
+
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" -F /tmp/body.md
+            echo "Updated existing issue #$EXISTING"
+          else
+            gh issue create -t "$TITLE" -F /tmp/body.md
+            echo "Created new issue"
+          fi
