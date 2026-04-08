@@ -29,6 +29,36 @@ import UIKit
       NSLog("[ICD360S][SECURITY] Screenshot detected by user")
     }
 
+    // SECURITY: hard screen-capture prevention.
+    //
+    // iOS does not provide a public API equivalent to Android's
+    // FLAG_SECURE, but content placed inside a UITextField marked
+    // with isSecureTextEntry = true is excluded by the system from
+    // screenshots, screen recordings and the AirPlay/Screen Sharing
+    // capture surface. By re-parenting the key window's CALayer under
+    // the secure subview's layer we get the same protection for the
+    // entire app, while leaving the view hierarchy untouched and
+    // gestures intact.
+    //
+    // This is the well-known "secureTextEntry hack" used by banking
+    // and messaging apps. It complements (not replaces) the blur
+    // overlay below: the blur defends against the on-disk background
+    // snapshot in /Library/Caches/Snapshots/, while this trick
+    // defends against live capture.
+    if let window = self.window {
+      let secureField = UITextField()
+      secureField.isSecureTextEntry = true
+      secureField.translatesAutoresizingMaskIntoConstraints = false
+      window.addSubview(secureField)
+      secureField.centerYAnchor.constraint(equalTo: window.centerYAnchor).isActive = true
+      secureField.centerXAnchor.constraint(equalTo: window.centerXAnchor).isActive = true
+      window.layer.superlayer?.addSublayer(secureField.layer)
+      if let secureSublayer = secureField.layer.sublayers?.last {
+        secureSublayer.addSublayer(window.layer)
+        NSLog("[ICD360S][SECURITY] Secure capture protection enabled")
+      }
+    }
+
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
