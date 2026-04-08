@@ -11,7 +11,7 @@ import 'localization_service.dart';
 /// Auto-update service for checking and installing updates
 class UpdateService {
   static const String updateUrl = 'https://mail.icd360s.de/updates/version.json';
-  static const String currentVersion = '2.20.0';
+  static const String currentVersion = '2.20.1';
 
   // Progress callback for UI updates
   static Function(int downloaded, int total, String status)? onProgress;
@@ -513,6 +513,7 @@ class UpdateInfo {
     this.sha256Hash,
   });
 }
+
 
 
 
