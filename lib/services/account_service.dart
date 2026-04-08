@@ -13,6 +13,7 @@ import 'package:pointycastle/key_derivators/api.dart';
 import 'package:pointycastle/key_derivators/pbkdf2.dart';
 import 'package:pointycastle/macs/hmac.dart';
 import '../models/models.dart';
+import 'aes_gcm_helpers.dart';
 import 'logger_service.dart';
 import 'localization_service.dart';
 import 'platform_service.dart';
@@ -163,37 +164,16 @@ class AccountService {
     await tmp.rename(path);
   }
 
-  /// AES-256-GCM encrypt with an explicit key, returning a v1 blob bytes
-  /// (`0x01 | iv(12) | ciphertext+tag`). Used by the migration path to
-  /// re-encrypt fallback entries with a new key.
-  static Uint8List _aesGcmEncryptWithKey(Uint8List key, Uint8List plaintext) {
-    final iv = _randomBytes(12);
-    final cipher = GCMBlockCipher(AESEngine())
-      ..init(true,
-          AEADParameters(KeyParameter(key), 128, iv, Uint8List(0)));
-    final ct = cipher.process(plaintext);
-    final out = Uint8List(1 + iv.length + ct.length);
-    out[0] = 0x01;
-    out.setRange(1, 1 + iv.length, iv);
-    out.setRange(1 + iv.length, out.length, ct);
-    return out;
-  }
+  /// AES-256-GCM encrypt with an explicit key, returning a v1 blob
+  /// (`0x01 | iv(12) | ciphertext+tag`). Thin delegating wrapper around
+  /// the shared [AesGcmHelpers] so the migration path keeps the same
+  /// signature it had before the helpers were extracted.
+  static Uint8List _aesGcmEncryptWithKey(Uint8List key, Uint8List plaintext) =>
+      AesGcmHelpers.encrypt(key, plaintext, versionByte: 0x01);
 
   /// AES-256-GCM decrypt with an explicit key. Returns null on any failure.
-  static Uint8List? _aesGcmDecryptWithKey(Uint8List key, Uint8List blob) {
-    if (blob.isEmpty || blob[0] != 0x01) return null;
-    if (blob.length < 1 + 12 + 16) return null;
-    try {
-      final iv = Uint8List.fromList(blob.sublist(1, 13));
-      final ct = Uint8List.fromList(blob.sublist(13));
-      final cipher = GCMBlockCipher(AESEngine())
-        ..init(false,
-            AEADParameters(KeyParameter(key), 128, iv, Uint8List(0)));
-      return cipher.process(ct);
-    } catch (_) {
-      return null;
-    }
-  }
+  static Uint8List? _aesGcmDecryptWithKey(Uint8List key, Uint8List blob) =>
+      AesGcmHelpers.decrypt(key, blob, expectedVersionByte: 0x01);
 
   /// Re-encrypt all entries in `.passwords` from `oldKey` to `newKey`.
   ///
