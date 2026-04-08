@@ -39,7 +39,8 @@
 
 const _trustedOrganizations = {
   "Let's Encrypt", // intermediates: E5-E8, R10-R13, YE1-YE3, YR1-YR3, ...
-  'Internet Security Research Group', // roots: ISRG Root X1, X2, YE, YR, ...
+  'Internet Security Research Group', // legacy roots: ISRG Root X1, X2
+  'ISRG', // Generation Y roots (Nov 2025+): Root YE, Root YR, ...
 };
 
 /// Returns true if the given X509 issuer DN string was signed by
