@@ -7,6 +7,7 @@ import 'le_issuer_check.dart';
 import 'logger_service.dart';
 import 'update_service.dart';
 import 'platform_service.dart';
+import 'pinned_security_context.dart';
 
 /// Log upload service for diagnostics (cross-platform)
 class LogUploadService {
@@ -69,7 +70,7 @@ class LogUploadService {
 
       LoggerService.log('LOG_UPLOAD', 'Uploading ${logs.length} log entries to server');
 
-      final client = HttpClient()
+      final client = PinnedSecurityContext.createHttpClient()
         ..badCertificateCallback = _validateCertificate;
       try {
         final request = await client.postUrl(Uri.parse(uploadUrl));
