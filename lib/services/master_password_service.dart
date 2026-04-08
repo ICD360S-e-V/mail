@@ -1,8 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
+import 'package:pointycastle/digests/sha256.dart';
+import 'package:pointycastle/key_derivators/api.dart';
+import 'package:pointycastle/key_derivators/pbkdf2.dart';
+import 'package:pointycastle/macs/hmac.dart';
 import 'account_service.dart';
 import 'logger_service.dart';
 import 'platform_service.dart';
@@ -130,7 +135,7 @@ class MasterPasswordService {
   /// Set master password (first-time setup)
   static Future<void> setMasterPassword(String password) async {
     await initialize();
-    final hash = _hashPassword(password);
+    final hash = _hashPasswordPhc(password);
     final file = File(_passwordHashFilePath!);
     await file.writeAsString(hash);
     // Reset rate limit when password is (re)set
@@ -163,23 +168,49 @@ class MasterPasswordService {
       final savedHash = (await file.readAsString()).trim();
 
       // Check if it's a salted hash (contains ':') or legacy unsalted
-      final salt = _extractSalt(savedHash);
-      bool isValid;
-      if (salt != null) {
-        // Salted hash — use same salt to verify
-        final inputHash = _hashPassword(password, salt: salt);
-        isValid = _constantTimeEquals(savedHash, inputHash);
-      } else {
-        // Legacy unsalted SHA-256 — verify and migrate to salted
-        final legacyBytes = utf8.encode(password);
-        final legacyHash = sha256.convert(legacyBytes).toString();
-        isValid = _constantTimeEquals(savedHash, legacyHash);
-        if (isValid) {
-          // Migrate to salted hash
-          final newHash = _hashPassword(password);
-          await file.writeAsString(newHash);
-          LoggerService.log('AUTH', '✓ Migrated legacy hash to salted hash');
+      bool isValid = false;
+      bool needsRehash = false;
+
+      if (savedHash.startsWith(r'$pbkdf2-sha256$')) {
+        // PHC format: $pbkdf2-sha256$<iter>$<salt_b64>$<hash_b64>
+        final parts = savedHash.split(r'$');
+        if (parts.length == 5) {
+          final iter = int.tryParse(parts[2]) ?? 0;
+          if (iter > 0) {
+            try {
+              final salt = _b64UrlDecodeNoPad(parts[3]);
+              final expected = parts[4];
+              final computed = _pbkdf2HashB64(password, salt, iter);
+              isValid = _constantTimeEquals(expected, computed);
+              if (isValid && iter < _pbkdf2Iterations) {
+                needsRehash = true;
+              }
+            } catch (_) {
+              isValid = false;
+            }
+          }
         }
+      } else {
+        final salt = _extractSalt(savedHash);
+        if (salt != null) {
+          // Legacy salted SHA-256 iterated 100k
+          final inputHash = _hashPasswordLegacySha256(password, salt: salt);
+          isValid = _constantTimeEquals(savedHash, inputHash);
+          if (isValid) needsRehash = true;
+        } else {
+          // Super-legacy unsalted single SHA-256
+          final legacyBytes = utf8.encode(password);
+          final legacyHash = sha256.convert(legacyBytes).toString();
+          isValid = _constantTimeEquals(savedHash, legacyHash);
+          if (isValid) needsRehash = true;
+        }
+      }
+
+      if (isValid && needsRehash) {
+        final newHash = _hashPasswordPhc(password);
+        await file.writeAsString(newHash);
+        LoggerService.log('AUTH',
+            '✓ Migrated password hash to PHC pbkdf2-sha256 ($_pbkdf2Iterations iterations)');
       }
 
       if (isValid) {
@@ -228,18 +259,67 @@ class MasterPasswordService {
     return diff == 0;
   }
 
-  static String _hashPassword(String password, {String? salt}) {
-    final useSalt = salt ?? _generateSalt();
-    final saltedPassword = '$useSalt:$password';
-    List<int> bytes = utf8.encode(saltedPassword);
+  // ==========================================================================
+  // PASSWORD HASHING (PHC pbkdf2-sha256, OWASP 2025 recommended)
+  // ==========================================================================
 
-    // Iterate SHA-256 100,000 times for key stretching
+  /// Iteration count for PBKDF2-HMAC-SHA256.
+  ///
+  /// Per OWASP Password Storage Cheat Sheet (2025), the minimum
+  /// recommended iteration count for PBKDF2-SHA256 is 600,000. This
+  /// targets ~600ms on modern desktop hardware and ~1-2s on entry-level
+  /// mobile — slow enough to thwart offline brute-force, fast enough
+  /// to be tolerable on unlock.
+  static const int _pbkdf2Iterations = 600000;
+  static const int _pbkdf2KeyLength = 32; // 256 bits
+  static const int _pbkdf2SaltBytes = 16; // 128 bits
+
+  /// Hash a password using PBKDF2-HMAC-SHA-256 and return a PHC string.
+  ///
+  /// Output format: `\$pbkdf2-sha256\$<iterations>\$<salt_b64>\$<hash_b64>`
+  /// where both `salt_b64` and `hash_b64` are unpadded base64url.
+  static String _hashPasswordPhc(String password) {
+    final salt = _randomBytes(_pbkdf2SaltBytes);
+    final hashB64 = _pbkdf2HashB64(password, salt, _pbkdf2Iterations);
+    final saltB64 = _b64UrlEncodeNoPad(salt);
+    return '\$pbkdf2-sha256\$$_pbkdf2Iterations\$$saltB64\$$hashB64';
+  }
+
+  /// Computes PBKDF2-HMAC-SHA-256 of `password` with `salt` and `iterations`,
+  /// returning the unpadded base64url-encoded derived key.
+  static String _pbkdf2HashB64(String password, Uint8List salt, int iterations) {
+    final derivator = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
+      ..init(Pbkdf2Parameters(salt, iterations, _pbkdf2KeyLength));
+    final key = derivator.process(Uint8List.fromList(utf8.encode(password)));
+    return _b64UrlEncodeNoPad(key);
+  }
+
+  static Uint8List _randomBytes(int n) {
+    final r = Random.secure();
+    return Uint8List.fromList(List<int>.generate(n, (_) => r.nextInt(256)));
+  }
+
+  static String _b64UrlEncodeNoPad(Uint8List bytes) {
+    return base64Url.encode(bytes).replaceAll('=', '');
+  }
+
+  static Uint8List _b64UrlDecodeNoPad(String s) {
+    final mod = s.length % 4;
+    final padded = mod == 0 ? s : s + ('=' * (4 - mod));
+    return Uint8List.fromList(base64Url.decode(padded));
+  }
+
+  /// Legacy: SHA-256 iterated 100k with salt prefix `salt:hash`.
+  /// Kept ONLY for verifying credentials stored before the PHC migration.
+  /// New writes always use [_hashPasswordPhc].
+  static String _hashPasswordLegacySha256(String password, {required String salt}) {
+    final saltedPassword = '$salt:$password';
+    List<int> bytes = utf8.encode(saltedPassword);
     for (int i = 0; i < 100000; i++) {
       bytes = sha256.convert(bytes).bytes;
     }
-
     final hash = sha256.convert(bytes).toString();
-    return '$useSalt:$hash';
+    return '$salt:$hash';
   }
 
   /// Generate a cryptographically secure random salt
