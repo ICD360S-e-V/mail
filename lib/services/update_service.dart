@@ -390,52 +390,71 @@ class UpdateService {
     }
   }
 
-  /// Android: Download APK to Downloads, verify signing cert, then open system installer
+  /// Android: Download APK to app-private cache, then install it via
+  /// PackageInstaller.Session.
+  ///
+  /// SECURITY: Eliminates the TOCTOU window of the legacy
+  /// `am start INSTALL_PACKAGE` flow:
+  ///
+  /// - The APK is written by `_downloadWithProgress` to
+  ///   `Directory.systemTemp` which on Android is the app-private
+  ///   `cacheDir` (`/data/data/de.icd360s.mailclient/cache/`). No other
+  ///   app on the device can read or write this path on any supported
+  ///   Android version (minSdk=24).
+  /// - We do NOT copy the APK to public Downloads anymore.
+  /// - The actual install runs through PackageInstaller.Session in
+  ///   MainActivity.kt — bytes stream from the cache file directly into
+  ///   a kernel-side install session, with no path that an attacker
+  ///   could substitute between cert verification and install.
+  /// - The signing-certificate hash is re-verified inside the Kotlin
+  ///   helper immediately before commit, so the check and the install
+  ///   reference the same on-disk bytes.
   static Future<bool> _installAndroid(UpdateInfo updateInfo) async {
     try {
       final l10nService = LocalizationService.instance;
-      LoggerService.log('UPDATE', 'Downloading APK for Android: ${updateInfo.downloadUrl}');
+      LoggerService.log('UPDATE',
+          'Downloading APK for Android: ${updateInfo.downloadUrl}');
 
       final downloadedFile = await _downloadWithProgress(updateInfo, l10nService);
       if (downloadedFile == null) return false;
 
-      final downloadsDir = Directory('/storage/emulated/0/Download');
-      final apkName = 'ICD360S_MailClient_v${updateInfo.version}.apk';
-      final apkDest = File('${downloadsDir.path}/$apkName');
-      await downloadedFile.copy(apkDest.path);
-      await downloadedFile.delete();
-
-      LoggerService.log('UPDATE', 'APK saved to ${apkDest.path}');
-
-      // SECURITY: Verify the APK's signing certificate matches the expected
-      // hash BEFORE handing it to the system installer. Even if the file SHA-256
-      // matched (which is required upstream), the cert check ensures the APK
-      // was signed by our keystore — defense against a compromised update server
-      // serving a tampered (re-signed) APK with a matching version.json hash.
-      final certVerified = await _verifyApkCert(apkDest.path);
-      if (!certVerified) {
-        await apkDest.delete();
-        onProgress?.call(0, 0, 'Update rejected: signature verification failed');
-        return false;
-      }
-
       onProgress?.call(100, 100, l10nService.getText(
         (l10n) => l10n.updateInstalling,
-        'Opening installer... Please tap Install when prompted.'
+        'Opening installer... Please tap Install when prompted.',
       ));
 
-      await Process.run('am', [
-        'start', '-a', 'android.intent.action.VIEW',
-        '-t', 'application/vnd.android.package-archive',
-        '-d', 'file://${apkDest.path}',
-        '--grant-read-uri-permission',
-      ]);
+      LoggerService.log('UPDATE',
+          'Invoking PackageInstaller.Session for ${downloadedFile.path}');
 
-      LoggerService.log('UPDATE', 'Triggered APK installer for ${apkDest.path}');
-      return true;
+      final result = await _apkVerifyChannel.invokeMethod<Map<dynamic, dynamic>>(
+        'installApk',
+        {
+          'path': downloadedFile.path,
+          'expectedCertSha256': _expectedApkCertSha256,
+        },
+      );
+      final ok = result?['ok'] == true;
+      if (ok) {
+        LoggerService.log('UPDATE',
+            '✓ Update installed via PackageInstaller.Session');
+        return true;
+      }
+      final reason = result?['reason'] as String?;
+      final message = result?['message'] as String?;
+      LoggerService.log('UPDATE',
+          '❌ PackageInstaller.Session failed: reason=$reason message=$message');
+      onProgress?.call(0, 0,
+          'Update install failed${reason != null ? ': $reason' : ''}');
+      // Best-effort cleanup if Kotlin didn't already remove the file.
+      try {
+        if (await downloadedFile.exists()) {
+          await downloadedFile.delete();
+        }
+      } catch (_) {}
+      return false;
     } catch (ex, stackTrace) {
       LoggerService.logError('UPDATE', ex, stackTrace);
-      return _updateViaBrowser(updateInfo);
+      return false;
     }
   }
 
