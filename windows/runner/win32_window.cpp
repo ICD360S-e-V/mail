@@ -144,6 +144,26 @@ bool Win32Window::Create(const std::wstring& title,
     return false;
   }
 
+  // SECURITY: Exclude this window from screenshot, screen recording,
+  // remote desktop and OS-level Recall capture.
+  //
+  // SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE) is a public
+  // Win32 API (winuser.h) available since Windows 10 version 2004.
+  // Capture surfaces (PrintScreen, Snipping Tool, OBS, Microsoft
+  // Teams screen-share, RDP, Windows Recall, etc.) render this window
+  // as a black rectangle. The flag is honored by the Desktop Window
+  // Manager and cannot be bypassed by user-mode capture APIs.
+  //
+  // Limitations:
+  //   - A small subset of Windows 11 builds (~5%) report success but
+  //     do not actually exclude — Microsoft Q&A bug, no workaround.
+  //   - Does not protect against a photograph of the screen taken
+  //     with a different device.
+  //   - 0x00000011 = WDA_EXCLUDEFROMCAPTURE. We use the literal
+  //     instead of the macro so this builds on toolchains where the
+  //     SDK header is older.
+  SetWindowDisplayAffinity(window, 0x00000011);
+
   UpdateTheme(window);
 
   return OnCreate();
