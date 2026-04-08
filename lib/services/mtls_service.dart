@@ -53,9 +53,20 @@ class MtlsService {
     }
   }
 
-  /// Callback for server certificate validation
-  /// Only accepts Let's Encrypt certificates for mail.icd360s.de
-  /// SECURITY: Validates full issuer DN to prevent MITM attacks
+  /// Callback for server certificate validation.
+  ///
+  /// IMPORTANT: Dart's badCertificateCallback is called ONCE PER CERT in the
+  /// chain that fails validation — not just for the leaf. We must accept:
+  ///   1. The leaf cert (subject = `/CN=mail.icd360s.de`), if its issuer is
+  ///      a trusted Let's Encrypt intermediate.
+  ///   2. The intermediate cert (subject = `/CN=E7` etc.), if its issuer is
+  ///      a trusted Let's Encrypt root.
+  ///   3. The root cert itself (subject = `/CN=ISRG Root X1` etc.) if it
+  ///      ever appears at this level.
+  ///
+  /// Returning false for ANY of these aborts the entire chain. The previous
+  /// implementation rejected the intermediate because it checked
+  /// `subject.contains('mail.icd360s.de')` — which is true only for the leaf.
   static bool onBadCertificate(X509Certificate cert) {
     try {
       final subject = cert.subject;
@@ -63,25 +74,31 @@ class MtlsService {
 
       LoggerService.log('MTLS', 'Server cert check: $subject (issuer: $issuer)');
 
-      final isLetsEncrypt = isTrustedLetsEncryptIssuer(issuer);
+      // Case 1: this cert IS a trusted Let's Encrypt CA (intermediate or root).
+      // Subject's CN matches a known LE CA.
+      if (isTrustedLetsEncryptIssuer(subject)) {
+        LoggerService.log('MTLS', '✓ Accepted LE CA cert: $subject');
+        return true;
+      }
 
-      if (!isLetsEncrypt) {
-        LoggerService.log('MTLS', '❌ REJECTED: Unknown issuer: $issuer (not a trusted Let\'s Encrypt CA)');
+      // Case 2: this is the leaf for mail.icd360s.de. Verify both the
+      // hostname and that it was signed by a trusted LE intermediate.
+      if (subject.contains('mail.icd360s.de')) {
+        if (isTrustedLetsEncryptIssuer(issuer)) {
+          LoggerService.log('MTLS', '✓ Accepted leaf for mail.icd360s.de (signed by trusted LE)');
+          return true;
+        }
+        LoggerService.log('MTLS', '❌ REJECTED: leaf for mail.icd360s.de but issuer not trusted: $issuer');
         return false;
       }
 
-      // Verify the certificate is for our server
-      final isOurServer = subject.contains('mail.icd360s.de');
-      if (!isOurServer) {
-        LoggerService.log('MTLS', '❌ REJECTED: Certificate not for mail.icd360s.de: $subject');
-        return false;
-      }
-
-      LoggerService.log('MTLS', '✓ Certificate accepted (Let\'s Encrypt for mail.icd360s.de)');
-      return true;
+      // Otherwise, reject — neither a trusted CA nor our domain's leaf.
+      LoggerService.log('MTLS', '❌ REJECTED: $subject is neither a trusted LE CA nor our domain leaf');
+      return false;
     } catch (ex) {
       LoggerService.log('MTLS', '❌ Certificate validation error: $ex');
       return false;
     }
   }
 }
+
