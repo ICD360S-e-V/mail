@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
@@ -107,9 +108,41 @@ Future<void> _appMain() async {
     LoggerService.logError('FLUTTER_ERROR', details.exception, details.stack ?? StackTrace.current);
   };
 
-  // Override the default grey error widget in release mode
-  // This shows the actual error on screen instead of a blank grey screen
+  // ErrorWidget.builder runs whenever a widget throws during build.
+  //
+  // SECURITY: in release builds we MUST NOT render the exception
+  // string or the stack trace into the visible UI. They contain
+  // internal class names, file paths, line numbers and sometimes
+  // user-controlled values that may include credentials or tokens
+  // (information disclosure → CWE-209). FlutterError.onError above
+  // already logs the full details via LoggerService for diagnosis.
+  //
+  // In debug builds we keep the rich error screen so developers can
+  // see what went wrong on the spot.
   ErrorWidget.builder = (FlutterErrorDetails details) {
+    LoggerService.logError(
+      'ERROR_WIDGET',
+      details.exception,
+      details.stack ?? StackTrace.current,
+    );
+    if (kReleaseMode) {
+      return Directionality(
+        textDirection: TextDirection.ltr,
+        child: Container(
+          color: const Color(0xFF1E1E1E),
+          padding: const EdgeInsets.all(24),
+          alignment: Alignment.center,
+          child: const Text(
+            'Something went wrong',
+            style: TextStyle(
+              fontSize: 16,
+              color: Color(0xFFCCCCCC),
+              decoration: TextDecoration.none,
+            ),
+          ),
+        ),
+      );
+    }
     return Directionality(
       textDirection: TextDirection.ltr,
       child: Container(
