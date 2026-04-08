@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'le_issuer_check.dart';
 import 'logger_service.dart';
 import 'certificate_service.dart';
+import 'pinned_security_context.dart';
 
 /// mTLS (Mutual TLS) Service - Client certificate authentication
 /// Uses per-user certificates (downloaded at login, NOT hardcoded)
@@ -30,8 +31,9 @@ class MtlsService {
       LoggerService.log('MTLS',
           'Creating SecurityContext with per-user certificate for ${CertificateService.currentUsername}...');
 
-      // Use withTrustedRoots: true to validate Let's Encrypt server certificate
-      final context = SecurityContext(withTrustedRoots: true);
+      // Restrict trust store to the four ISRG roots only — defense in
+      // depth against compromised system CAs on desktop platforms.
+      final context = PinnedSecurityContext.create();
 
       // STEP 1: Add private key (unique per user)
       context.usePrivateKeyBytes(utf8.encode(CertificateService.clientKey!));
