@@ -50,3 +50,19 @@ updates:
         update-types:
           - "minor"
           - "patch"
+
+  # Android Gradle dependencies (androidx, kotlin libs, etc.)
+  # AGP itself is ignored — it must stay in sync with Flutter SDK and is
+  # upgraded manually together with `flutter upgrade`.
+  - package-ecosystem: "gradle"
+    directory: "/android"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "android"
+    ignore:
+      - dependency-name: "com.android.application"
+      - dependency-name: "com.android.library"
+      - dependency-name: "com.android.tools.build:gradle"
