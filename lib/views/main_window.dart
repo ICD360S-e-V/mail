@@ -24,6 +24,7 @@ import 'add_account_dialog.dart';
 import 'factory_reset_dialog.dart';
 import 'log_viewer_window.dart';
 import 'changelog_window.dart';
+import '../utils/text_safety.dart';
 
 /// Main window with Fluent Design
 class MainWindow extends StatefulWidget {
@@ -1001,7 +1002,7 @@ class _MainWindowState extends State<MainWindow> {
                       children: [
                         Expanded(
                           child: Text(
-                            email.from,
+                            sanitizeBidi(email.from),
                             style: theme.typography.body?.copyWith(
                               fontWeight: email.isRead ? FontWeight.normal : FontWeight.bold,
                             ),
@@ -1029,7 +1030,7 @@ class _MainWindowState extends State<MainWindow> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      email.subject,
+                      sanitizeBidi(email.subject),
                       style: theme.typography.body,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -1100,7 +1101,7 @@ class _MainWindowState extends State<MainWindow> {
                   SizedBox(
                     width: 250,
                     child: Text(
-                      email.from,
+                      sanitizeBidi(email.from),
                       style: theme.typography.body?.copyWith(
                         fontWeight: email.isRead ? FontWeight.normal : FontWeight.bold,
                       ),
@@ -1112,7 +1113,7 @@ class _MainWindowState extends State<MainWindow> {
                   // Subject
                   Expanded(
                     child: Text(
-                      email.subject,
+                      sanitizeBidi(email.subject),
                       style: theme.typography.body,
                       overflow: TextOverflow.ellipsis,
                     ),
