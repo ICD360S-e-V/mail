@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
+import 'le_issuer_check.dart';
 import 'logger_service.dart';
 import 'certificate_service.dart';
 
@@ -12,19 +13,6 @@ class MtlsService {
   // No hardcoded certificates - all downloaded dynamically per-user
   // This prevents certificate extraction from compiled .exe file
 
-  // Trusted Let's Encrypt issuer Distinguished Names (exact match, not substring)
-  static const _trustedIssuers = [
-    'CN=R3,O=Let\'s Encrypt,C=US',
-    'CN=R10,O=Let\'s Encrypt,C=US',
-    'CN=R11,O=Let\'s Encrypt,C=US',
-    'CN=R12,O=Let\'s Encrypt,C=US',
-    'CN=E5,O=Let\'s Encrypt,C=US',
-    'CN=E6,O=Let\'s Encrypt,C=US',
-    'CN=E7,O=Let\'s Encrypt,C=US',
-    'CN=E8,O=Let\'s Encrypt,C=US',
-    'CN=ISRG Root X1,O=Internet Security Research Group,C=US',
-    'CN=ISRG Root X2,O=Internet Security Research Group,C=US',
-  ];
 
   /// Get SecurityContext for mTLS connections
   /// Uses per-user certificates downloaded from server (NOT hardcoded)
@@ -75,10 +63,7 @@ class MtlsService {
 
       LoggerService.log('MTLS', 'Server cert check: $subject (issuer: $issuer)');
 
-      // Exact match against known Let's Encrypt issuer DNs
-      final isLetsEncrypt = _trustedIssuers.any(
-        (trusted) => issuer == trusted || issuer.contains(trusted),
-      );
+      final isLetsEncrypt = isTrustedLetsEncryptIssuer(issuer);
 
       if (!isLetsEncrypt) {
         LoggerService.log('MTLS', '❌ REJECTED: Unknown issuer: $issuer (not a trusted Let\'s Encrypt CA)');
