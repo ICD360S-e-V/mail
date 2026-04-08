@@ -102,6 +102,10 @@ class UpdateService {
   /// Check if update is available
   static Future<UpdateInfo?> checkForUpdates() async {
     try {
+      // Pin baseline to currentVersion on first run so any subsequent
+      // proposal strictly below the currently installed build is rejected,
+      // even before the first successful update bumps the baseline.
+      await VersionBaseline.initialize(currentVersion);
       LoggerService.log('UPDATE', 'Checking for updates at $updateUrl');
 
       // Download version.json from server
