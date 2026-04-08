@@ -8,6 +8,10 @@ import 'package:path/path.dart' as p;
 import 'package:pointycastle/api.dart';
 import 'package:pointycastle/block/aes.dart';
 import 'package:pointycastle/block/modes/gcm.dart';
+import 'package:pointycastle/digests/sha256.dart';
+import 'package:pointycastle/key_derivators/api.dart';
+import 'package:pointycastle/key_derivators/pbkdf2.dart';
+import 'package:pointycastle/macs/hmac.dart';
 import '../models/models.dart';
 import 'logger_service.dart';
 import 'localization_service.dart';
@@ -77,70 +81,181 @@ class AccountService {
   // SESSION KEY MANAGEMENT (M4 fix — AES-GCM with master-password-derived key)
   // ==========================================================================
 
-  /// Derive a 256-bit AES key from the master password via PBKDF2 with 100k
-  /// iterations of HMAC-SHA-256 (same iteration count as the auth hash, but a
-  /// different salt so the two hashes can never match).
-  static Uint8List _deriveSessionKey(String masterPassword, Uint8List salt) {
-    // We implement PBKDF2 manually with SHA-256 to avoid pulling more deps.
-    // 100k iterations on a modern device takes ~100ms — slow enough to thwart
-    // brute force, fast enough to be tolerable on unlock.
-    const iterations = 100000;
-    const keyLength = 32; // 256 bits
+  /// Iteration count for PBKDF2-HMAC-SHA256, per OWASP 2025
+  /// (Password Storage Cheat Sheet). Same value as
+  /// MasterPasswordService._pbkdf2Iterations.
+  static const int _pbkdf2Iterations = 600000;
+  static const int _pbkdf2KeyLength = 32; // 256 bits
+  static const int _pbkdf2SaltLength = 16; // 128 bits
 
-    // PBKDF2-HMAC-SHA-256
-    Uint8List hmacSha256(Uint8List key, Uint8List data) {
-      return Uint8List.fromList(Hmac(sha256, key).convert(data).bytes);
-    }
-
-    final result = Uint8List(keyLength);
-    int pos = 0;
-    int blockNum = 1;
-    while (pos < keyLength) {
-      // INT(blockNum) — 4-byte big-endian
-      final block = Uint8List(salt.length + 4);
-      block.setRange(0, salt.length, salt);
-      block[salt.length] = (blockNum >> 24) & 0xff;
-      block[salt.length + 1] = (blockNum >> 16) & 0xff;
-      block[salt.length + 2] = (blockNum >> 8) & 0xff;
-      block[salt.length + 3] = blockNum & 0xff;
-
-      final pwBytes = Uint8List.fromList(utf8.encode(masterPassword));
-      var u = hmacSha256(pwBytes, block);
-      final t = Uint8List.fromList(u);
-
-      for (int i = 1; i < iterations; i++) {
-        u = hmacSha256(pwBytes, u);
-        for (int j = 0; j < t.length; j++) {
-          t[j] ^= u[j];
-        }
-      }
-
-      final remaining = keyLength - pos;
-      final copyLen = remaining < t.length ? remaining : t.length;
-      result.setRange(pos, pos + copyLen, t);
-      pos += copyLen;
-      blockNum++;
-    }
-    return result;
+  /// Derive a 256-bit AES key from the master password via
+  /// PBKDF2-HMAC-SHA-256 with the given salt and iteration count.
+  static Uint8List _deriveSessionKey(
+      String masterPassword, Uint8List salt, int iterations) {
+    final derivator = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
+      ..init(Pbkdf2Parameters(salt, iterations, _pbkdf2KeyLength));
+    return derivator.process(Uint8List.fromList(utf8.encode(masterPassword)));
   }
 
-  /// Load or create the salt file used to derive the session key.
-  static Uint8List _loadOrCreateSalt() {
+  static Uint8List _randomBytes(int n) {
+    final r = Random.secure();
+    return Uint8List.fromList(List<int>.generate(n, (_) => r.nextInt(256)));
+  }
+
+  /// Load the salt + iteration count from the salt file, or create a new
+  /// one in v2 (text) format on first run.
+  ///
+  /// Salt file format:
+  ///   - v2 (current): UTF-8 text `pbkdf2-sha256:<iter>:<salt_b64>`
+  ///   - v1 (legacy):  raw 16 bytes; iteration count was hardcoded 100000
+  ///
+  /// Backward compatibility: a legacy raw-bytes file is detected and
+  /// reported as 100000 iterations so unlockSession can derive the
+  /// matching key and run the migration to v2 / 600k.
+  static ({Uint8List salt, int iterations}) _loadOrCreateSaltAndIter() {
     final f = File(_saltFilePath!);
     if (f.existsSync()) {
-      return Uint8List.fromList(f.readAsBytesSync());
+      final raw = f.readAsBytesSync();
+      try {
+        final text = utf8.decode(raw);
+        if (text.startsWith('pbkdf2-sha256:')) {
+          final parts = text.split(':');
+          if (parts.length == 3) {
+            final iter = int.tryParse(parts[1]) ?? 0;
+            if (iter > 0) {
+              final saltB64 = parts[2];
+              final mod = saltB64.length % 4;
+              final padded = mod == 0 ? saltB64 : saltB64 + ('=' * (4 - mod));
+              final salt = Uint8List.fromList(base64Url.decode(padded));
+              return (salt: salt, iterations: iter);
+            }
+          }
+        }
+      } catch (_) {
+        // Not valid UTF-8 → legacy raw bytes
+      }
+      // Legacy v1: raw bytes, 100k iterations
+      return (salt: Uint8List.fromList(raw), iterations: 100000);
     }
-    // First-run: generate fresh 16-byte CSPRNG salt
-    final random = Random.secure();
-    final salt = Uint8List.fromList(List<int>.generate(16, (_) => random.nextInt(256)));
-    f.writeAsBytesSync(salt);
-    return salt;
+    // First-run: write fresh v2 file
+    final salt = _randomBytes(_pbkdf2SaltLength);
+    _writeSaltFileV2Sync(salt, _pbkdf2Iterations);
+    return (salt: salt, iterations: _pbkdf2Iterations);
+  }
+
+  static String _formatSaltFileV2(Uint8List salt, int iterations) {
+    final saltB64 = base64Url.encode(salt).replaceAll('=', '');
+    return 'pbkdf2-sha256:$iterations:$saltB64';
+  }
+
+  static void _writeSaltFileV2Sync(Uint8List salt, int iterations) {
+    File(_saltFilePath!).writeAsStringSync(_formatSaltFileV2(salt, iterations));
+  }
+
+  static Future<void> _writeSaltFileV2(Uint8List salt, int iterations) async {
+    await _atomicWriteString(
+        _saltFilePath!, _formatSaltFileV2(salt, iterations));
+  }
+
+  static Future<void> _atomicWriteString(String path, String content) async {
+    final tmp = File('$path.tmp');
+    await tmp.writeAsString(content, flush: true);
+    await tmp.rename(path);
+  }
+
+  /// AES-256-GCM encrypt with an explicit key, returning a v1 blob bytes
+  /// (`0x01 | iv(12) | ciphertext+tag`). Used by the migration path to
+  /// re-encrypt fallback entries with a new key.
+  static Uint8List _aesGcmEncryptWithKey(Uint8List key, Uint8List plaintext) {
+    final iv = _randomBytes(12);
+    final cipher = GCMBlockCipher(AESEngine())
+      ..init(true,
+          AEADParameters(KeyParameter(key), 128, iv, Uint8List(0)));
+    final ct = cipher.process(plaintext);
+    final out = Uint8List(1 + iv.length + ct.length);
+    out[0] = 0x01;
+    out.setRange(1, 1 + iv.length, iv);
+    out.setRange(1 + iv.length, out.length, ct);
+    return out;
+  }
+
+  /// AES-256-GCM decrypt with an explicit key. Returns null on any failure.
+  static Uint8List? _aesGcmDecryptWithKey(Uint8List key, Uint8List blob) {
+    if (blob.isEmpty || blob[0] != 0x01) return null;
+    if (blob.length < 1 + 12 + 16) return null;
+    try {
+      final iv = Uint8List.fromList(blob.sublist(1, 13));
+      final ct = Uint8List.fromList(blob.sublist(13));
+      final cipher = GCMBlockCipher(AESEngine())
+        ..init(false,
+            AEADParameters(KeyParameter(key), 128, iv, Uint8List(0)));
+      return cipher.process(ct);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Re-encrypt all entries in `.passwords` from `oldKey` to `newKey`.
+  ///
+  /// Entries that cannot be decrypted with `oldKey` (e.g. legacy XOR
+  /// formats handled by `_decryptLegacyXor`) are preserved untouched
+  /// and will be migrated lazily on next access.
+  static Future<void> _migrateFallbackPasswords(
+      Uint8List oldKey, Uint8List newKey) async {
+    if (_passwordsFallbackPath == null) return;
+    final file = File(_passwordsFallbackPath!);
+    if (!await file.exists()) return;
+    Map<String, dynamic> data;
+    try {
+      final content = await file.readAsString();
+      data = jsonDecode(content) as Map<String, dynamic>;
+    } catch (ex) {
+      LoggerService.log(
+          'ACCOUNTS', '⚠ Migration: cannot parse .passwords ($ex)');
+      return;
+    }
+
+    final updated = <String, dynamic>{};
+    var migrated = 0;
+    var preserved = 0;
+    for (final entry in data.entries) {
+      final stored = entry.value;
+      if (stored is! String) {
+        updated[entry.key] = stored;
+        continue;
+      }
+      try {
+        final blob = Uint8List.fromList(base64Decode(stored));
+        final plain = _aesGcmDecryptWithKey(oldKey, blob);
+        if (plain == null) {
+          updated[entry.key] = stored;
+          preserved++;
+          continue;
+        }
+        final newBlob = _aesGcmEncryptWithKey(newKey, plain);
+        updated[entry.key] = base64Encode(newBlob);
+        migrated++;
+      } catch (_) {
+        updated[entry.key] = stored;
+        preserved++;
+      }
+    }
+
+    if (migrated > 0) {
+      await _atomicWriteString(
+          _passwordsFallbackPath!, jsonEncode(updated));
+      LoggerService.log('ACCOUNTS',
+          '✓ Re-encrypted $migrated fallback entries to PBKDF2-$_pbkdf2Iterations key (preserved $preserved legacy)');
+    }
   }
 
   /// Unlock the credential session.
   ///
-  /// Called by MasterPasswordService after a successful master-password verify.
-  /// Derives the AES session key from the password and holds it in memory.
+  /// Called by MasterPasswordService after a successful master-password
+  /// verify. Derives the AES session key from the password and holds it
+  /// in memory. If the salt file is in legacy v1 format (or its iteration
+  /// count is below the current target), automatically migrates the salt
+  /// file and re-encrypts all fallback entries to the new key.
   static Future<void> unlockSession(String masterPassword) async {
     // Make sure paths are initialized
     if (_saltFilePath == null) {
@@ -153,8 +268,30 @@ class AccountService {
         await dir.create(recursive: true);
       }
     }
-    final salt = _loadOrCreateSalt();
-    _sessionKey = _deriveSessionKey(masterPassword, salt);
+
+    final saltInfo = _loadOrCreateSaltAndIter();
+    final derivedKey = _deriveSessionKey(
+        masterPassword, saltInfo.salt, saltInfo.iterations);
+
+    if (saltInfo.iterations < _pbkdf2Iterations) {
+      LoggerService.log('ACCOUNTS',
+          'Migrating credential KDF from ${saltInfo.iterations} to $_pbkdf2Iterations iterations');
+      final newSalt = _randomBytes(_pbkdf2SaltLength);
+      final newKey = _deriveSessionKey(
+          masterPassword, newSalt, _pbkdf2Iterations);
+      // Re-encrypt the fallback file FIRST (in case of crash, the salt
+      // file still matches the on-disk ciphertext).
+      await _migrateFallbackPasswords(derivedKey, newKey);
+      await _writeSaltFileV2(newSalt, _pbkdf2Iterations);
+      // Wipe the old derived key
+      for (var i = 0; i < derivedKey.length; i++) {
+        derivedKey[i] = 0;
+      }
+      _sessionKey = newKey;
+    } else {
+      _sessionKey = derivedKey;
+    }
+
     LoggerService.log('ACCOUNTS', 'Credential session unlocked');
   }
 
