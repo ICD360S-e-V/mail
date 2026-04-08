@@ -39,7 +39,7 @@
           Pinning an intermediate creates a fragile dependency on LE's
           rotation schedule. Pinning roots is the standard recommendation.
 
-        Expiration extended to 2028-01-01 to give plenty of headroom for
+        Expiration extended to 2030-01-01 to give plenty of headroom for
         publishing a release with rotated pins before the safety net expires.
     -->
     <domain-config>
@@ -47,7 +47,7 @@
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
-        <pin-set expiration="2028-01-01">
+        <pin-set expiration="2030-01-01">
             <!-- ACTIVE: ISRG Root X1 (RSA, current root in served chain) -->
             <pin digest="SHA-256">C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M=</pin>
             <!-- ACTIVE: ISRG Root X2 (ECDSA, planned future root, already deployed by LE) -->
