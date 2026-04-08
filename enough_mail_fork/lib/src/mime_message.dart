@@ -103,6 +103,7 @@ class MimePart {
     String? value, [
     HeaderEncoding encoding = HeaderEncoding.none,
   ]) {
+    _assertValidHeaderForCompose(name, value);
     headers ??= <Header>[];
     var localValue = value;
     if (value != null) {
@@ -126,6 +127,7 @@ class MimePart {
     String? value, [
     HeaderEncoding encoding = HeaderEncoding.none,
   ]) {
+    _assertValidHeaderForCompose(name, value);
     headers ??= <Header>[];
     final lowerCaseName = name.toLowerCase();
     headers?.removeWhere((h) => h.lowerCaseName == lowerCaseName);
@@ -140,6 +142,47 @@ class MimePart {
       }
     }
     headers?.add(Header(name, localValue, encoding));
+  }
+
+  /// SECURITY (M8): RFC 5322 §2.2 forbids CR / LF inside a header
+  /// field body except as part of a folding sequence; the field name
+  /// itself must be printable US-ASCII (codes 33-126) excluding the
+  /// colon. We enforce both rules at the lowest common entry point
+  /// for the compose API ([addHeader] / [setHeader]) so a malicious
+  /// or buggy upstream caller cannot smuggle additional headers
+  /// (Bcc / Reply-To / Subject / body) by injecting `\r\n`
+  /// into a value pulled from a contact, autocomplete or calendar
+  /// invite.
+  ///
+  /// We do NOT validate in the [Header] constructor itself, because
+  /// the parser path also constructs `Header` instances from
+  /// server-supplied bytes (incoming mail) where we want to be
+  /// permissive — strict input validation is reserved for the
+  /// compose / outgoing path.
+  ///
+  /// Throws [FormatException] if the input would produce a malformed
+  /// or smuggled header.
+  static void _assertValidHeaderForCompose(String name, String? value) {
+    if (name.isEmpty) {
+      throw const FormatException('Empty MIME header name');
+    }
+    for (var i = 0; i < name.length; i++) {
+      final c = name.codeUnitAt(i);
+      // RFC 5322: ftext = %d33-57 / %d59-126
+      if (c < 33 || c > 126 || c == 58) {
+        throw const FormatException(
+            'Invalid MIME header name: contains forbidden character');
+      }
+    }
+    if (value != null) {
+      for (var i = 0; i < value.length; i++) {
+        final c = value.codeUnitAt(i);
+        if (c == 0x0D || c == 0x0A || c == 0x00) {
+          throw const FormatException(
+              'Invalid MIME header value: contains CR / LF / NUL');
+        }
+      }
+    }
   }
 
   /// Removes the header with the specified [name].
