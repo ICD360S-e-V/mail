@@ -85,7 +85,11 @@ class _ChangelogWindowState extends State<ChangelogWindow> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSection(theme, '🆕 Version 2.20.3 - 8 Apr 2026', [
+          _buildSection(theme, '🆕 Version 2.20.4 - 8 Apr 2026', [
+            'Bug fix - mTLS chain validation: badCertificateCallback is invoked per-cert in the chain (leaf + intermediate + root). v2.20.2 only accepted certs whose subject contained mail.icd360s.de, rejecting the intermediate (CN=E7) and aborting the entire chain. Now accepts trusted LE CAs as intermediate/root and only the leaf needs the hostname match.',
+          ]),
+          const SizedBox(height: 16),
+          _buildSection(theme, 'Version 2.20.3 - 8 Apr 2026', [
             'Bug fix - Update SHA-256 verification: read platform-specific hash field (sha256_macos / _linux / _android / _ios) instead of always reading the Windows sha256, which caused all non-Windows updates to fail with "file corrupted or tampered"',
           ]),
           const SizedBox(height: 16),
@@ -315,6 +319,7 @@ class _ChangelogWindowState extends State<ChangelogWindow> {
     );
   }
 }
+
 
 
 
