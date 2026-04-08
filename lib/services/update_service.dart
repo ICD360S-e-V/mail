@@ -27,6 +27,19 @@ class UpdateService {
   // Progress callback for UI updates
   static Function(int downloaded, int total, String status)? onProgress;
 
+  // In-flight deduplication for the two long-running update entry
+  // points. Dart is single-threaded per isolate but async functions
+  // can interleave at every `await`. Without these guards a periodic
+  // timer + a manual user tap can launch two parallel downloads of
+  // the same APK into the same temp file (corrupting it), or trigger
+  // two PackageInstaller dialogs, or double-bump the version
+  // baseline. The pattern: first caller starts the work and stores
+  // its Future; subsequent callers while it is in-flight receive the
+  // same Future, so they all complete with the same result instead
+  // of racing.
+  static Future<UpdateInfo?>? _inflightCheck;
+  static Future<bool>? _inflightInstall;
+
   /// SHA-256 of the DER-encoded X.509 signing certificate used to sign all
   /// official ICD360S Mail Client APKs (the keystore lives in GitHub Secrets,
   /// alias `upload`, organization `ICD360S e.V.`).
@@ -182,7 +195,19 @@ class UpdateService {
   }
 
   /// Check if update is available
-  static Future<UpdateInfo?> checkForUpdates() async {
+  static Future<UpdateInfo?> checkForUpdates() {
+    if (_inflightCheck != null) {
+      LoggerService.log('UPDATE', 'checkForUpdates: reusing in-flight call');
+      return _inflightCheck!;
+    }
+    final fut = _checkForUpdatesInternal();
+    _inflightCheck = fut.whenComplete(() {
+      _inflightCheck = null;
+    });
+    return _inflightCheck!;
+  }
+
+  static Future<UpdateInfo?> _checkForUpdatesInternal() async {
     try {
       // Pin baseline to currentVersion on first run so any subsequent
       // proposal strictly below the currently installed build is rejected,
@@ -300,7 +325,21 @@ class UpdateService {
   }
 
   /// Download and install update automatically with progress
-  static Future<bool> downloadAndInstallAuto(UpdateInfo updateInfo) async {
+  static Future<bool> downloadAndInstallAuto(UpdateInfo updateInfo) {
+    if (_inflightInstall != null) {
+      LoggerService.log('UPDATE',
+          'downloadAndInstallAuto: reusing in-flight call');
+      return _inflightInstall!;
+    }
+    final fut = _downloadAndInstallAutoInternal(updateInfo);
+    _inflightInstall = fut.whenComplete(() {
+      _inflightInstall = null;
+    });
+    return _inflightInstall!;
+  }
+
+  static Future<bool> _downloadAndInstallAutoInternal(
+      UpdateInfo updateInfo) async {
     // L2 anti-rollback (defense in depth): re-check the baseline at the
     // entry point of the install pipeline so any code path that
     // constructs an UpdateInfo manually (deep link, UI button, retry)
