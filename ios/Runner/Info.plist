@@ -86,6 +86,14 @@
 					</dict>
 					<dict>
 						<key>SPKI-SHA256-BASE64</key>
+						<string>sCkq5UWXjg+7mKu9lMhhYF5bGLsy7VI/UNW3tccdR7w=</string>
+					</dict>
+					<dict>
+						<key>SPKI-SHA256-BASE64</key>
+						<string>fk6IOKit1ild5647BH06ujSIq5XbCgqlbYl6ANhhi88=</string>
+					</dict>
+					<dict>
+						<key>SPKI-SHA256-BASE64</key>
 						<string>Av62R4GaV3MhXb533nhIRyJHzbmei4Fa60QqvOBVYeA=</string>
 					</dict>
 				</array>
