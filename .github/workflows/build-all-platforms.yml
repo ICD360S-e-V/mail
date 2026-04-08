@@ -145,7 +145,7 @@ jobs:
 
       - name: Build Linux
         run: |
-          flutter pub get
+          flutter pub get --enforce-lockfile
           flutter build linux --release
 
       # SECURITY (M9): Declare libsecret-1-0 as a runtime dependency.
@@ -341,7 +341,7 @@ jobs:
 
       - name: Build Android ${{ matrix.flavor }} ${{ matrix.format }}
         run: |
-          flutter pub get
+          flutter pub get --enforce-lockfile
           flutter build ${{ matrix.format }} --release --flavor ${{ matrix.flavor }} ${{ matrix.build_args }}
 
       - name: Upload Android ${{ matrix.flavor }} ${{ matrix.format }} artifact
@@ -413,7 +413,7 @@ jobs:
 
       - name: Build iOS (no codesign)
         run: |
-          flutter pub get
+          flutter pub get --enforce-lockfile
           flutter build ios --release --no-codesign
 
       - name: Create iOS .ipa
@@ -498,7 +498,7 @@ jobs:
 
       - name: Build Windows
         run: |
-          flutter pub get
+          flutter pub get --enforce-lockfile
           flutter build windows --release
 
       # SECURITY: Download VC++ Redistributable from Microsoft with pinned SHA-256.
