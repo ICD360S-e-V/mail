@@ -182,10 +182,10 @@ class _ConfirmPhraseDialogState extends State<_ConfirmPhraseDialog> {
   Widget build(BuildContext context) {
     return ContentDialog(
       title: Row(
-        children: const [
+        children: [
           Icon(FluentIcons.warning, color: Colors.red, size: 24),
-          SizedBox(width: 8),
-          Text('Factory Reset'),
+          const SizedBox(width: 8),
+          const Text('Factory Reset'),
         ],
       ),
       content: Column(
@@ -202,7 +202,7 @@ class _ConfirmPhraseDialogState extends State<_ConfirmPhraseDialog> {
           const Text('  • All settings and cached data'),
           const Text('  • Email history and trash countdowns'),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'This action CANNOT be undone.',
             style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
           ),
@@ -237,3 +237,4 @@ class _ConfirmPhraseDialogState extends State<_ConfirmPhraseDialog> {
     );
   }
 }
+
