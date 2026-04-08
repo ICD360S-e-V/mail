@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
+import 'le_issuer_check.dart';
 import 'logger_service.dart';
 import 'update_service.dart';
 import 'platform_service.dart';
@@ -13,27 +14,10 @@ class LogUploadService {
   static String? _deviceId;
   static bool _loggingEnabled = false;
 
-  // Trusted Let's Encrypt issuer DNs
-  static const _trustedIssuers = [
-    'CN=R3,O=Let\'s Encrypt,C=US',
-    'CN=R10,O=Let\'s Encrypt,C=US',
-    'CN=R11,O=Let\'s Encrypt,C=US',
-    'CN=R12,O=Let\'s Encrypt,C=US',
-    'CN=E5,O=Let\'s Encrypt,C=US',
-    'CN=E6,O=Let\'s Encrypt,C=US',
-    'CN=E7,O=Let\'s Encrypt,C=US',
-    'CN=E8,O=Let\'s Encrypt,C=US',
-    'CN=ISRG Root X1,O=Internet Security Research Group,C=US',
-    'CN=ISRG Root X2,O=Internet Security Research Group,C=US',
-  ];
-
-  /// Validate server certificate
+  /// Validate server certificate using shared LE issuer helper.
   static bool _validateCertificate(X509Certificate cert, String host, int port) {
     if (host != 'mail.icd360s.de') return false;
-    final issuer = cert.issuer;
-    return _trustedIssuers.any(
-      (trusted) => issuer == trusted || issuer.contains(trusted),
-    );
+    return isTrustedLetsEncryptIssuer(cert.issuer);
   }
 
   /// Get or create device ID (using CSPRNG, not PII)
