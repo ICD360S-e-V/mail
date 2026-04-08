@@ -7,6 +7,12 @@ class LocalizationService {
   static LocalizationService? _instance;
   AppLocalizations? _localizations;
 
+  /// Whether we have already logged a "not initialized" warning. We log it
+  /// once per session to flag the issue, then stay silent. Without this
+  /// guard, code paths like update download progress (which fires hundreds
+  /// of times per second) flood the log with identical warnings.
+  bool _loggedNotInitializedOnce = false;
+
   static LocalizationService get instance {
     _instance ??= LocalizationService._();
     return _instance!;
@@ -24,7 +30,11 @@ class LocalizationService {
   /// Usage: getText((l10n) => l10n.buttonCancel, 'Cancel')
   String getText(String Function(AppLocalizations) selector, String fallback) {
     if (_localizations == null) {
-      LoggerService.log('LOCALIZATION', 'WARNING: AppLocalizations not initialized yet, using fallback: "$fallback"');
+      if (!_loggedNotInitializedOnce) {
+        _loggedNotInitializedOnce = true;
+        LoggerService.log('LOCALIZATION',
+            'AppLocalizations not initialized yet — using fallback strings (will not log this again until reset)');
+      }
       return fallback;
     }
     return selector(_localizations!);
