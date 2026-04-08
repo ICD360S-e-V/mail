@@ -9,6 +9,56 @@ import 'private/imap/parser_helper.dart';
 import 'private/util/ascii_runes.dart';
 import 'private/util/byte_utils.dart';
 
+// SECURITY (M5): defensive limits for the multipart parser.
+//
+// Without explicit limits a malicious or buggy IMAP server can
+// trigger denial of service through:
+//   - extremely long boundary strings (CVE-2024-7999 pattern)
+//   - thousands of forged boundaries inside one body (memory blow-up
+//     from String.split allocating one string per fragment)
+//   - deeply-nested multipart structures (unbounded recursion through
+//     parts -> TextMimeData(...).parse(null))
+//   - boundaries containing CR / LF / NUL bytes (parser confusion)
+//
+// The constants below mirror the limits used by the Go standard
+// library's `mime/multipart` package, which is the industry reference
+// for hardened multipart parsing.
+class _MimeParseLimits {
+  /// RFC 2046 §5.1.1: boundary parameter is 1-70 characters.
+  static const int maxBoundaryLength = 70;
+
+  /// Maximum number of child parts inside a single multipart container.
+  static const int maxParts = 1000;
+
+  /// Maximum recursion depth for nested multipart bodies.
+  static const int maxNestingDepth = 10;
+
+  /// Refuse to run String.split on bodies larger than this; the split
+  /// would otherwise allocate ~3x the body size in temporary fragment
+  /// strings. 50 MiB comfortably accommodates real-world emails with
+  /// attachments while preventing pathological inputs.
+  static const int maxBodyBytesForSplit = 50 * 1024 * 1024;
+
+  /// Current recursion depth across both TextMimeData and
+  /// BinaryMimeData. Single-threaded per isolate, so a static counter
+  /// is safe; the parsers always wrap recursive calls in try/finally
+  /// so a thrown exception cannot leak the counter upwards.
+  static int currentDepth = 0;
+}
+
+/// RFC 2046 forbids CR / LF / NUL inside boundary parameter values
+/// and limits the boundary to 1-70 characters. We additionally reject
+/// empty boundaries (which would split nothing or split everything).
+bool _isValidMimeBoundary(String? boundary) {
+  if (boundary == null || boundary.isEmpty) return false;
+  if (boundary.length > _MimeParseLimits.maxBoundaryLength) return false;
+  for (var i = 0; i < boundary.length; i++) {
+    final c = boundary.codeUnitAt(i);
+    if (c == 0x0D || c == 0x0A || c == 0x00) return false;
+  }
+  return true;
+}
+
 /// Abstracts textual or binary mime data
 abstract class MimeData {
   /// Creates a new mime data
@@ -151,28 +201,56 @@ class TextMimeData extends MimeData {
       partsBoundary = contentTypeHeader?.boundary;
     }
     if (partsBoundary != null) {
-      parts = [];
-      final splitBoundary = '--$partsBoundary\r\n';
-      final childParts = bodyText.split(splitBoundary);
-      if (!bodyText.startsWith(splitBoundary)) {
-        // mime-readers can ignore the preamble:
-        childParts.removeAt(0);
+      // SECURITY (M5): validate boundary, body size and nesting depth
+      // BEFORE the expensive split. Each guard fails closed: if the
+      // input violates a safety limit we simply do not populate
+      // [parts]. The body remains accessible as a single text blob,
+      // so a legitimate-looking-but-pathological email is still
+      // openable, just not pre-split.
+      if (!_isValidMimeBoundary(partsBoundary)) {
+        return;
       }
-      if (childParts.isNotEmpty) {
-        var lastPart = childParts.last;
-        final closingIndex = lastPart.lastIndexOf('--$partsBoundary--');
-        if (closingIndex != -1) {
-          childParts.removeLast();
-          lastPart = lastPart.substring(0, closingIndex);
-          childParts.add(lastPart);
+      if (body.length > _MimeParseLimits.maxBodyBytesForSplit) {
+        return;
+      }
+      if (_MimeParseLimits.currentDepth >= _MimeParseLimits.maxNestingDepth) {
+        return;
+      }
+      _MimeParseLimits.currentDepth++;
+      try {
+        parts = [];
+        final splitBoundary = '--\$partsBoundary\r\n';
+        final childParts = bodyText.split(splitBoundary);
+        if (!bodyText.startsWith(splitBoundary)) {
+          // mime-readers can ignore the preamble:
+          childParts.removeAt(0);
         }
-        for (final childPart in childParts) {
-          if (childPart.isNotEmpty) {
-            final part = TextMimeData(childPart, containsHeader: true)
-              ..parse(null);
-            parts?.add(part);
+        // SECURITY (M5): cap the number of fragments. Truncating
+        // (rather than throwing) keeps the first N legitimate parts
+        // visible to the user even if a malicious server padded the
+        // body with extra forged boundaries.
+        if (childParts.length > _MimeParseLimits.maxParts) {
+          childParts.removeRange(
+              _MimeParseLimits.maxParts, childParts.length);
+        }
+        if (childParts.isNotEmpty) {
+          var lastPart = childParts.last;
+          final closingIndex = lastPart.lastIndexOf('--\$partsBoundary--');
+          if (closingIndex != -1) {
+            childParts.removeLast();
+            lastPart = lastPart.substring(0, closingIndex);
+            childParts.add(lastPart);
+          }
+          for (final childPart in childParts) {
+            if (childPart.isNotEmpty) {
+              final part = TextMimeData(childPart, containsHeader: true)
+                ..parse(null);
+              parts?.add(part);
+            }
           }
         }
+      } finally {
+        _MimeParseLimits.currentDepth--;
       }
     }
   }
@@ -261,8 +339,18 @@ class BinaryMimeData extends MimeData {
         partsBoundary = usedContentType?.boundary;
       }
       if (partsBoundary != null) {
-        // split into different parts:
-        parts = _splitAndParse(partsBoundary, _bodyData);
+        // SECURITY (M5): same defensive validation as TextMimeData.
+        if (_isValidMimeBoundary(partsBoundary) &&
+            _bodyData.length <= _MimeParseLimits.maxBodyBytesForSplit &&
+            _MimeParseLimits.currentDepth <
+                _MimeParseLimits.maxNestingDepth) {
+          _MimeParseLimits.currentDepth++;
+          try {
+            parts = _splitAndParse(partsBoundary, _bodyData);
+          } finally {
+            _MimeParseLimits.currentDepth--;
+          }
+        }
       }
     }
     _bodySize = _bodyData.length;
@@ -294,6 +382,11 @@ class BinaryMimeData extends MimeData {
           final part = BinaryMimeData(partData, containsHeader: true)
             ..parse(null);
           result.add(part);
+          if (result.length >= _MimeParseLimits.maxParts) {
+            // SECURITY (M5): too many parts — stop scanning rather
+            // than allocate further sublists.
+            return result;
+          }
           i += boundary.length;
           startIndex = i;
         }
