@@ -5,13 +5,14 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
 import 'package:url_launcher/url_launcher.dart';
+import 'le_issuer_check.dart';
 import 'logger_service.dart';
 import 'localization_service.dart';
 
 /// Auto-update service for checking and installing updates
 class UpdateService {
   static const String updateUrl = 'https://mail.icd360s.de/updates/version.json';
-  static const String currentVersion = '2.20.1';
+  static const String currentVersion = '2.20.2';
 
   // Progress callback for UI updates
   static Function(int downloaded, int total, String status)? onProgress;
@@ -68,27 +69,11 @@ class UpdateService {
     }
   }
 
-  // Trusted Let's Encrypt issuer DNs (same as MtlsService)
-  static const _trustedIssuers = [
-    'CN=R3,O=Let\'s Encrypt,C=US',
-    'CN=R10,O=Let\'s Encrypt,C=US',
-    'CN=R11,O=Let\'s Encrypt,C=US',
-    'CN=R12,O=Let\'s Encrypt,C=US',
-    'CN=E5,O=Let\'s Encrypt,C=US',
-    'CN=E6,O=Let\'s Encrypt,C=US',
-    'CN=E7,O=Let\'s Encrypt,C=US',
-    'CN=E8,O=Let\'s Encrypt,C=US',
-    'CN=ISRG Root X1,O=Internet Security Research Group,C=US',
-    'CN=ISRG Root X2,O=Internet Security Research Group,C=US',
-  ];
-
-  /// Validate server certificate — only accept trusted Let's Encrypt issuers
+  /// Validate server certificate — only accept trusted Let's Encrypt issuers.
+  /// Uses the shared `isTrustedLetsEncryptIssuer` helper.
   static bool _validateCertificate(X509Certificate cert, String host, int port) {
     if (host != 'mail.icd360s.de') return false;
-    final issuer = cert.issuer;
-    return _trustedIssuers.any(
-      (trusted) => issuer == trusted || issuer.contains(trusted),
-    );
+    return isTrustedLetsEncryptIssuer(cert.issuer);
   }
 
   /// Verify that an update download URL is allowed: must be HTTPS and pointed
@@ -513,6 +498,7 @@ class UpdateInfo {
     this.sha256Hash,
   });
 }
+
 
 
 
