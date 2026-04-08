@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:http/io_client.dart';
 import 'le_issuer_check.dart';
 import 'logger_service.dart';
+import 'pinned_security_context.dart';
 
 /// Service for downloading per-user certificates from server
 /// Eliminates hardcoded certificates vulnerability
@@ -82,7 +83,7 @@ class CertificateService {
         final cleanUsername = username.replaceAll('@icd360s.de', '');
 
         // Fresh HttpClient each time to avoid stale connections/DNS cache
-        ioClient = HttpClient()
+        ioClient = PinnedSecurityContext.createHttpClient()
           ..connectionTimeout = const Duration(seconds: 10)
           ..idleTimeout = const Duration(seconds: 1);
         ioClient.badCertificateCallback = _validateCertificate;
