@@ -1359,7 +1359,7 @@ class _MainWindowState extends State<MainWindow> {
                 onPressed: _showChangelog,
                 builder: (context, states) {
                   return Text(
-                    l10n.mainWindowVersion('2.20.0'),
+                    l10n.mainWindowVersion('2.20.1'),
                     style: theme.typography.caption?.copyWith(
                       color: states.isHovered ? theme.accentColor.light : theme.accentColor,
                       fontWeight: FontWeight.bold,
@@ -1515,4 +1515,5 @@ class _SignalBarsPainter extends CustomPainter {
     return oldDelegate.bars != bars || oldDelegate.color != color;
   }
 }
+
 
