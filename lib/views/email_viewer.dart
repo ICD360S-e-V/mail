@@ -18,6 +18,7 @@ import '../services/logger_service.dart';
 import '../services/platform_service.dart';
 import 'compose_window.dart';
 import 'attachment_viewer_window.dart';
+import '../utils/text_safety.dart';
 
 /// Email viewer window
 class EmailViewer extends StatefulWidget {
@@ -239,18 +240,18 @@ class _EmailViewerState extends State<EmailViewer> {
             : MediaQuery.of(context).size.width * 0.95,
         maxHeight: MediaQuery.of(context).size.height * 0.9,
       ),
-      title: Text(email.subject),
+      title: Text(sanitizeBidi(email.subject)),
       content: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Email metadata
-            _buildMetadataRow(l10n.labelFrom, email.from, theme),
+            _buildMetadataRow(l10n.labelFrom, sanitizeBidi(email.from), theme),
             const SizedBox(height: 8),
-            _buildMetadataRow(l10n.labelTo, email.to, theme),
+            _buildMetadataRow(l10n.labelTo, sanitizeBidi(email.to), theme),
             if (email.cc.isNotEmpty) ...[
               const SizedBox(height: 8),
-              _buildMetadataRow('CC:', email.cc, theme),
+              _buildMetadataRow('CC:', sanitizeBidi(email.cc), theme),
             ],
             const SizedBox(height: 8),
             _buildMetadataRow(l10n.labelDate, dateFormat.format(email.date), theme),
