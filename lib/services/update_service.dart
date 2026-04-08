@@ -8,6 +8,14 @@ import 'package:url_launcher/url_launcher.dart';
 import 'le_issuer_check.dart';
 import 'logger_service.dart';
 import 'localization_service.dart';
+import 'package:pointycastle/asn1/asn1_parser.dart';
+import 'package:pointycastle/asn1/primitives/asn1_integer.dart';
+import 'package:pointycastle/asn1/primitives/asn1_sequence.dart';
+import 'package:pointycastle/digests/sha256.dart';
+import 'package:pointycastle/ecc/api.dart';
+import 'package:pointycastle/ecc/curves/secp256r1.dart';
+import 'package:pointycastle/signers/ecdsa_signer.dart';
+import 'package:pointycastle/api.dart' as pc_api;
 import 'pinned_security_context.dart';
 import 'version_baseline.dart';
 
@@ -36,6 +44,22 @@ class UpdateService {
   /// To rotate this value: extract the new cert with
   ///   openssl x509 -in cert.pem -outform DER | sha256sum
   /// and update both this constant and a new release.
+  /// Base64-encoded raw uncompressed ECDSA P-256 public key (65 bytes,
+  /// format `0x04 || X || Y`) used to verify the detached signature on
+  /// `version.json`.
+  ///
+  /// SECURITY: The matching private key is held offline at
+  /// `/root/.icd360s/release_signing/version_signing_priv.pem` on the
+  /// release-signing host (Claude Code dev server, NOT mail.icd360s.de).
+  /// A compromise of `mail.icd360s.de` cannot forge update metadata
+  /// because the attacker would need this offline private key.
+  ///
+  /// To rotate: generate a new keypair offline, ship a release that
+  /// trusts BOTH the old and the new key, wait for adoption, ship a
+  /// follow-up release that trusts only the new key.
+  static const String _versionJsonPublicKey =
+      'BOaKDVWITCwis2+9tVGNkeNPBsV0dO/ja3HheaaqVW6GZbb6Y6csarYVoMpCFH7FTprFSwfZP1JO72fRu2x6te0=';
+
   static const String _expectedApkCertSha256 =
       'ff9c4a92347693745a06a20cc15310e897145dad6b719cbe724eda093a6195b5';
 
@@ -73,6 +97,64 @@ class UpdateService {
 
   /// Validate server certificate — only accept trusted Let's Encrypt issuers.
   /// Uses the shared `isTrustedLetsEncryptIssuer` helper.
+  /// Verify an ECDSA P-256 / SHA-256 detached signature against a
+  /// message using the hardcoded `_versionJsonPublicKey`.
+  ///
+  /// Signature format: ASN.1 DER (the openssl `dgst -sha256 -sign`
+  /// default). Pure Dart, no native code, no extra dependencies
+  /// (pointycastle is already pulled in by other services).
+  static bool _verifyVersionJsonSignature(
+      Uint8List message, Uint8List derSignature) {
+    try {
+      final pubBytes = base64.decode(_versionJsonPublicKey);
+      if (pubBytes.length != 65 || pubBytes[0] != 0x04) {
+        LoggerService.log('UPDATE',
+            '❌ version.json verify: malformed pinned public key');
+        return false;
+      }
+
+      final curve = ECCurve_secp256r1();
+      BigInt toBigInt(List<int> bytes) {
+        final hex =
+            bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+        return BigInt.parse(hex, radix: 16);
+      }
+
+      final x = toBigInt(pubBytes.sublist(1, 33));
+      final y = toBigInt(pubBytes.sublist(33, 65));
+      final point = curve.curve.createPoint(x, y);
+      final pubKey = ECPublicKey(point, curve);
+
+      final parser = ASN1Parser(derSignature);
+      final asn1 = parser.nextObject();
+      if (asn1 is! ASN1Sequence ||
+          asn1.elements == null ||
+          asn1.elements!.length != 2) {
+        LoggerService.log('UPDATE',
+            '❌ version.json verify: signature is not an ASN.1 SEQUENCE of 2');
+        return false;
+      }
+      final rEl = asn1.elements![0];
+      final sEl = asn1.elements![1];
+      if (rEl is! ASN1Integer || sEl is! ASN1Integer) {
+        LoggerService.log('UPDATE',
+            '❌ version.json verify: signature components not INTEGERs');
+        return false;
+      }
+      final ecSig = ECSignature(rEl.integer!, sEl.integer!);
+
+      // SHA-256 of the message, then ECDSA verify on the hash.
+      final hash = SHA256Digest().process(message);
+
+      final signer = ECDSASigner();
+      signer.init(false, pc_api.PublicKeyParameter<ECPublicKey>(pubKey));
+      return signer.verifySignature(hash, ecSig);
+    } catch (ex, st) {
+      LoggerService.logError('UPDATE', ex, st);
+      return false;
+    }
+  }
+
   static bool _validateCertificate(X509Certificate cert, String host, int port) {
     if (host != 'mail.icd360s.de') return false;
     return isTrustedLetsEncryptIssuer(cert.issuer);
@@ -112,11 +194,43 @@ class UpdateService {
       final client = PinnedSecurityContext.createHttpClient()
         ..badCertificateCallback = _validateCertificate;
       try {
+        // Download version.json AND its detached ECDSA signature, then
+        // verify before trusting any field. Defends against compromise
+        // of mail.icd360s.de itself: an attacker who controls the
+        // server can serve any JSON, but cannot forge a valid signature
+        // without the offline private key.
         final request = await client.getUrl(Uri.parse(updateUrl));
         final response = await request.close();
 
         if (response.statusCode == 200) {
-          final jsonString = await response.transform(utf8.decoder).join();
+          final jsonBytes = Uint8List.fromList(
+              await response.fold<List<int>>(<int>[], (acc, c) {
+            acc.addAll(c);
+            return acc;
+          }));
+
+          final sigUrl = '$updateUrl.sig';
+          final sigReq = await client.getUrl(Uri.parse(sigUrl));
+          final sigResp = await sigReq.close();
+          if (sigResp.statusCode != 200) {
+            LoggerService.log('UPDATE',
+                '❌ REJECTED: $sigUrl returned ${sigResp.statusCode}');
+            return null;
+          }
+          final sigBytes = Uint8List.fromList(
+              await sigResp.fold<List<int>>(<int>[], (acc, c) {
+            acc.addAll(c);
+            return acc;
+          }));
+
+          if (!_verifyVersionJsonSignature(jsonBytes, sigBytes)) {
+            LoggerService.log('UPDATE',
+                '❌ REJECTED: version.json signature verification FAILED');
+            return null;
+          }
+          LoggerService.log('UPDATE', '✓ version.json signature verified');
+
+          final jsonString = utf8.decode(jsonBytes);
           final json = jsonDecode(jsonString) as Map<String, dynamic>;
 
           final latestVersion = json['version'] as String;
