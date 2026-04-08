@@ -85,7 +85,12 @@ class _ChangelogWindowState extends State<ChangelogWindow> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSection(theme, '🆕 Version 2.20.1 - 8 Apr 2026', [
+          _buildSection(theme, '🆕 Version 2.20.2 - 8 Apr 2026', [
+            'CRITICAL Bug fix - TLS issuer validation parsed wrong DN format (slash vs comma) in v2.20.0/2.20.1, rejecting all legitimate Let\'s Encrypt certs and breaking IMAP/SMTP/HTTPS for every account',
+            'Fix applied in 5 services: mtls, certificate_service, update_service, log_upload_service, changelog_service via shared le_issuer_check helper',
+          ]),
+          const SizedBox(height: 16),
+          _buildSection(theme, 'Version 2.20.1 - 8 Apr 2026', [
             'Bug fix - Migration: passwords from v2.5.x (hostname-XOR) now properly migrated to AES-GCM',
             'Bug fix - Update download: throttle progress callback (no more UI rebuild flood)',
             'Bug fix - Trash cleanup: skip silently if certificates not yet loaded (no more 20+ stack trace spam)',
@@ -306,5 +311,6 @@ class _ChangelogWindowState extends State<ChangelogWindow> {
     );
   }
 }
+
 
 
