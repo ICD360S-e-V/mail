@@ -9,6 +9,7 @@ import 'le_issuer_check.dart';
 import 'logger_service.dart';
 import 'localization_service.dart';
 import 'pinned_security_context.dart';
+import 'version_baseline.dart';
 
 /// Auto-update service for checking and installing updates
 class UpdateService {
@@ -153,6 +154,14 @@ class UpdateService {
           }
 
           // Compare versions
+          // L2 anti-rollback: refuse to even surface a candidate
+          // version that is below our persisted monotonic baseline.
+          // See VersionBaseline / CWE-1328.
+          if (!await VersionBaseline.isAcceptable(latestVersion)) {
+            LoggerService.log('UPDATE',
+                '❌ REJECTED candidate $latestVersion: below persisted baseline');
+            return null;
+          }
           if (_isNewerVersion(latestVersion, currentVersion)) {
             return UpdateInfo(
               version: latestVersion,
@@ -174,6 +183,18 @@ class UpdateService {
 
   /// Download and install update automatically with progress
   static Future<bool> downloadAndInstallAuto(UpdateInfo updateInfo) async {
+    // L2 anti-rollback (defense in depth): re-check the baseline at the
+    // entry point of the install pipeline so any code path that
+    // constructs an UpdateInfo manually (deep link, UI button, retry)
+    // also gets the protection. Bumps the baseline AFTER all integrity
+    // checks pass and the platform-specific install path returns success.
+    if (!await VersionBaseline.isAcceptable(updateInfo.version)) {
+      LoggerService.log('UPDATE',
+          '❌ REJECTED install of ${updateInfo.version}: below persisted baseline');
+      onProgress?.call(0, 0, 'Update rejected: rollback blocked');
+      return false;
+    }
+
     // iOS: no self-update possible, open browser
     if (Platform.isIOS) {
       return _updateViaBrowser(updateInfo);
@@ -181,7 +202,9 @@ class UpdateService {
 
     // Android: download APK then trigger system installer
     if (Platform.isAndroid) {
-      return _installAndroid(updateInfo);
+      final ok = await _installAndroid(updateInfo);
+      if (ok) await VersionBaseline.bumpTo(updateInfo.version);
+      return ok;
     }
 
     try {
@@ -204,6 +227,10 @@ class UpdateService {
       await Future.delayed(const Duration(seconds: 2));
 
       // Platform-specific install
+      // Bump baseline BEFORE launching the installer: on Windows/macOS/
+      // Linux the installer subprocess takes over and the current
+      // process is killed before we could record success.
+      await VersionBaseline.bumpTo(updateInfo.version);
       if (Platform.isWindows) {
         return _installWindows(downloadedFile);
       } else if (Platform.isMacOS) {
