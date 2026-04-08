@@ -266,6 +266,13 @@ class UpdateService {
       final sink = updateFile.openWrite();
       int downloaded = 0;
       final allBytes = <int>[];
+      // Throttle progress callbacks: only notify when percent changes
+      // (or every 250ms at most). Without this, the callback fires once
+      // per network chunk (~4KB on most platforms), which on a 30 MB
+      // download means ~7500 callbacks. Each one rebuilds the navigation
+      // pane and floods the log with localization warnings.
+      int lastPercent = -1;
+      DateTime lastNotify = DateTime.fromMillisecondsSinceEpoch(0);
 
       try {
         await for (final chunk in response) {
@@ -274,14 +281,26 @@ class UpdateService {
           downloaded += chunk.length;
 
           final percent = contentLength > 0 ? (downloaded * 100 / contentLength).round() : 0;
-          onProgress?.call(downloaded, contentLength, l10nService.getText(
-            (l10n) => '${l10n.updateDownloadingProgress}$percent% (${(downloaded / 1024 / 1024).toStringAsFixed(1)} MB)',
-            'Downloading: $percent% (${(downloaded / 1024 / 1024).toStringAsFixed(1)} MB)'
-          ));
+          final now = DateTime.now();
+          final percentChanged = percent != lastPercent;
+          final timeElapsed = now.difference(lastNotify).inMilliseconds >= 250;
+          if (percentChanged || timeElapsed) {
+            lastPercent = percent;
+            lastNotify = now;
+            onProgress?.call(downloaded, contentLength, l10nService.getText(
+              (l10n) => '${l10n.updateDownloadingProgress}$percent% (${(downloaded / 1024 / 1024).toStringAsFixed(1)} MB)',
+              'Downloading: $percent% (${(downloaded / 1024 / 1024).toStringAsFixed(1)} MB)'
+            ));
+          }
         }
       } finally {
         await sink.close();
       }
+      // Always notify final state
+      onProgress?.call(downloaded, contentLength, l10nService.getText(
+        (l10n) => '${l10n.updateDownloadingProgress}100% (${(downloaded / 1024 / 1024).toStringAsFixed(1)} MB)',
+        'Downloading: 100% (${(downloaded / 1024 / 1024).toStringAsFixed(1)} MB)'
+      ));
 
       LoggerService.log('UPDATE', 'Downloaded $downloaded bytes to ${updateFile.path}');
 
@@ -494,5 +513,6 @@ class UpdateInfo {
     this.sha256Hash,
   });
 }
+
 
 
