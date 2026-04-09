@@ -546,9 +546,38 @@ class UpdateService {
     await Process.run('hdiutil', ['detach', mountPoint]);
     await updateFile.delete();
 
-    // Relaunch app
-    await Process.start('open', [appBundlePath], mode: ProcessStartMode.detached);
-    LoggerService.log('UPDATE', 'Relaunching app from $appBundlePath');
+    // Relaunch app via a detached shell that waits for THIS process
+    // to fully exit before calling `open`.
+    //
+    // SECURITY / CORRECTNESS: Without the delay, three things go
+    // wrong simultaneously:
+    //   1. macOS LaunchServices sees the existing process still
+    //      running with the same bundle id, so `open` becomes a
+    //      no-op "bring to front" instead of launching the new
+    //      binary.
+    //   2. Even after `exit(0)`, LaunchServices may have already
+    //      cached the request and serve the old running PID, then
+    //      see it die and never try again.
+    //   3. The single-instance lock in main.dart blocks any second
+    //      instance that races against the dying parent.
+    //
+    // Following the same pattern Sparkle uses on macOS: spawn a
+    // detached child that polls until our PID is gone, then issues
+    // `open` against the freshly-installed bundle. The 2-second
+    // grace period covers normal Dart/Flutter shutdown teardown.
+    final pid = pid;
+    final escapedPath = appBundlePath.replaceAll(r"'", r"'''");
+    await Process.start(
+      'sh',
+      [
+        '-c',
+        "while kill -0 $pid 2>/dev/null; do sleep 0.2; done; "
+            "sleep 1; open '$escapedPath'",
+      ],
+      mode: ProcessStartMode.detached,
+    );
+    LoggerService.log('UPDATE',
+        'Scheduled detached relaunch (after PID $pid exits) from $appBundlePath');
     exit(0);
   }
 
