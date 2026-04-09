@@ -10,9 +10,20 @@
 	<true/>
 	<key>com.apple.security.files.downloads.read-write</key>
 	<true/>
-	<key>keychain-access-groups</key>
-	<array>
-		<string>$(AppIdentifierPrefix)de.icd360s.mailclient</string>
-	</array>
+	<!--
+		NOTE: keychain-access-groups was REMOVED in v2.21.2 because the
+		previous value `$(AppIdentifierPrefix)de.icd360s.mailclient` requires
+		a real Apple Developer Team ID prefix. Our CI builds are ad-hoc
+		signed (no paid Developer Program), so $(AppIdentifierPrefix)
+		expands to nothing → invalid entitlement → -34018
+		errSecMissingEntitlement on every flutter_secure_storage call,
+		breaking M1 (rate-limit AES-GCM) and M7 (mTLS cert persist).
+
+		Without this entitlement, flutter_secure_storage uses the app's
+		default keychain access (no cross-app sharing), which works for
+		ad-hoc signed apps. If we ever join the Apple Developer Program
+		and ship a Developer-ID-signed build, this entitlement can be
+		re-added with the proper team prefix.
+	-->
 </dict>
 </plist>
