@@ -565,19 +565,21 @@ class UpdateService {
     // detached child that polls until our PID is gone, then issues
     // `open` against the freshly-installed bundle. The 2-second
     // grace period covers normal Dart/Flutter shutdown teardown.
-    final pid = pid;
-    final escapedPath = appBundlePath.replaceAll(r"'", r"'''");
+    final myPid = pid;
+    // Single-quote-escape for sh: ' -> '\''
+    final escapedPath =
+        appBundlePath.replaceAll("'", r"'\''");
     await Process.start(
       'sh',
       [
         '-c',
-        "while kill -0 $pid 2>/dev/null; do sleep 0.2; done; "
+        "while kill -0 $myPid 2>/dev/null; do sleep 0.2; done; "
             "sleep 1; open '$escapedPath'",
       ],
       mode: ProcessStartMode.detached,
     );
     LoggerService.log('UPDATE',
-        'Scheduled detached relaunch (after PID $pid exits) from $appBundlePath');
+        'Scheduled detached relaunch (after PID $myPid exits) from $appBundlePath');
     exit(0);
   }
 
