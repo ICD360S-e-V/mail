@@ -143,10 +143,11 @@ jobs:
           sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libsecret-1-dev rpm ruby-dev
           sudo gem install fpm
 
-      - name: Build Linux
-        run: |
-          flutter pub get --enforce-lockfile
-          flutter build linux --release
+      - name: Resolve Flutter dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Compile Linux release binary
+        run: flutter build linux --release
 
       # SECURITY (M9): Declare libsecret-1-0 as a runtime dependency.
       # flutter_secure_storage_linux requires libsecret to use the system
@@ -257,23 +258,32 @@ jobs:
           # Sanity: print version so the build log shows what actually ran
           ./appimagetool --version || true
 
-      - name: Build AppImage (signed)
-        env:
-          GPG_KEY_ID: ${{ secrets.APPIMAGE_GPG_KEY_ID }}
+      - name: Prepare AppDir structure
         run: |
-          # Prepare AppDir
-          mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
+          mkdir -p AppDir/usr/bin \
+                   AppDir/usr/share/applications \
+                   AppDir/usr/share/icons/hicolor/256x256/apps
+
+      - name: Stage Flutter bundle into AppDir
+        run: |
           cp -r build/linux/x64/release/bundle/* AppDir/usr/bin/
+
+      - name: Stage desktop entry and icons
+        run: |
           cp linux/icd360s-mail-client.desktop AppDir/icd360s-mail-client.desktop
           cp linux/icd360s-mail-client.desktop AppDir/usr/share/applications/
-          # Use app logo as icon
           cp assets/logo.png AppDir/icd360s_mail_client.png
           cp assets/logo.png AppDir/usr/share/icons/hicolor/256x256/apps/icd360s_mail_client.png
 
-          # Build AppImage with embedded GPG signature
+      - name: Build and GPG-sign AppImage
+        env:
+          GPG_KEY_ID: ${{ secrets.APPIMAGE_GPG_KEY_ID }}
+        run: |
           # --sign           — embed signature in AppImage Signing Block
           # --sign-key KEYID — use the imported key
-          ARCH=x86_64 ./appimagetool --no-appstream --sign --sign-key "$GPG_KEY_ID" AppDir ICD360S-Mail-Client-x86_64.AppImage
+          ARCH=x86_64 ./appimagetool --no-appstream \
+            --sign --sign-key "$GPG_KEY_ID" \
+            AppDir ICD360S-Mail-Client-x86_64.AppImage
 
       - name: Cleanup GPG keyring
         if: always()
@@ -419,10 +429,13 @@ jobs:
           } > android/key.properties
           chmod 600 android/key.properties
 
-      - name: Build Android ${{ matrix.flavor }} ${{ matrix.format }}
+      - name: Resolve Flutter dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Compile Android ${{ matrix.flavor }} ${{ matrix.format }} (release)
         run: |
-          flutter pub get --enforce-lockfile
-          flutter build ${{ matrix.format }} --release --flavor ${{ matrix.flavor }} ${{ matrix.build_args }}
+          flutter build ${{ matrix.format }} --release \
+            --flavor ${{ matrix.flavor }} ${{ matrix.build_args }}
 
       - name: Upload Android ${{ matrix.flavor }} ${{ matrix.format }} artifact
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
@@ -515,26 +528,31 @@ jobs:
           flutter precache --ios --macos
           flutter doctor -v
 
-      - name: Build iOS (no codesign)
+      - name: Resolve Flutter dependencies
         run: |
+          export PATH="$HOME/flutter/bin:$PATH"
           flutter pub get --enforce-lockfile
+
+      - name: Compile iOS Runner.app (no codesign)
+        run: |
+          export PATH="$HOME/flutter/bin:$PATH"
           flutter build ios --release --no-codesign
 
-      - name: Create iOS .ipa
+      - name: Package iOS .ipa from Runner.app
         run: |
           mkdir -p build/ios/Payload
           cp -r build/ios/iphoneos/Runner.app build/ios/Payload/
           cd build/ios && zip -r ../icd360s-mail.ipa Payload/
 
-      - name: Configure macOS signing for CI
+      - name: Configure macOS signing for CI (manual, no team)
         run: |
-          # Set manual signing without team (ad-hoc will be applied post-build)
           sed -i '' 's/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g' macos/Runner.xcodeproj/project.pbxproj
           sed -i '' 's/"CODE_SIGN_IDENTITY\[sdk=macosx\*\]" = "Apple Development"/"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-"/g' macos/Runner.xcodeproj/project.pbxproj
           sed -i '' 's/DEVELOPMENT_TEAM = B42ZX94AKL/DEVELOPMENT_TEAM = ""/g' macos/Runner.xcodeproj/project.pbxproj
 
-      - name: Build macOS
+      - name: Compile macOS .app bundle (release)
         run: |
+          export PATH="$HOME/flutter/bin:$PATH"
           flutter build macos --release
 
       - name: Ad-hoc sign macOS app
@@ -629,10 +647,11 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
-      - name: Build Windows
-        run: |
-          flutter pub get --enforce-lockfile
-          flutter build windows --release
+      - name: Resolve Flutter dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Compile Windows release binary
+        run: flutter build windows --release
 
       # SECURITY: Download VC++ Redistributable from Microsoft with pinned SHA-256.
       # Previously this binary was committed to the repo (windows/redist/vc_redist.x64.exe),
