@@ -344,9 +344,11 @@ class ImapClient extends ClientBase {
   ///
   /// Requires the IMAP service to support `AUTH=PLAIN` capability.
   Future<List<Capability>> login(String name, String password) async {
+    final quotedName = _quoteImapString(name);
+    final quotedPassword = _quoteImapString(password);
     final cmd = Command(
-      'LOGIN "$name" "$password"',
-      logText: 'LOGIN "$name" "(password scrambled)"',
+      'LOGIN $quotedName $quotedPassword',
+      logText: 'LOGIN $quotedName "(password scrambled)"',
       writeTimeout: defaultWriteTimeout,
       responseTimeout: defaultResponseTimeout,
     );
@@ -1302,23 +1304,26 @@ class ImapClient extends ClientBase {
     );
   }
 
-  /// Quotes an already-encoded mailbox path per RFC 3501 quoted-string
-  /// rules.
+  /// Quotes a string per RFC 3501 quoted-string rules.
   ///
-  /// Defense-in-depth against CRLF injection: rejects paths containing
-  /// CR/LF/NUL bytes (which could otherwise be used by a malicious or
-  /// compromised IMAP server to smuggle additional commands), and
-  /// escapes backslash and double-quote characters.
-  String _quoteEncodedMailboxPath(String encodedPath) {
-    if (encodedPath.contains('\r') ||
-        encodedPath.contains('\n') ||
-        encodedPath.contains('\x00')) {
+  /// Defense-in-depth against CRLF injection: rejects values containing
+  /// CR/LF/NUL bytes (which could otherwise be used to smuggle additional
+  /// IMAP commands), and escapes backslash and double-quote characters.
+  ///
+  /// Used for mailbox paths, LOGIN credentials, SETMETADATA mailbox names,
+  /// SETQUOTA/GETQUOTA roots, and any other user-controlled value
+  /// interpolated into an IMAP command string.
+  String _quoteImapString(String value) {
+    if (value.contains('\r') ||
+        value.contains('\n') ||
+        value.contains('\x00')) {
       throw ImapException(
         this,
-        'Invalid mailbox path: contains forbidden control characters',
+        'Invalid IMAP string: contains forbidden control characters '
+            '(CR/LF/NUL)',
       );
     }
-    final escaped = encodedPath
+    final escaped = value
         .replaceAll(r'\', r'\\')
         .replaceAll('"', r'\"');
     return '"$escaped"';
@@ -1330,13 +1335,13 @@ class ImapClient extends ClientBase {
         return path;
       }
 
-      return _quoteEncodedMailboxPath(path);
+      return _quoteImapString(path);
     }
     final pathSeparator = serverInfo.pathSeparator ?? '/';
     var encodedPath = Mailbox.encode(path, pathSeparator);
     if (encodedPath.contains(' ') ||
         (alwaysQuote && !encodedPath.startsWith('"'))) {
-      encodedPath = _quoteEncodedMailboxPath(encodedPath);
+      encodedPath = _quoteImapString(encodedPath);
     }
 
     return encodedPath;
@@ -1565,7 +1570,7 @@ class ImapClient extends ClientBase {
     bool enableCondStore = false,
     QResyncParameters? qresync,
   }) {
-    final path = _quoteEncodedMailboxPath(box.encodedPath);
+    final path = _quoteImapString(box.encodedPath);
     final buffer = StringBuffer()
       ..write(command)
       ..write(' ')
@@ -2076,13 +2081,15 @@ class ImapClient extends ClientBase {
     final Command cmd;
     final value = entry.value;
     if (value == null || _isSafeForQuotedTransmission(valueText ?? '')) {
-      final cmdText = 'SETMETADATA "${entry.mailboxName}" '
+      final quotedMailbox = _quoteImapString(entry.mailboxName);
+      final cmdText = 'SETMETADATA $quotedMailbox '
           '(${entry.name} '
-          '${value == null ? 'NIL' : '"$valueText"'})';
+          '${value == null ? 'NIL' : _quoteImapString(valueText ?? '')})';
       cmd = Command(cmdText);
     } else {
       // this is a complex command that requires continuation responses
-      final setPart = 'SETMETADATA "${entry.mailboxName}" '
+      final quotedMailbox = _quoteImapString(entry.mailboxName);
+      final setPart = 'SETMETADATA $quotedMailbox '
           '(${entry.name} {${value.length}}';
       final parts = <String>[setPart, '$valueText)'];
       cmd = Command.withContinuation(parts);
@@ -2101,7 +2108,7 @@ class ImapClient extends ClientBase {
     final parts = <String>[];
     var cmd = StringBuffer()..write('SETMETADATA ');
     var entry = entries.first;
-    cmd.write('"${entry.mailboxName}" (');
+    cmd.write('${_quoteImapString(entry.mailboxName)} (');
     for (entry in entries) {
       cmd
         ..write(' ')
@@ -2142,7 +2149,7 @@ class ImapClient extends ClientBase {
   ///  query that mailbox's status without deselecting the current
   ///  mailbox in the first IMAP4rev1 connection.
   Future<Mailbox> statusMailbox(Mailbox box, List<StatusFlags> flags) {
-    final path = _quoteEncodedMailboxPath(box.encodedPath);
+    final path = _quoteImapString(box.encodedPath);
     final buffer = StringBuffer()
       ..write('STATUS ')
       ..write(path)
@@ -2226,7 +2233,7 @@ class ImapClient extends ClientBase {
   /// [box] the mailbox that should be renamed
   /// [newName] the desired future name of the mailbox
   Future<Mailbox> renameMailbox(Mailbox box, String newName) async {
-    final path = _quoteEncodedMailboxPath(box.encodedPath);
+    final path = _quoteImapString(box.encodedPath);
 
     final cmd = Command(
       'RENAME $path ${_encodeMailboxPath(newName)}',
@@ -2266,7 +2273,7 @@ class ImapClient extends ClientBase {
       _sendMailboxCommand('UNSUBSCRIBE', box);
 
   Future<Mailbox> _sendMailboxCommand(String command, Mailbox box) async {
-    final path = _quoteEncodedMailboxPath(box.encodedPath);
+    final path = _quoteImapString(box.encodedPath);
     final cmd = Command(
       '$command $path',
       writeTimeout: defaultWriteTimeout,
@@ -2356,10 +2363,9 @@ class ImapClient extends ClientBase {
   /// Note that the server needs to support the [QUOTA](https://tools.ietf.org/html/rfc2087) capability.
   Future<QuotaResult> setQuota({
     required Map<String, int> resourceLimits,
-    String quotaRoot = '""',
+    String quotaRoot = '',
   }) {
-    final quotaRootParameter =
-        quotaRoot.contains(' ') ? '"$quotaRoot"' : quotaRoot;
+    final quotaRootParameter = _quoteImapString(quotaRoot);
     final buffer = StringBuffer()
       ..write('SETQUOTA ')
       ..write(quotaRootParameter)
@@ -2383,9 +2389,8 @@ class ImapClient extends ClientBase {
   /// Optionally define the [quotaRoot] which defaults to `""`.
   /// Note that the server needs to support the
   /// [QUOTA](https://tools.ietf.org/html/rfc2087) capability.
-  Future<QuotaResult> getQuota({String quotaRoot = '""'}) {
-    final quotaRootParameter =
-        quotaRoot.contains(' ') ? '"$quotaRoot"' : quotaRoot;
+  Future<QuotaResult> getQuota({String quotaRoot = ''}) {
+    final quotaRootParameter = _quoteImapString(quotaRoot);
     final cmd = Command(
       'GETQUOTA $quotaRootParameter',
       writeTimeout: defaultWriteTimeout,
