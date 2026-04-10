@@ -30,7 +30,14 @@ import 'logger_service.dart';
 ///   - This means an attacker who wipes secure storage cannot
 ///     downgrade below the currently installed version.
 class VersionBaseline {
-  static const _storage = FlutterSecureStorage();
+  // macOS: usesDataProtectionKeychain=false routes SecItem to the legacy
+  // file-based login keychain, which (unlike the data protection keychain)
+  // does NOT require an `application-identifier` entitlement and works on
+  // ad-hoc signed builds. See actions/checkout#290 + flutter_secure_storage
+  // issue #804 for context.
+  static const _storage = FlutterSecureStorage(
+    mOptions: MacOsOptions(usesDataProtectionKeychain: false),
+  );
 
   /// Key for the baseline version in secure storage.
   static const _kBaseline = 'version_baseline_value';
