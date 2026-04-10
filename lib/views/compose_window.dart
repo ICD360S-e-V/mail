@@ -102,10 +102,10 @@ class _ComposeWindowState extends State<ComposeWindow> {
       // NSOpenPanel directly — works fine outside the sandbox.
       // Requires file_picker >= 11.0.0.
       if (Platform.isMacOS) {
-        await FilePicker.platform.skipEntitlementsChecks();
+        await FilePicker.skipEntitlementsChecks();
       }
       LoggerService.log('COMPOSE', 'Opening file picker dialog...');
-      final result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.pickFiles(
         allowMultiple: true,
         type: FileType.any,
         withData: true,
