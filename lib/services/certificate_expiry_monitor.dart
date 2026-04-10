@@ -10,7 +10,11 @@ import 'logger_service.dart';
 /// check — this was inaccurate (drifted on restart, broke if server
 /// changed validity period).
 class CertificateExpiryMonitor {
-  static const _storage = FlutterSecureStorage();
+  // macOS: usesDataProtectionKeychain=false uses the legacy login keychain
+  // which works on ad-hoc signed builds (no entitlement required).
+  static const _storage = FlutterSecureStorage(
+    mOptions: MacOsOptions(usesDataProtectionKeychain: false),
+  );
   static const _kNotAfter = 'client_cert_not_after_utc';
   static const _kNotBefore = 'client_cert_not_before_utc';
 
