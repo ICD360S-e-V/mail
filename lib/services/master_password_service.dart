@@ -4,7 +4,6 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart' show PlatformException;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path/path.dart' as p;
 import 'package:pointycastle/digests/sha256.dart';
 import 'package:pointycastle/key_derivators/api.dart';
@@ -14,6 +13,7 @@ import 'account_service.dart';
 import 'aes_gcm_helpers.dart';
 import 'certificate_service.dart';
 import 'logger_service.dart';
+import 'portable_secure_storage.dart';
 import 'platform_service.dart';
 
 /// Master password service for app authentication (cross-platform).
@@ -38,11 +38,10 @@ class MasterPasswordService {
   // Windows Credential Manager / macOS Keychain / Linux libsecret).
   // An attacker with filesystem-only access cannot read or forge the
   // key, so they cannot reset _failedAttempts to bypass the lockout.
-  // macOS: usesDataProtectionKeychain=false uses the legacy login keychain
-  // which works on ad-hoc signed builds (no entitlement required).
-  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage(
-    mOptions: MacOsOptions(usesDataProtectionKeychain: false),
-  );
+  // PortableSecureStorage uses native storage on iOS/Android/Windows/
+  // Linux and AES-GCM file backend on macOS (Keychain unavailable on
+  // ad-hoc signed builds).
+  static final _secureStorage = PortableSecureStorage.instance;
   static const String _rateLimitKeyName = 'icd360s_rate_limit_state_key_v2';
   static const int _rateLimitVersionByte = 0x02;
   static const Duration _tamperLockoutDuration = Duration(hours: 24);
