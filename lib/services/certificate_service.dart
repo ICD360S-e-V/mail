@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/io_client.dart';
+import 'certificate_expiry_monitor.dart';
 import 'le_issuer_check.dart';
 import 'logger_service.dart';
 import 'pinned_security_context.dart';
@@ -163,6 +164,10 @@ class CertificateService {
           // fresh download.
         }
 
+        // Parse the real expiry from the certificate PEM and persist it.
+        // This replaces the old 90-day estimate with the actual NotAfter date.
+        await CertificateExpiryMonitor.parseCertAndPersistExpiry(_clientCert!);
+
         final validityDays = data['validity_days'] ?? 365;
         LoggerService.log('CERT-DOWNLOAD',
             '✓ Certificate downloaded for $username (valid $validityDays days)');
@@ -257,6 +262,8 @@ class CertificateService {
       _clientKey = key;
       _caCert = ca;
       _currentUsername = username;
+      // Restore persisted expiry dates (parsed from PEM at download time)
+      await CertificateExpiryMonitor.loadPersistedExpiry();
       LoggerService.log('CERT-DOWNLOAD',
           'mTLS cert cache restored from secure storage for $username');
       return true;
