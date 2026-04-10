@@ -20,7 +20,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: subosito/flutter-action@e938fdf56512cc96ef2f93601a5c50a2026c6a49 # v2.18.1
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           flutter-version: "3.41.4"
           channel: stable
