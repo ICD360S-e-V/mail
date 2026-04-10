@@ -1,11 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/io_client.dart';
 import 'certificate_expiry_monitor.dart';
 import 'le_issuer_check.dart';
 import 'logger_service.dart';
 import 'pinned_security_context.dart';
+import 'portable_secure_storage.dart';
 
 /// Service for downloading per-user certificates from server
 /// Eliminates hardcoded certificates vulnerability
@@ -29,11 +29,10 @@ class CertificateService {
   static String? _caCert;
   static String? _currentUsername;
 
-  // macOS: usesDataProtectionKeychain=false uses the legacy login keychain
-  // which works on ad-hoc signed builds (no entitlement required).
-  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage(
-    mOptions: MacOsOptions(usesDataProtectionKeychain: false),
-  );
+  // PortableSecureStorage uses native storage on iOS/Android/Windows/
+  // Linux and AES-GCM file backend on macOS (Keychain unavailable on
+  // ad-hoc signed builds).
+  static final _secureStorage = PortableSecureStorage.instance;
   static const String _kStorageClientCert = 'icd360s_mtls_client_cert';
   static const String _kStorageClientKey = 'icd360s_mtls_client_key';
   static const String _kStorageCaCert = 'icd360s_mtls_ca_cert';
