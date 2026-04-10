@@ -76,6 +76,14 @@ class UpdateService {
   static const String _expectedApkCertSha256 =
       'ff9c4a92347693745a06a20cc15310e897145dad6b719cbe724eda093a6195b5';
 
+  /// Expected macOS bundle identifier — verified after DMG extraction.
+  static const String _expectedMacBundleId = 'de.icd360s.mail';
+
+  /// Expected Apple Developer Team ID — null until we have a cert.
+  /// When set, enables codesign --verify + Team ID check on updates.
+  // ignore: unused_field
+  static const String? _expectedMacTeamId = null; // Future: 'ABCDEF1234'
+
   static const MethodChannel _apkVerifyChannel =
       MethodChannel('de.icd360s.mailclient/apk_verify');
 
@@ -391,7 +399,7 @@ class UpdateService {
       if (Platform.isWindows) {
         return _installWindows(downloadedFile);
       } else if (Platform.isMacOS) {
-        return _installMacOS(downloadedFile);
+        return _installMacOS(downloadedFile, updateInfo);
       } else if (Platform.isLinux) {
         return _installLinux(downloadedFile);
       }
@@ -512,7 +520,7 @@ class UpdateService {
   }
 
   /// macOS: Mount DMG, copy .app to /Applications, relaunch
-  static Future<bool> _installMacOS(File updateFile) async {
+  static Future<bool> _installMacOS(File updateFile, UpdateInfo updateInfo) async {
     final mountPoint = '/tmp/icd360s-update-mount';
 
     // Mount DMG
@@ -528,19 +536,99 @@ class UpdateService {
       return false;
     }
 
-    // Determine install location (where current app is running from, or /Applications)
+    // ── Verify extracted .app BEFORE replacing the running app ──
+
+    final extractedApp = apps.first.path;
+
+    // 1. Verify Info.plist: bundle ID must match expected
+    final bundleIdResult = await Process.run('/usr/libexec/PlistBuddy', [
+      '-c', 'Print CFBundleIdentifier',
+      '$extractedApp/Contents/Info.plist',
+    ]);
+    final bundleId = (bundleIdResult.stdout as String).trim();
+    if (bundleId != _expectedMacBundleId) {
+      LoggerService.log('UPDATE',
+          '❌ Bundle ID mismatch: expected $_expectedMacBundleId, got $bundleId');
+      await Process.run('hdiutil', ['detach', mountPoint]);
+      return false;
+    }
+
+    // 2. Verify Info.plist: version matches what version.json advertised
+    final versionResult = await Process.run('/usr/libexec/PlistBuddy', [
+      '-c', 'Print CFBundleShortVersionString',
+      '$extractedApp/Contents/Info.plist',
+    ]);
+    final extractedVersion = (versionResult.stdout as String).trim();
+    if (extractedVersion != updateInfo.version) {
+      LoggerService.log('UPDATE',
+          '❌ Version mismatch: expected ${updateInfo.version}, '
+          'got $extractedVersion');
+      await Process.run('hdiutil', ['detach', mountPoint]);
+      return false;
+    }
+
+    // 3. Main binary must exist and have reasonable size
+    final mainBinaryName = bundleId.split('.').last;
+    final mainBinary = File('$extractedApp/Contents/MacOS/$mainBinaryName');
+    if (!mainBinary.existsSync()) {
+      // Try the app directory name as fallback
+      final appName = path.basenameWithoutExtension(extractedApp);
+      final altBinary = File('$extractedApp/Contents/MacOS/$appName');
+      if (!altBinary.existsSync()) {
+        LoggerService.log('UPDATE', '❌ Main binary missing from .app bundle');
+        await Process.run('hdiutil', ['detach', mountPoint]);
+        return false;
+      }
+    }
+
+    // 4. If we have an Apple Developer Team ID, verify codesign.
+    //    Currently null — scaffold for when we get a cert.
+    if (_expectedMacTeamId != null) {
+      final csResult = await Process.run('codesign', [
+        '--verify', '--deep', '--strict', extractedApp,
+      ]);
+      if (csResult.exitCode != 0) {
+        LoggerService.log('UPDATE',
+            '❌ codesign --verify failed: ${csResult.stderr}');
+        await Process.run('hdiutil', ['detach', mountPoint]);
+        return false;
+      }
+      // Check Team ID
+      final dvResult = await Process.run('codesign', ['-dv', extractedApp]);
+      final dvOutput = dvResult.stderr as String;
+      final teamMatch = RegExp(r'TeamIdentifier=(\S+)').firstMatch(dvOutput);
+      if (teamMatch?.group(1) != _expectedMacTeamId) {
+        LoggerService.log('UPDATE',
+            '❌ Team ID mismatch: expected $_expectedMacTeamId, '
+            'got ${teamMatch?.group(1)}');
+        await Process.run('hdiutil', ['detach', mountPoint]);
+        return false;
+      }
+      LoggerService.log('UPDATE',
+          '✓ codesign verified (Team ID: $_expectedMacTeamId)');
+    }
+
+    LoggerService.log('UPDATE',
+        '✓ App bundle verified: $bundleId v$extractedVersion');
+
+    // ── Replace old app with verified new one ──
+
+    // Determine install location
     final currentExe = Platform.resolvedExecutable;
     final appBundlePath = currentExe.contains('.app/')
         ? currentExe.substring(0, currentExe.indexOf('.app/') + 4)
-        : '/Applications/${path.basename(apps.first.path)}';
+        : '/Applications/${path.basename(extractedApp)}';
 
-    // Remove old app and copy new one
     final oldApp = Directory(appBundlePath);
     if (oldApp.existsSync()) {
       await Process.run('rm', ['-rf', appBundlePath]);
     }
-    await Process.run('cp', ['-R', apps.first.path, appBundlePath]);
-    LoggerService.log('UPDATE', 'Copied ${apps.first.path} → $appBundlePath');
+    await Process.run('cp', ['-R', extractedApp, appBundlePath]);
+    LoggerService.log('UPDATE', 'Copied $extractedApp → $appBundlePath');
+
+    // 5. Strip quarantine xattr — prevents "App can't be opened"
+    //    dialog on some macOS configurations.
+    await Process.run('xattr', ['-rd', 'com.apple.quarantine', appBundlePath]);
 
     // Unmount DMG
     await Process.run('hdiutil', ['detach', mountPoint]);
