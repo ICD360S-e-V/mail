@@ -202,14 +202,65 @@ jobs:
           # Persist GNUPGHOME for the next steps
           echo "GNUPGHOME=$GNUPGHOME" >> "$GITHUB_ENV"
 
+      # ─────────────────────────────────────────────────────────────
+      # Download + verify appimagetool (pinned to 1.9.1, SHA-256 checked)
+      #
+      # Upstream:  https://github.com/AppImage/appimagetool/releases/tag/1.9.1
+      # Commit:    8c8c91f762b412a19f4e8d2c4b35afb98f2d7c81
+      # Published: 2025-11-18
+      # Verified:  2026-04-10 against GitHub Releases API .assets[].digest
+      #
+      # WHY pinned to 1.9.1 and not "continuous":
+      #   The "continuous" tag is a rolling pointer, rebuilt on every
+      #   upstream commit. Identical URL → DIFFERENT bytes over time.
+      #   Even with SHA-256 verification, "continuous" would silently
+      #   break CI on the next upstream push.
+      #
+      # ROTATION (every ~6 months):
+      #   gh api repos/AppImage/appimagetool/releases/latest \
+      #     --jq '{tag:.tag_name, published:.published_at,
+      #            assets:[.assets[]|{name,digest,size}]}'
+      #   Update APPIMAGETOOL_VERSION + APPIMAGETOOL_SHA256 + cache key
+      #   in the same commit.
+      # ─────────────────────────────────────────────────────────────
+      - name: Cache appimagetool
+        id: cache-appimagetool
+        uses: actions/cache@v4
+        with:
+          path: appimagetool
+          key: appimagetool-x86_64-1.9.1-ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
+
+      - name: Download and verify appimagetool
+        env:
+          APPIMAGETOOL_VERSION: "1.9.1"
+          APPIMAGETOOL_URL: "https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage"
+          APPIMAGETOOL_SHA256: "ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0"
+        run: |
+          set -euo pipefail
+
+          if [ -f appimagetool ]; then
+            echo "::notice::appimagetool restored from cache, re-verifying hash"
+          else
+            echo "::notice::Downloading appimagetool ${APPIMAGETOOL_VERSION}"
+            curl --fail --location --silent --show-error \
+                 --retry 5 --retry-delay 2 --retry-connrefused \
+                 --output appimagetool.tmp \
+                 "${APPIMAGETOOL_URL}"
+            mv appimagetool.tmp appimagetool
+          fi
+
+          # Verify SHA-256. --strict catches whitespace/format issues.
+          # Hash mismatch = exit 1 = workflow fails loudly.
+          echo "${APPIMAGETOOL_SHA256}  appimagetool" | sha256sum --check --strict
+          chmod +x appimagetool
+
+          # Sanity: print version so the build log shows what actually ran
+          ./appimagetool --version || true
+
       - name: Build AppImage (signed)
         env:
           GPG_KEY_ID: ${{ secrets.APPIMAGE_GPG_KEY_ID }}
         run: |
-          # Download appimagetool
-          wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
-          chmod +x appimagetool
-
           # Prepare AppDir
           mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
           cp -r build/linux/x64/release/bundle/* AppDir/usr/bin/
