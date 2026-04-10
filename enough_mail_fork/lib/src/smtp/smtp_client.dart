@@ -427,6 +427,9 @@ class SmtpClient extends ClientBase {
     String password, [
     AuthMechanism authMechanism = AuthMechanism.plain,
   ]) {
+    // SECURITY: Refuse to send credentials on a plaintext connection.
+    // Prevents STARTTLS stripping attacks (RFC 3207 §6, RFC 4954 §4).
+    requireTlsForAuth();
     late SmtpCommand command;
     switch (authMechanism) {
       case AuthMechanism.plain:
