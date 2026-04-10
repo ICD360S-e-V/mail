@@ -814,10 +814,21 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
-          # Need full history + tags for `git for-each-ref refs/tags/...`
-          # so we can extract the annotated tag message as release notes.
-          fetch-depth: 0
-          fetch-tags: true
+          fetch-depth: 1
+          # NOTE: do NOT set fetch-tags: true here.
+          # On tag-push events it conflicts with the SHA fetch
+          # (actions/checkout#1467: "Cannot fetch both <sha> and refs/tags/<tag>").
+          # Annotated tag objects are restored manually below.
+
+      - name: Restore annotated tag object
+        # actions/checkout#290 (still OPEN): the default checkout converts
+        # annotated tags to LIGHTWEIGHT tags on the runner — the tag message,
+        # tagger, and signature are lost. We must re-fetch the real tag object
+        # so `git for-each-ref --format='%(contents:body)'` returns the
+        # developer-authored message instead of an empty string.
+        run: |
+          git fetch --force --tags origin \
+            "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
 
       - name: Download all artifacts
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
@@ -871,48 +882,65 @@ jobs:
           echo "## Release artifacts:" >> "$GITHUB_STEP_SUMMARY"
           ls -lah release/
 
-      # Extract the annotated tag message and use it as the release body.
-      # This way `git tag -a vX.Y.Z -m "..."` (or push of an annotated tag
-      # via the GitHub Git API) drives the release notes — no manual
-      # editing of the release after the fact.
+      # Build release notes from the annotated tag message.
       #
-      # Falls back to GitHub's auto-generated notes only if the tag is
-      # lightweight (no message). Strips the leading subject line from
-      # the body and uses it as the release name.
-      - name: Extract release notes from annotated tag
-        id: tag_notes
+      # Why this is structured the way it is:
+      #
+      # 1. We use `%(contents:subject)` and `%(contents:body)` instead of
+      #    `%(contents)` because the latter includes any PGP/SSH signature
+      #    block in the output. The split atoms strip the signature
+      #    automatically (verified per git-for-each-ref(1)).
+      #
+      # 2. We write the body to a FILE and pass it to softprops/action-gh-release
+      #    via `body_path`, NOT via `body` + GITHUB_OUTPUT heredoc. GitHub's
+      #    own docs say: "If the value is completely arbitrary then you
+      #    shouldn't use this format. Write the value to a file instead."
+      #    A tag message containing a line that matches the heredoc delimiter
+      #    would silently corrupt the GITHUB_OUTPUT file.
+      #
+      # 3. We hard-fail on lightweight tags. The release pipeline expects
+      #    annotated tags created with `git tag -a` (or via GitHub Git API
+      #    with type=commit + tag object). If someone pushes a lightweight
+      #    tag, fail loudly instead of silently publishing the commit
+      #    message as release notes.
+      - name: Build release notes from annotated tag
+        id: notes
         run: |
           set -euo pipefail
-          # `git for-each-ref --format='%(contents)'` gives us the tag message
-          # WITHOUT the PGP signature footer. `git tag -l --format='%(contents)'`
-          # also works but for-each-ref is more explicit.
-          MSG=$(git for-each-ref --format='%(contents)' "refs/tags/${GITHUB_REF_NAME}")
-          if [ -z "$MSG" ]; then
-            echo "::warning::Tag ${GITHUB_REF_NAME} has no annotation; falling back to auto notes"
-            echo "has_message=false" >> "$GITHUB_OUTPUT"
-            exit 0
+          TAG="${GITHUB_REF_NAME}"
+
+          # Guard: require an annotated tag (objecttype == 'tag', not 'commit')
+          if [ "$(git cat-file -t "refs/tags/$TAG")" != "tag" ]; then
+            echo "::error::Tag $TAG is lightweight; annotated tag (git tag -a) is required"
+            exit 1
           fi
-          # First non-empty line = release name
-          NAME=$(printf '%s\n' "$MSG" | sed -n '/./{p;q}')
-          # Body = full message (subject + blank line + body)
+
+          # Signature-safe extraction (strips PGP/SSH signature blocks)
+          SUBJECT=$(git for-each-ref --format='%(contents:subject)' "refs/tags/$TAG")
+          BODY=$(git for-each-ref --format='%(contents:body)' "refs/tags/$TAG")
+
+          # Write release notes to a file — GitHub docs explicitly recommend
+          # this over heredoc-on-GITHUB_OUTPUT for arbitrary content.
           {
-            echo "has_message=true"
-            echo "name<<TAGMSG_EOF"
-            printf '%s\n' "$NAME"
-            echo "TAGMSG_EOF"
-            echo "body<<TAGMSG_EOF"
-            printf '%s\n' "$MSG"
-            echo "TAGMSG_EOF"
-          } >> "$GITHUB_OUTPUT"
+            printf '%s\n\n' "$SUBJECT"
+            printf '%s' "$BODY"
+          } > "${RUNNER_TEMP}/release_notes.md"
+
+          # Expose only the single-line subject via GITHUB_OUTPUT (safe)
+          printf 'release_name=%s\n' "$SUBJECT" >> "$GITHUB_OUTPUT"
+          printf 'notes_path=%s\n' "${RUNNER_TEMP}/release_notes.md" >> "$GITHUB_OUTPUT"
+
+          echo "::notice::Release notes built from tag $TAG ($(wc -l < ${RUNNER_TEMP}/release_notes.md) lines)"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1
         with:
           files: release/*
-          # Use annotated tag message if present; otherwise GitHub auto-notes
-          name: ${{ steps.tag_notes.outputs.name }}
-          body: ${{ steps.tag_notes.outputs.body }}
-          generate_release_notes: ${{ steps.tag_notes.outputs.has_message != 'true' }}
+          name: ${{ steps.notes.outputs.release_name }}
+          body_path: ${{ steps.notes.outputs.notes_path }}
+          # Tag message is the source of truth — no auto-prepended PR list
+          generate_release_notes: false
+          fail_on_unmatched_files: true
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
 
