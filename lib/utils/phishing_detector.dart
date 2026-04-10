@@ -1,3 +1,5 @@
+import 'package:crypto/crypto.dart';
+import 'dart:typed_data';
 import 'dart:convert';
 import 'dart:io';
 
@@ -22,10 +24,9 @@ import '../services/logger_service.dart';
 ///   default for privacy (URL is sent to Google). Enable by providing
 ///   an API key via [safeBrowsingApiKey].
 class PhishingDetector {
-  /// Google Safe Browsing API key. Set to enable Layer 3.
-  /// Get one free at https://console.cloud.google.com/apis/credentials
-  /// then enable "Safe Browsing API" in the API Library.
-  static String? safeBrowsingApiKey;
+  // Layer 3 is now fully offline — no API key needed on the client.
+  // The server (mail.icd360s.de) syncs hash prefixes from Google
+  // every 6 hours via /opt/icd360s/safebrowsing/sync.py.
 
   /// Known URL shorteners that hide the real destination.
   static const Set<String> _urlShorteners = {
@@ -159,66 +160,136 @@ class PhishingDetector {
     return hasLatin && (hasCyrillic || hasGreek);
   }
 
-  /// Layer 3: Check URL against Google Safe Browsing v4 Lookup API.
-  ///
-  /// Returns threat type string if URL is flagged, null if safe or
-  /// if the API is not configured / unreachable.
-  ///
-  /// PRIVACY: This sends the URL to Google's servers. Only called
-  /// when [safeBrowsingApiKey] is set (opt-in).
-  static Future<String?> checkSafeBrowsing(String url) async {
-    final apiKey = safeBrowsingApiKey;
-    if (apiKey == null || apiKey.isEmpty) return null;
+  // =========================================================================
+  // Layer 3: Offline Safe Browsing (local hash prefix database)
+  // =========================================================================
+  //
+  // PRIVACY: ZERO URLs are sent to Google. A cron on mail.icd360s.de
+  // downloads hash prefixes from Google Safe Browsing Update API every
+  // 6 hours and writes them to /updates/safebrowsing.bin. The client
+  // downloads this file periodically and does a local binary search.
+  //
+  // File format: "SBv1" (4) | version (u32 LE) | count (u32 LE) |
+  //              prefix_size (u32 LE) | sorted 4-byte prefixes
+  // =========================================================================
 
+  static const String _safeBrowsingUrl =
+      'https://mail.icd360s.de/updates/safebrowsing.bin';
+
+  /// In-memory sorted prefix list (loaded from downloaded file).
+  static List<int>? _prefixDatabase;
+
+  /// Last time the database was refreshed.
+  static DateTime? _lastDbRefresh;
+
+  /// Refresh interval (6 hours matches server cron).
+  static const Duration _dbRefreshInterval = Duration(hours: 6);
+
+  /// Path to the cached database file on disk.
+  static String? _dbCachePath;
+
+  /// Initialize the database cache path. Call once at app startup.
+  static void setCachePath(String appDataPath) {
+    _dbCachePath = '$appDataPath/safebrowsing.bin';
+  }
+
+  /// Load or refresh the local hash prefix database.
+  static Future<void> _ensureDatabase() async {
+    // Skip if recently refreshed
+    if (_prefixDatabase != null &&
+        _lastDbRefresh != null &&
+        DateTime.now().difference(_lastDbRefresh!) < _dbRefreshInterval) {
+      return;
+    }
+
+    // Try loading from cache first
+    if (_prefixDatabase == null && _dbCachePath != null) {
+      final cached = File(_dbCachePath!);
+      if (cached.existsSync()) {
+        _loadFromBytes(cached.readAsBytesSync());
+      }
+    }
+
+    // Download fresh copy in background
     try {
       final client = HttpClient();
-      final request = await client.postUrl(Uri.parse(
-        'https://safebrowsing.googleapis.com/v4/threatMatches:find?key=$apiKey',
-      ));
-      request.headers.contentType = ContentType.json;
-      request.write(jsonEncode({
-        'client': {
-          'clientId': 'icd360s-mail-client',
-          'clientVersion': '2.22',
-        },
-        'threatInfo': {
-          'threatTypes': [
-            'MALWARE',
-            'SOCIAL_ENGINEERING',
-            'UNWANTED_SOFTWARE',
-            'POTENTIALLY_HARMFUL_APPLICATION',
-          ],
-          'platformTypes': ['ANY_PLATFORM'],
-          'threatEntryTypes': ['URL'],
-          'threatEntries': [
-            {'url': url},
-          ],
-        },
-      }));
-
+      final request = await client.getUrl(Uri.parse(_safeBrowsingUrl));
       final response = await request.close().timeout(
-        const Duration(seconds: 5),
+        const Duration(seconds: 30),
       );
-      final body = await response.transform(utf8.decoder).join();
-
       if (response.statusCode == 200) {
-        final data = jsonDecode(body) as Map<String, dynamic>;
-        final matches = data['matches'] as List<dynamic>?;
-        if (matches != null && matches.isNotEmpty) {
-          final threat = matches[0]['threatType'] as String? ?? 'UNKNOWN';
-          LoggerService.log('PHISHING',
-              '⚠ Google Safe Browsing flagged URL: $url as $threat');
-          return threat;
+        final bytes = <int>[];
+        await for (final chunk in response) {
+          bytes.addAll(chunk);
         }
-      }
+        final data = Uint8List.fromList(bytes);
+        _loadFromBytes(data);
 
+        // Cache to disk
+        if (_dbCachePath != null) {
+          await File(_dbCachePath!).writeAsBytes(data);
+        }
+        _lastDbRefresh = DateTime.now();
+      }
       client.close(force: true);
-      return null;
     } catch (ex) {
       LoggerService.log('PHISHING',
-          'Safe Browsing API error (non-fatal): $ex');
-      return null;
+          'Safe Browsing DB download failed (non-fatal, using cache): $ex');
     }
+  }
+
+  /// Parse the binary file into a sorted list of 4-byte prefix ints.
+  static void _loadFromBytes(Uint8List data) {
+    if (data.length < 16) return;
+    // Verify magic
+    if (data[0] != 0x53 || data[1] != 0x42 ||
+        data[2] != 0x76 || data[3] != 0x31) {
+      // Not "SBv1"
+      return;
+    }
+    final count = data.buffer.asByteData().getUint32(8, Endian.little);
+    final prefixSize = data.buffer.asByteData().getUint32(12, Endian.little);
+    if (prefixSize != 4 || data.length < 16 + count * 4) return;
+
+    _prefixDatabase = List<int>.generate(count, (i) {
+      final offset = 16 + i * 4;
+      return data.buffer.asByteData().getUint32(offset, Endian.big);
+    });
+    LoggerService.log('PHISHING',
+        'Safe Browsing DB loaded: ${_prefixDatabase!.length} prefixes');
+  }
+
+  /// Check a URL against the local prefix database using binary search.
+  ///
+  /// Returns true if the URL's SHA-256 hash prefix matches any known
+  /// threat. False positive rate: ~1 in 16 million (acceptable for
+  /// warning-only use — we never block, just warn).
+  static Future<bool> checkSafeBrowsingOffline(String url) async {
+    await _ensureDatabase();
+    final db = _prefixDatabase;
+    if (db == null || db.isEmpty) return false;
+
+    // Canonicalize URL (lowercase host, strip fragment)
+    final uri = Uri.tryParse(url);
+    if (uri == null) return false;
+    final canonical = uri.replace(fragment: '').toString().toLowerCase();
+
+    // SHA-256 hash → extract first 4 bytes as uint32 big-endian
+    final hash = sha256.convert(utf8.encode(canonical)).bytes;
+    final prefix = (hash[0] << 24) | (hash[1] << 16) | (hash[2] << 8) | hash[3];
+
+    // Binary search in sorted prefix list
+    int lo = 0, hi = db.length - 1;
+    while (lo <= hi) {
+      final mid = (lo + hi) ~/ 2;
+      if (db[mid] == prefix) return true;
+      if (db[mid] < prefix) {
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    return false;
   }
 
   /// Run ALL layers and return combined result.
@@ -245,16 +316,18 @@ class PhishingDetector {
       }
     }
 
-    // Layer 3: Google Safe Browsing (opt-in)
-    String? safeBrowsingThreat;
-    if (safeBrowsingApiKey != null) {
-      safeBrowsingThreat = await checkSafeBrowsing(url);
-      if (safeBrowsingThreat != null) {
+    // Layer 3: Offline Safe Browsing (local hash prefix DB — no URLs sent to Google)
+    bool safeBrowsingMatch = false;
+    try {
+      safeBrowsingMatch = await checkSafeBrowsingOffline(url);
+      if (safeBrowsingMatch) {
         localWarnings.insert(0, PhishingWarning(
           severity: WarningSeverity.critical,
-          message: 'Google Safe Browsing: flagged as $safeBrowsingThreat',
+          message: 'URL matches known threat in Safe Browsing database',
         ));
       }
+    } catch (_) {
+      // Non-fatal — Layer 2 still provides protection
     }
 
     final maxSeverity = localWarnings.isEmpty
@@ -267,7 +340,7 @@ class PhishingDetector {
       url: url,
       warnings: localWarnings,
       maxSeverity: maxSeverity,
-      safeBrowsingThreat: safeBrowsingThreat,
+      safeBrowsingMatch: safeBrowsingMatch,
     );
   }
 
@@ -299,13 +372,13 @@ class PhishingResult {
   final String url;
   final List<PhishingWarning> warnings;
   final WarningSeverity maxSeverity;
-  final String? safeBrowsingThreat;
+  final bool safeBrowsingMatch;
 
   const PhishingResult({
     required this.url,
     required this.warnings,
     required this.maxSeverity,
-    this.safeBrowsingThreat,
+    this.safeBrowsingMatch = false,
   });
 
   bool get isSafe => warnings.isEmpty;
