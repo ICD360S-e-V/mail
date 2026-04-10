@@ -14,6 +14,17 @@ class MtlsService {
   // No hardcoded certificates - all downloaded dynamically per-user
   // This prevents certificate extraction from compiled .exe file
 
+  /// The expected hostname for server certificate validation.
+  static const _expectedHost = 'mail.icd360s.de';
+
+  /// Extract CN from an OpenSSL oneline subject/issuer string.
+  ///
+  /// Input format: `/C=US/O=Let's Encrypt/CN=E7`
+  /// Returns: `E7` (or null if no CN found)
+  static String? _extractCN(String dn) {
+    final match = RegExp(r'/CN=([^/]+)').firstMatch(dn);
+    return match?.group(1);
+  }
 
   /// Get SecurityContext for mTLS connections
   /// Uses per-user certificates downloaded from server (NOT hardcoded)
@@ -29,7 +40,7 @@ class MtlsService {
 
     try {
       LoggerService.log('MTLS',
-          'Creating SecurityContext with per-user certificate for ${CertificateService.currentUsername}...');
+          'Creating SecurityContext with per-user certificate...');
 
       // Restrict trust store to the four ISRG roots only — defense in
       // depth against compromised system CAs on desktop platforms.
@@ -43,8 +54,7 @@ class MtlsService {
       final fullChain =
           '${CertificateService.clientCert!}\n${CertificateService.caCert!}';
       context.useCertificateChainBytes(utf8.encode(fullChain));
-      LoggerService.log('MTLS',
-          '✓ Per-user certificate chain loaded (UNIQUE for ${CertificateService.currentUsername})');
+      LoggerService.log('MTLS', '✓ Per-user certificate chain loaded');
 
       LoggerService.log('MTLS', '✓ SecurityContext ready for mTLS (per-user mode)');
 
@@ -57,50 +67,80 @@ class MtlsService {
 
   /// Callback for server certificate validation.
   ///
-  /// IMPORTANT: Dart's badCertificateCallback is called ONCE PER CERT in the
-  /// chain that fails validation — not just for the leaf. We must accept:
-  ///   1. The leaf cert (subject = `/CN=mail.icd360s.de`), if its issuer is
-  ///      a trusted Let's Encrypt intermediate.
-  ///   2. The intermediate cert (subject = `/CN=E7` etc.), if its issuer is
-  ///      a trusted Let's Encrypt root.
-  ///   3. The root cert itself (subject = `/CN=ISRG Root X1` etc.) if it
-  ///      ever appears at this level.
+  /// SECURITY: This callback fires when Dart's built-in PKIX chain
+  /// validation fails against our pinned SecurityContext (ISRG roots).
   ///
-  /// Returning false for ANY of these aborts the entire chain. The previous
-  /// implementation rejected the intermediate because it checked
-  /// `subject.contains('mail.icd360s.de')` — which is true only for the leaf.
+  /// NOTE: mail_service.dart connects using the resolved IP address
+  /// (from DNS lookup), not the hostname "mail.icd360s.de". This causes
+  /// hostname verification to fail even for valid LE certs, which is why
+  /// this callback is invoked on every connection. We must therefore
+  /// perform our own validation here:
+  ///
+  ///   1. For the LEAF cert: extract CN with exact match against
+  ///      "mail.icd360s.de" (not substring contains()), AND verify
+  ///      its ISSUER is a trusted LE organization.
+  ///   2. For INTERMEDIATE certs (LE CAs): verify their ISSUER is
+  ///      a trusted ISRG organization — NOT their subject (previous
+  ///      versions incorrectly checked subject).
+  ///   3. For ROOT certs (ISRG): verify by exact organization match
+  ///      in subject (roots are self-signed, so subject == issuer).
+  ///   4. Everything else: reject.
   static bool onBadCertificate(X509Certificate cert) {
     try {
       final subject = cert.subject;
       final issuer = cert.issuer;
+      final subjectCN = _extractCN(subject);
+      final issuerCN = _extractCN(issuer);
 
-      LoggerService.log('MTLS', 'Server cert check: $subject (issuer: $issuer)');
-
-      // Case 1: this cert IS a trusted Let's Encrypt CA (intermediate or root).
-      // Subject's CN matches a known LE CA.
-      if (isTrustedLetsEncryptIssuer(subject)) {
-        LoggerService.log('MTLS', '✓ Accepted LE CA cert: $subject');
-        return true;
-      }
-
-      // Case 2: this is the leaf for mail.icd360s.de. Verify both the
-      // hostname and that it was signed by a trusted LE intermediate.
-      if (subject.contains('mail.icd360s.de')) {
+      // Case 1: LEAF cert for our domain.
+      // Extract CN exactly — no substring matching.
+      if (subjectCN == _expectedHost) {
+        // Verify the leaf was signed by a trusted LE intermediate.
         if (isTrustedLetsEncryptIssuer(issuer)) {
-          LoggerService.log('MTLS', '✓ Accepted leaf for mail.icd360s.de (signed by trusted LE)');
+          LoggerService.log('MTLS',
+              '✓ Accepted leaf: CN=$subjectCN (issuer CN=$issuerCN)');
           return true;
         }
-        LoggerService.log('MTLS', '❌ REJECTED: leaf for mail.icd360s.de but issuer not trusted: $issuer');
+        LoggerService.logWarning('MTLS',
+            '❌ REJECTED leaf CN=$subjectCN: issuer not trusted LE '
+            '(issuer: $issuer)');
         return false;
       }
 
-      // Otherwise, reject — neither a trusted CA nor our domain's leaf.
-      LoggerService.log('MTLS', '❌ REJECTED: $subject is neither a trusted LE CA nor our domain leaf');
+      // Case 2: INTERMEDIATE cert (LE CA like E7, R10, YE1 etc.).
+      // An intermediate's ISSUER must be a trusted ISRG root.
+      // We check the ISSUER, not the subject — the previous code
+      // checked subject which is semantically wrong (a cert claiming
+      // O=Let's Encrypt in its subject doesn't prove it's genuine).
+      if (isTrustedLetsEncryptIssuer(issuer)) {
+        LoggerService.log('MTLS',
+            '✓ Accepted intermediate: CN=$subjectCN (issuer CN=$issuerCN)');
+        return true;
+      }
+
+      // Case 3: ROOT cert (ISRG Root X1, X2, YE, YR).
+      // Roots are self-signed: subject == issuer. We check subject
+      // here because for a root there is no separate issuer to verify.
+      if (isTrustedLetsEncryptIssuer(subject)) {
+        // Double-check it's actually self-signed (subject ≈ issuer).
+        if (subject == issuer ||
+            _extractCN(subject) == _extractCN(issuer)) {
+          LoggerService.log('MTLS',
+              '✓ Accepted root: CN=$subjectCN');
+          return true;
+        }
+      }
+
+      // Case 4: Unknown cert — reject.
+      LoggerService.logWarning('MTLS',
+          '❌ REJECTED: CN=$subjectCN is neither our domain leaf, '
+          'a LE intermediate, nor an ISRG root '
+          '(subject: $subject, issuer: $issuer)');
       return false;
     } catch (ex) {
-      LoggerService.log('MTLS', '❌ Certificate validation error: $ex');
+      LoggerService.logWarning('MTLS',
+          '❌ Certificate validation error: $ex — rejecting');
       return false;
     }
   }
 }
-
