@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../models/models.dart';
+import '../utils/pii_redactor.dart';
 import 'logger_service.dart';
 import 'localization_service.dart';
 
@@ -102,7 +103,7 @@ class NotificationService {
         );
       }
 
-      LoggerService.log('NOTIFICATION', 'Notification shown for email from ${email.from}');
+      LoggerService.log('NOTIFICATION', 'Notification shown for email from ${piiEmail(email.from)}');
     } catch (ex, stackTrace) {
       LoggerService.logError('NOTIFICATION', ex, stackTrace);
     }
@@ -187,7 +188,7 @@ class NotificationService {
         payload: payload,
       );
 
-      LoggerService.log('NOTIFICATION', 'System notification sent: $title');
+      LoggerService.log('NOTIFICATION', 'System notification sent (new email)');
     } catch (ex, stackTrace) {
       LoggerService.logError('NOTIFICATION', ex, stackTrace);
     }
