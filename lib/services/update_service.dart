@@ -682,11 +682,38 @@ class UpdateService {
     final ext = path.extension(updateFile.path).toLowerCase();
 
     if (ext == '.appimage') {
-      final currentExe = Platform.resolvedExecutable;
-      final appImagePath = Platform.environment['APPIMAGE'] ?? currentExe;
+      // Validate APPIMAGE path — prevents arbitrary file overwrite
+      // if a malicious parent process spoofs the env var.
+      final appImagePath = _getValidatedAppImagePath();
+      if (appImagePath == null) {
+        LoggerService.log('UPDATE',
+            '❌ Cannot determine safe AppImage path — '
+            'APPIMAGE env var is unset, invalid, or points to a '
+            'protected location');
+        return false;
+      }
 
-      await updateFile.copy(appImagePath);
-      await Process.run('chmod', ['+x', appImagePath]);
+      // Verify the downloaded file is actually an AppImage
+      if (!_hasAppImageMagic(updateFile.path)) {
+        LoggerService.log('UPDATE',
+            '❌ Downloaded update is not a valid AppImage (bad magic)');
+        return false;
+      }
+
+      // Atomic update: write to temp in same dir, then rename.
+      // rename() on the same filesystem is atomic on Linux.
+      final parentDir = File(appImagePath).parent.path;
+      final tempPath = '$parentDir/.icd360s_update_${pid}.tmp';
+      try {
+        await updateFile.copy(tempPath);
+        await Process.run('chmod', ['+x', tempPath]);
+        await File(tempPath).rename(appImagePath);
+      } catch (ex) {
+        // Clean up temp on failure
+        try { await File(tempPath).delete(); } catch (_) {}
+        LoggerService.logError('UPDATE', ex, StackTrace.current);
+        return false;
+      }
       LoggerService.log('UPDATE', 'Replaced AppImage at $appImagePath');
 
       await Process.start(appImagePath, [], mode: ProcessStartMode.detached);
@@ -696,6 +723,82 @@ class UpdateService {
       return _updateViaBrowser(UpdateInfo(
         version: '', downloadUrl: updateFile.path, changelog: '',
       ));
+    }
+  }
+
+  /// Validate the APPIMAGE env var for safe self-update.
+  ///
+  /// Returns the canonicalized path if all checks pass, null otherwise.
+  /// Prevents arbitrary file overwrite via spoofed APPIMAGE env var.
+  static String? _getValidatedAppImagePath() {
+    final raw = Platform.environment['APPIMAGE'];
+    if (raw == null || raw.isEmpty) return null;
+
+    // 1. Canonicalize: resolve symlinks and ".." components
+    String canonical;
+    try {
+      canonical = File(raw).resolveSymbolicLinksSync();
+    } catch (_) {
+      return null; // File doesn't exist or can't be resolved
+    }
+
+    // 2. Block system directories — never overwrite anything there
+    const forbiddenPrefixes = [
+      '/usr/', '/bin/', '/sbin/', '/lib/', '/lib64/',
+      '/etc/', '/boot/', '/dev/', '/proc/', '/sys/',
+      '/var/lib/', '/var/run/', '/run/', '/snap/',
+    ];
+    for (final prefix in forbiddenPrefixes) {
+      if (canonical.startsWith(prefix)) return null;
+    }
+
+    // 3. Must be a regular file
+    final stat = FileStat.statSync(canonical);
+    if (stat.type != FileSystemEntityType.file) return null;
+
+    // 4. Must be owned by current user
+    try {
+      final fileUidResult = Process.runSync('stat', ['-c', '%u', canonical]);
+      final myUidResult = Process.runSync('id', ['-u']);
+      final fileUid = int.tryParse(
+          (fileUidResult.stdout as String).trim());
+      final myUid = int.tryParse(
+          (myUidResult.stdout as String).trim());
+      if (fileUid == null || myUid == null || fileUid != myUid) {
+        return null;
+      }
+    } catch (_) {
+      return null;
+    }
+
+    // 5. Must actually be an AppImage (check ELF + AI magic bytes)
+    if (!_hasAppImageMagic(canonical)) return null;
+
+    return canonical;
+  }
+
+  /// Check ELF header + AppImage magic bytes (offset 8-10: 'A' 'I' 0x01/0x02).
+  static bool _hasAppImageMagic(String filePath) {
+    try {
+      final raf = File(filePath).openSync(mode: FileMode.read);
+      try {
+        final header = Uint8List(11);
+        final n = raf.readIntoSync(header);
+        if (n < 11) return false;
+        // ELF magic: 0x7f 'E' 'L' 'F'
+        if (header[0] != 0x7f || header[1] != 0x45 ||
+            header[2] != 0x4c || header[3] != 0x46) {
+          return false;
+        }
+        // AppImage magic at offset 8: 'A' 'I' then type 1 or 2
+        if (header[8] != 0x41 || header[9] != 0x49) return false;
+        if (header[10] != 0x01 && header[10] != 0x02) return false;
+        return true;
+      } finally {
+        raf.closeSync();
+      }
+    } catch (_) {
+      return false;
     }
   }
 
