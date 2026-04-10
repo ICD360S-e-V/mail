@@ -3,7 +3,6 @@ import 'dart:typed_data';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:pointycastle/asn1/asn1_parser.dart';
 import 'package:pointycastle/asn1/primitives/asn1_integer.dart';
 import 'package:pointycastle/asn1/primitives/asn1_sequence.dart';
@@ -16,6 +15,7 @@ import 'package:pointycastle/api.dart' as pc_api;
 import '../services/le_issuer_check.dart';
 import '../services/logger_service.dart';
 import '../services/pinned_security_context.dart';
+import '../services/portable_secure_storage.dart';
 
 /// Multi-layer phishing URL detector.
 ///
@@ -359,10 +359,9 @@ class PhishingDetector {
   static String? _dbCachePath;
 
   /// Persistent state for anti-replay and anti-emptying checks.
-  // macOS: legacy login keychain (no entitlement required for ad-hoc builds)
-  static const _storage = FlutterSecureStorage(
-    mOptions: MacOsOptions(usesDataProtectionKeychain: false),
-  );
+  /// PortableSecureStorage uses native storage on iOS/Android/Windows/
+  /// Linux and AES-GCM file backend on macOS.
+  static final _storage = PortableSecureStorage.instance;
   static const _kLastTimestamp = 'sb_last_timestamp';
   static const _kLastCount = 'sb_last_count';
 
