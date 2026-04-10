@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import '../models/models.dart';
 import '../services/services.dart';
+import '../utils/pii_redactor.dart';
 
 /// Email provider for managing email accounts and messages
 class EmailProvider with ChangeNotifier {
@@ -343,7 +344,7 @@ class EmailProvider with ChangeNotifier {
           if (!previousIds.contains(email.messageId)) {
             // New email detected - show Windows Toast notification
             await NotificationService.showNewEmailToast(email);
-            LoggerService.log('NEW_EMAIL', '🔔 New email from ${email.from}: ${email.subject}');
+            LoggerService.log('NEW_EMAIL', '🔔 New email from ${piiEmail(email.from)} ${piiSubject(email.subject)}');
           }
         }
       }
@@ -460,7 +461,7 @@ class EmailProvider with ChangeNotifier {
     try {
       await _mailService.sendEmailAsync(_currentAccount!, to, subject, body);
       _error = null;
-      LoggerService.log('PROVIDER', '✓ Email sent to $to');
+      LoggerService.log('PROVIDER', '✓ Email sent to ${piiEmail(to)}');
     } catch (ex, stackTrace) {
       _error = ex.toString();
       LoggerService.logError('PROVIDER', ex, stackTrace);
@@ -480,7 +481,7 @@ class EmailProvider with ChangeNotifier {
     try {
       await _mailService.sendEmailAsync(account, to, subject, body);
       _error = null;
-      LoggerService.log('PROVIDER', '✓ Email sent from ${account.username} to $to');
+      LoggerService.log('PROVIDER', '✓ Email sent from ${piiEmail(account.username)} to ${piiEmail(to)}');
     } catch (ex, stackTrace) {
       _error = ex.toString();
       LoggerService.logError('PROVIDER', ex, stackTrace);
@@ -512,7 +513,7 @@ class EmailProvider with ChangeNotifier {
         draftUid: draftUid,
       );
       _error = null;
-      LoggerService.log('PROVIDER', '✓ Email sent from ${account.username} to $to (CC: $cc, BCC: $bcc) with ${attachments.length} attachments');
+      LoggerService.log('PROVIDER', '✓ Email sent from ${piiEmail(account.username)} to:${to.split(',').length} cc:${cc.isEmpty ? 0 : cc.split(',').length} bcc:${bcc.isEmpty ? 0 : bcc.split(',').length} attachments:${attachments.length}');
     } catch (ex, stackTrace) {
       _error = ex.toString();
       LoggerService.logError('PROVIDER', ex, stackTrace);
@@ -642,7 +643,7 @@ class EmailProvider with ChangeNotifier {
       _emails.removeWhere((e) => e.messageId == email.messageId);
 
       _error = null;
-      LoggerService.log('PROVIDER', '✓ Email moved to $toFolder: ${email.subject}');
+      LoggerService.log('PROVIDER', '✓ Email moved to $toFolder ${piiSubject(email.subject)}');
 
       // Refresh all folder counts (source and destination folders affected)
       await _refreshFolderCounts(_currentAccount!);
