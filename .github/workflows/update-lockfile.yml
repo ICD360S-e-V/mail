@@ -1,0 +1,58 @@
+name: Update pubspec.lock
+
+# Trigger on pushes to main that touch pubspec.yaml but not pubspec.lock
+# (i.e., a dependency was added/changed without running flutter pub get)
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'pubspec.yaml'
+
+permissions:
+  contents: write
+
+jobs:
+  update-lockfile:
+    name: Sync pubspec.lock
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: subosito/flutter-action@e938fdf56512cc96ef2f93601a5c50a2026c6a49 # v2.18.1
+        with:
+          flutter-version: "3.41.4"
+          channel: stable
+
+      - name: Check if lockfile is stale
+        id: check
+        run: |
+          # Try enforce-lockfile first — if it succeeds, lock is in sync
+          if flutter pub get --enforce-lockfile 2>/dev/null; then
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+            echo "pubspec.lock is up to date"
+          else
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            echo "pubspec.lock needs update"
+          fi
+
+      - name: Update lockfile
+        if: steps.check.outputs.stale == 'true'
+        run: |
+          flutter pub get
+          echo "pubspec.lock updated"
+
+      - name: Commit and push
+        if: steps.check.outputs.stale == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pubspec.lock
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "deps: auto-update pubspec.lock [skip ci]"
+            git push
+            echo "✓ pubspec.lock committed and pushed"
+          fi
