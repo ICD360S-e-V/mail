@@ -160,7 +160,14 @@ class _ComposeWindowState extends State<ComposeWindow> {
       LoggerService.logError('COMPOSE', ex, stackTrace);
       if (!mounted) return;
       final l10n = l10nOf(context);
-      NotificationService.showErrorToast(l10n.errorTitle, l10n.errorFailedToPickFiles);
+      // Surface the underlying exception so user-reported bugs include
+      // the real cause (macOS sandbox / NSOpenPanel error / plugin
+      // crash etc.) instead of a generic "failed to pick files".
+      final detail = ex.toString();
+      NotificationService.showErrorToast(
+        l10n.errorTitle,
+        '${l10n.errorFailedToPickFiles}\n\n$detail',
+      );
     }
   }
 
