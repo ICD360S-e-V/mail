@@ -19,6 +19,7 @@ import '../services/platform_service.dart';
 import 'compose_window.dart';
 import 'attachment_viewer_window.dart';
 import '../utils/phishing_detector.dart';
+import '../utils/html_to_plain_text.dart';
 import '../utils/safe_html_renderer.dart';
 import '../utils/text_safety.dart';
 
@@ -545,7 +546,15 @@ class _EmailViewerState extends State<EmailViewer> {
             final nav = Navigator.of(context);
             final parentContext = nav.context;
             nav.pop();
-            // Open compose with forwarded email content
+            // Convert HTML body to plain text for forwarding.
+            // This strips dangerous tags, neutralizes phishing links
+            // (text <url> format exposes mismatches), drops tracking
+            // pixels and base64 images, and prevents the recipient
+            // from receiving raw HTML that could re-render phishing
+            // content with full styling.
+            final plainBody = _isHtmlEmail(email.body)
+                ? HtmlToPlainText.convert(email.body)
+                : email.body;
             final forwardBody = '''
 ${l10nForward.infoForwardedMessage}
 ${l10nForward.labelFrom} ${email.from}
@@ -553,7 +562,7 @@ ${l10nForward.labelDate} ${DateFormat('yyyy-MM-dd HH:mm:ss').format(email.date)}
 ${l10nForward.labelSubject} ${email.subject}
 ${l10nForward.labelTo} ${email.to}${email.cc.isNotEmpty ? '\nCC: ${email.cc}' : ''}
 
-${email.body}
+$plainBody
 ''';
             await showDialog(
               context: parentContext,
