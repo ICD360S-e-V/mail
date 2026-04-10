@@ -18,6 +18,7 @@ import '../services/logger_service.dart';
 import '../services/platform_service.dart';
 import 'compose_window.dart';
 import 'attachment_viewer_window.dart';
+import '../utils/phishing_detector.dart';
 import '../utils/safe_html_renderer.dart';
 import '../utils/text_safety.dart';
 
@@ -207,7 +208,7 @@ class _EmailViewerState extends State<EmailViewer> {
   /// This dialog ALWAYS shows the REAL destination URL so the user
   /// can verify before opening. If the visible text looks like a
   /// different domain, a prominent warning is shown.
-  Future<bool> _showLinkConfirmDialog(String actualUrl, {String? displayText}) async {
+  Future<bool> _showLinkConfirmDialog(String actualUrl, {String? displayText, PhishingResult? phishingResult}) async {
     final actualDomain = _extractDomain(actualUrl);
     final textDomain = (displayText != null && _looksLikeUrl(displayText))
         ? _extractDomain(displayText.startsWith('http')
@@ -217,6 +218,8 @@ class _EmailViewerState extends State<EmailViewer> {
     final isDomainMismatch = textDomain != null &&
         actualDomain != null &&
         textDomain != actualDomain;
+    final isDangerous = isDomainMismatch ||
+        (phishingResult?.isDangerous ?? false);
 
     if (!mounted) return false;
     final theme = FluentTheme.of(context);
@@ -227,12 +230,12 @@ class _EmailViewerState extends State<EmailViewer> {
         title: Row(
           children: [
             Icon(
-              isDomainMismatch ? FluentIcons.warning : FluentIcons.open_in_new_window,
+              isDangerous ? FluentIcons.warning : FluentIcons.open_in_new_window,
               size: 20,
-              color: isDomainMismatch ? Colors.red : theme.accentColor,
+              color: isDangerous ? Colors.red : theme.accentColor,
             ),
             const SizedBox(width: 8),
-            Text(isDomainMismatch
+            Text(isDangerous
                 ? 'Suspicious link detected!'
                 : 'Open external link?'),
           ],
@@ -271,6 +274,47 @@ class _EmailViewerState extends State<EmailViewer> {
                 ),
               ),
             ],
+            // Layer 2+3 phishing warnings
+            if (phishingResult != null && phishingResult.warnings.isNotEmpty) ...[
+              Container(
+                padding: const EdgeInsets.all(10),
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: phishingResult.isDangerous
+                      ? Colors.red.withValues(alpha: 0.1)
+                      : Colors.orange.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: phishingResult.isDangerous
+                        ? Colors.red.withValues(alpha: 0.3)
+                        : Colors.orange.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: phishingResult.warnings.map((w) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          w.severity == WarningSeverity.critical || w.severity == WarningSeverity.high
+                              ? FluentIcons.warning
+                              : FluentIcons.info,
+                          size: 14,
+                          color: w.severity == WarningSeverity.critical || w.severity == WarningSeverity.high
+                              ? Colors.red
+                              : Colors.orange,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(child: Text(w.message,
+                            style: const TextStyle(fontSize: 12))),
+                      ],
+                    ),
+                  )).toList(),
+                ),
+              ),
+            ],
             const Text('This link will open in your browser:',
                 style: TextStyle(fontSize: 13)),
             const SizedBox(height: 8),
@@ -285,7 +329,7 @@ class _EmailViewerState extends State<EmailViewer> {
                 style: TextStyle(
                   fontSize: 12,
                   fontFamily: 'monospace',
-                  color: isDomainMismatch ? Colors.red : null,
+                  color: isDangerous ? Colors.red : null,
                 ),
               ),
             ),
@@ -297,11 +341,11 @@ class _EmailViewerState extends State<EmailViewer> {
             onPressed: () => Navigator.of(ctx).pop(false),
           ),
           FilledButton(
-            style: isDomainMismatch
+            style: isDangerous
                 ? ButtonStyle(backgroundColor: WidgetStateProperty.all(Colors.red))
                 : null,
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(isDomainMismatch
+            child: Text(isDangerous
                 ? 'Open anyway (dangerous)'
                 : 'Open in browser'),
           ),
@@ -315,10 +359,10 @@ class _EmailViewerState extends State<EmailViewer> {
     // Decode HTML entities in URL (e.g., &amp; -> &)
     final decodedUrl = _decodeHtmlEntities(url);
 
-    // SECURITY (1.3): Show confirmation dialog with real URL.
-    // This catches phishing links where display text shows one
-    // domain but href points to another.
-    final confirmed = await _showLinkConfirmDialog(decodedUrl);
+    // SECURITY (1.3): Run multi-layer phishing analysis then show
+    // confirmation dialog with real URL + any warnings.
+    final result = await PhishingDetector.analyze(decodedUrl);
+    final confirmed = await _showLinkConfirmDialog(decodedUrl, phishingResult: result);
     if (!confirmed) {
       LoggerService.log('EMAIL_VIEWER', 'User cancelled opening URL: $decodedUrl');
       return;
