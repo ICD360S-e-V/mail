@@ -182,9 +182,148 @@ class _EmailViewerState extends State<EmailViewer> {
   }
 
   /// Open URL in external system browser (cross-platform)
+  /// Extract the domain from a URL string, or null if not parseable.
+  static String? _extractDomain(String url) {
+    try {
+      return Uri.parse(url).host.toLowerCase();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Returns true if [text] looks like a URL (contains a domain pattern
+  /// with a TLD, or starts with http/https).
+  static bool _looksLikeUrl(String text) {
+    final t = text.trim().toLowerCase();
+    return t.startsWith('http://') ||
+        t.startsWith('https://') ||
+        RegExp(r'^[a-z0-9.-]+\.[a-z]{2,}(/|$)').hasMatch(t);
+  }
+
+  /// Show a confirmation dialog before opening any external link.
+  ///
+  /// SECURITY (1.3): Phishing defense. HTML emails can display
+  /// "https://paypal.com" as link text but point to "https://evil.com".
+  /// This dialog ALWAYS shows the REAL destination URL so the user
+  /// can verify before opening. If the visible text looks like a
+  /// different domain, a prominent warning is shown.
+  Future<bool> _showLinkConfirmDialog(String actualUrl, {String? displayText}) async {
+    final actualDomain = _extractDomain(actualUrl);
+    final textDomain = (displayText != null && _looksLikeUrl(displayText))
+        ? _extractDomain(displayText.startsWith('http')
+            ? displayText
+            : 'https://$displayText')
+        : null;
+    final isDomainMismatch = textDomain != null &&
+        actualDomain != null &&
+        textDomain != actualDomain;
+
+    if (!mounted) return false;
+    final theme = FluentTheme.of(context);
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => ContentDialog(
+        title: Row(
+          children: [
+            Icon(
+              isDomainMismatch ? FluentIcons.warning : FluentIcons.open_in_new_window,
+              size: 20,
+              color: isDomainMismatch ? Colors.red : theme.accentColor,
+            ),
+            const SizedBox(width: 8),
+            Text(isDomainMismatch
+                ? 'Suspicious link detected!'
+                : 'Open external link?'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isDomainMismatch) ...[
+              Container(
+                padding: const EdgeInsets.all(10),
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'The link text shows a different domain than the actual URL. '
+                      'This is a common phishing technique.',
+                      style: TextStyle(
+                        color: Colors.red,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text('Link text domain: $textDomain',
+                        style: const TextStyle(fontSize: 12)),
+                    Text('Actual domain: $actualDomain',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ),
+            ],
+            const Text('This link will open in your browser:',
+                style: TextStyle(fontSize: 13)),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: theme.micaBackgroundColor,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: SelectableText(
+                actualUrl,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontFamily: 'monospace',
+                  color: isDomainMismatch ? Colors.red : null,
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          Button(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.of(ctx).pop(false),
+          ),
+          FilledButton(
+            style: isDomainMismatch
+                ? ButtonStyle(backgroundColor: WidgetStateProperty.all(Colors.red))
+                : null,
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(isDomainMismatch
+                ? 'Open anyway (dangerous)'
+                : 'Open in browser'),
+          ),
+        ],
+      ),
+    );
+    return result == true;
+  }
+
   Future<void> _openUrlInExternalBrowser(String url) async {
     // Decode HTML entities in URL (e.g., &amp; -> &)
     final decodedUrl = _decodeHtmlEntities(url);
+
+    // SECURITY (1.3): Show confirmation dialog with real URL.
+    // This catches phishing links where display text shows one
+    // domain but href points to another.
+    final confirmed = await _showLinkConfirmDialog(decodedUrl);
+    if (!confirmed) {
+      LoggerService.log('EMAIL_VIEWER', 'User cancelled opening URL: $decodedUrl');
+      return;
+    }
+
     LoggerService.log('EMAIL_VIEWER', 'Opening URL in external browser: $decodedUrl');
     try {
       final uri = Uri.parse(decodedUrl);
