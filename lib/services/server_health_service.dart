@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dns_checker.dart';
 import 'logger_service.dart';
 
 /// Server health service for checking SPF/DKIM/DMARC DNS records
@@ -30,34 +31,22 @@ class ServerHealthService {
     return status;
   }
 
-  /// Check SPF record
+  /// Check SPF record via DoH (works on all platforms including mobile)
   Future<HealthCheckResult> _checkSpfAsync() async {
     try {
-      // Use nslookup to check SPF TXT record
-      final result = await Process.run('nslookup', ['-type=TXT', domain]);
-
-      if (result.exitCode == 0) {
-        final output = result.stdout.toString();
-        if (output.contains('v=spf1')) {
-          LoggerService.log('HEALTH', 'SPF record found for $domain');
-          return HealthCheckResult(
-            status: 'OK',
-            color: 'Green',
-            message: 'SPF record exists for $domain',
-          );
-        } else {
-          return HealthCheckResult(
-            status: 'MISSING',
-            color: 'Orange',
-            message: 'No SPF record found for $domain',
-          );
-        }
+      final spf = await DnsChecker.lookupSpf(domain);
+      if (spf != null) {
+        LoggerService.log('HEALTH', 'SPF record found for $domain');
+        return HealthCheckResult(
+          status: 'OK',
+          color: 'Green',
+          message: 'SPF record exists for $domain: $spf',
+        );
       }
-
       return HealthCheckResult(
-        status: 'ERROR',
-        color: 'Red',
-        message: 'DNS query failed',
+        status: 'MISSING',
+        color: 'Orange',
+        message: 'No SPF record found for $domain',
       );
     } catch (ex) {
       return HealthCheckResult(
@@ -68,35 +57,22 @@ class ServerHealthService {
     }
   }
 
-  /// Check DKIM record
+  /// Check DKIM record via DoH (works on all platforms including mobile)
   Future<HealthCheckResult> _checkDkimAsync() async {
     try {
-      // Check DKIM selector (default._domainkey.icd360s.de)
-      final selector = 'default._domainkey.$domain';
-      final result = await Process.run('nslookup', ['-type=TXT', selector]);
-
-      if (result.exitCode == 0) {
-        final output = result.stdout.toString();
-        if (output.contains('v=DKIM1') || output.contains('k=rsa')) {
-          LoggerService.log('HEALTH', 'DKIM record found for $selector');
-          return HealthCheckResult(
-            status: 'OK',
-            color: 'Green',
-            message: 'DKIM record exists for $selector',
-          );
-        } else {
-          return HealthCheckResult(
-            status: 'MISSING',
-            color: 'Orange',
-            message: 'No DKIM record found for $selector',
-          );
-        }
+      final dkim = await DnsChecker.lookupDkim(domain);
+      if (dkim != null) {
+        LoggerService.log('HEALTH', 'DKIM record found for $domain');
+        return HealthCheckResult(
+          status: 'OK',
+          color: 'Green',
+          message: 'DKIM record exists for default._domainkey.$domain',
+        );
       }
-
       return HealthCheckResult(
-        status: 'ERROR',
-        color: 'Red',
-        message: 'DNS query failed',
+        status: 'MISSING',
+        color: 'Orange',
+        message: 'No DKIM record found for default._domainkey.$domain',
       );
     } catch (ex) {
       return HealthCheckResult(
