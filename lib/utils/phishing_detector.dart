@@ -64,6 +64,34 @@ class PhishingDetector {
     0x04BB: 'h', 0x043D: 'H', 0x043A: 'K',
   };
 
+  /// Cyrillic letters that visually resemble ASCII Latin letters.
+  /// Used for whole-script-confusable detection (UTS #39 + Chromium).
+  /// If a label is 100% Cyrillic AND every character is in this set,
+  /// the label is a confusable (e.g. аррӏе → apple).
+  static const Set<int> _cyrillicLatinLookalikes = {
+    0x0430, 0x0441, 0x0435, 0x043E, 0x0440, 0x0445, 0x0443, // a c e o p x y
+    0x0456, 0x0458, 0x04CF, 0x0501, 0x050D, 0x04BB, 0x051B, // i j ӏ ԁ ԍ һ ԛ
+    0x0455, 0x051D, 0x044C, 0x044A, 0x04BD, 0x043F, 0x0433, // s ԝ ь ъ ҽ п г
+    0x0475, 0x0461, 0x044B, 0x044E, 0x043A,                  // ѵ ѡ ы ю к
+  };
+
+  /// Greek letters that visually resemble ASCII Latin letters.
+  /// Used for whole-script-confusable detection.
+  static const Set<int> _greekLatinLookalikes = {
+    0x03B1, 0x03BF, 0x03C1, 0x03F2, 0x03F3, // α ο ρ ϲ ϳ
+    0x03BD, 0x03C4, 0x03C5, 0x03C7, 0x03B9, // ν τ υ χ ι
+  };
+
+  /// ccTLDs where Cyrillic script is legitimate — don't flag whole-script
+  /// Cyrillic labels as confusable when ending in these.
+  static const Set<String> _cyrillicTlds = {
+    'ru', 'by', 'bg', 'kz', 'ua', 'su', 'uz', 'mk', 'rs', 'mn',
+    'рф', 'бел', 'укр', 'мкд', 'срб', 'бг', 'қаз',
+  };
+
+  /// ccTLDs where Greek script is legitimate.
+  static const Set<String> _greekTlds = {'gr', 'cy', 'ελ'};
+
   /// Run all Layer 2 heuristic checks on a URL. Returns a list of
   /// warnings (empty = no issues detected).
   static List<PhishingWarning> checkLocal(String url) {
@@ -118,11 +146,20 @@ class PhishingDetector {
       ));
     }
 
-    // Homograph / mixed script detection
-    if (_containsMixedScript(host)) {
+    // Homograph detection — UTS #39 Highly Restrictive + whole-script
+    // confusable check (catches both pаypal.com and аррӏе.com).
+    final spoofVerdict = _checkIdnSpoof(host);
+    if (spoofVerdict == _IdnVerdict.mixedScript) {
       warnings.add(PhishingWarning(
         severity: WarningSeverity.high,
-        message: 'Domain contains mixed Unicode scripts (possible homograph attack)',
+        message: 'Domain mixes incompatible Unicode scripts '
+            '(Latin + Cyrillic/Greek) — possible homograph attack',
+      ));
+    } else if (spoofVerdict == _IdnVerdict.wholeScriptConfusable) {
+      warnings.add(PhishingWarning(
+        severity: WarningSeverity.high,
+        message: 'Domain uses non-Latin characters that look like Latin '
+            'letters — almost certainly a phishing attempt',
       ));
     }
 
@@ -145,31 +182,117 @@ class PhishingDetector {
     return warnings;
   }
 
-  /// Check if a domain string contains characters from multiple
-  /// Unicode scripts that could be a homograph attack. Specifically
-  /// detects Cyrillic or Greek characters mixed into Latin-looking
-  /// domains.
-  static bool _containsMixedScript(String domain) {
-    // Only check the part before TLD (strip last segment)
-    final parts = domain.split('.');
-    if (parts.length < 2) return false;
-    final label = parts.sublist(0, parts.length - 1).join('.');
+  /// Per-label IDN spoof check based on UTS #39 Highly Restrictive
+  /// profile + whole-script confusable detection (Chromium-style).
+  ///
+  /// Returns the worst verdict across all labels in the hostname.
+  static _IdnVerdict _checkIdnSpoof(String hostname) {
+    final parts = hostname.split('.');
+    if (parts.isEmpty) return _IdnVerdict.safe;
+    final tld = parts.last;
 
-    bool hasLatin = false;
-    bool hasCyrillic = false;
-    bool hasGreek = false;
+    var worst = _IdnVerdict.safe;
+    for (final label in parts) {
+      final v = _checkLabelSpoof(label, tld);
+      if (v.index > worst.index) worst = v;
+    }
+    return worst;
+  }
 
-    for (final rune in label.runes) {
-      if ((rune >= 0x0041 && rune <= 0x007A)) {
-        hasLatin = true;
-      } else if (rune >= 0x0400 && rune <= 0x04FF) {
-        hasCyrillic = true;
-      } else if (rune >= 0x0370 && rune <= 0x03FF) {
-        hasGreek = true;
+  static _IdnVerdict _checkLabelSpoof(String label, String tld) {
+    if (label.isEmpty) return _IdnVerdict.safe;
+    // Pure ASCII = safe
+    if (label.codeUnits.every((c) => c < 0x80)) return _IdnVerdict.safe;
+
+    final codepoints = label.runes.toList();
+
+    // Collect scripts used (Common/Inherited excluded).
+    final scripts = <_Script>{};
+    for (final cp in codepoints) {
+      final s = _scriptOf(cp);
+      if (s != _Script.common && s != _Script.inherited) scripts.add(s);
+    }
+
+    // UTS #39 Highly Restrictive — reject mixed Latin + non-CJK.
+    if (!_isHighlyRestrictive(scripts)) return _IdnVerdict.mixedScript;
+
+    // Whole-script confusable: Cyrillic
+    if (scripts.length == 1 && scripts.contains(_Script.cyrillic)) {
+      final allLookalike =
+          codepoints.every(_cyrillicLatinLookalikes.contains);
+      if (allLookalike && !_cyrillicTlds.contains(tld)) {
+        return _IdnVerdict.wholeScriptConfusable;
       }
     }
 
-    return hasLatin && (hasCyrillic || hasGreek);
+    // Whole-script confusable: Greek
+    if (scripts.length == 1 && scripts.contains(_Script.greek)) {
+      final allLookalike =
+          codepoints.every(_greekLatinLookalikes.contains);
+      if (allLookalike && !_greekTlds.contains(tld)) {
+        return _IdnVerdict.wholeScriptConfusable;
+      }
+    }
+
+    return _IdnVerdict.safe;
+  }
+
+  /// UTS #39 Highly Restrictive: single script, or one of the three
+  /// fixed CJK + Latin combinations.
+  static bool _isHighlyRestrictive(Set<_Script> s) {
+    if (s.isEmpty || s.length == 1) return true;
+    // Japanese: Latin + Han + Hiragana + Katakana
+    if (s.difference({_Script.latin, _Script.han, _Script.hiragana,
+        _Script.katakana}).isEmpty) return true;
+    // Traditional Chinese: Latin + Han + Bopomofo
+    if (s.difference({_Script.latin, _Script.han, _Script.bopomofo})
+        .isEmpty) return true;
+    // Korean: Latin + Han + Hangul
+    if (s.difference({_Script.latin, _Script.han, _Script.hangul})
+        .isEmpty) return true;
+    return false;
+  }
+
+  /// Minimal Unicode script classifier — covers blocks relevant to
+  /// hostname spoofing detection. For full coverage we'd need ICU,
+  /// but the Identifier Profile already excludes most exotic ranges.
+  static _Script _scriptOf(int cp) {
+    if (cp < 0x80) {
+      if ((cp >= 0x61 && cp <= 0x7A) || (cp >= 0x41 && cp <= 0x5A)) {
+        return _Script.latin;
+      }
+      return _Script.common;
+    }
+    // Latin Extended-A/B/IPA
+    if (cp >= 0x0080 && cp <= 0x024F) return _Script.latin;
+    if (cp >= 0x1E00 && cp <= 0x1EFF) return _Script.latin;
+    // Greek + Coptic
+    if (cp >= 0x0370 && cp <= 0x03FF) return _Script.greek;
+    if (cp >= 0x1F00 && cp <= 0x1FFF) return _Script.greek;
+    // Cyrillic
+    if (cp >= 0x0400 && cp <= 0x052F) return _Script.cyrillic;
+    // Armenian
+    if (cp >= 0x0530 && cp <= 0x058F) return _Script.armenian;
+    // Hebrew
+    if (cp >= 0x0590 && cp <= 0x05FF) return _Script.hebrew;
+    // Arabic
+    if (cp >= 0x0600 && cp <= 0x06FF) return _Script.arabic;
+    // Hiragana
+    if (cp >= 0x3040 && cp <= 0x309F) return _Script.hiragana;
+    // Katakana
+    if (cp >= 0x30A0 && cp <= 0x30FF) return _Script.katakana;
+    if (cp >= 0xFF65 && cp <= 0xFF9F) return _Script.katakana;
+    // Bopomofo
+    if (cp >= 0x3100 && cp <= 0x312F) return _Script.bopomofo;
+    // Hangul
+    if (cp >= 0xAC00 && cp <= 0xD7AF) return _Script.hangul;
+    if (cp >= 0x1100 && cp <= 0x11FF) return _Script.hangul;
+    // Han (CJK Unified)
+    if (cp >= 0x4E00 && cp <= 0x9FFF) return _Script.han;
+    if (cp >= 0x3400 && cp <= 0x4DBF) return _Script.han;
+    // Combining marks
+    if (cp >= 0x0300 && cp <= 0x036F) return _Script.inherited;
+    return _Script.unknown;
   }
 
   // =========================================================================
@@ -527,6 +650,19 @@ class PhishingDetector {
 }
 
 enum WarningSeverity { none, low, medium, high, critical }
+
+/// Internal verdict for IDN spoof detection (UTS #39 + whole-script
+/// confusable). Order matters — `index` is used to compute "worst".
+enum _IdnVerdict { safe, mixedScript, wholeScriptConfusable }
+
+/// Internal Unicode script enum for spoof detection. Limited to scripts
+/// relevant to hostname display — exotic scripts are filtered out
+/// elsewhere.
+enum _Script {
+  common, inherited, unknown,
+  latin, cyrillic, greek, armenian, hebrew, arabic,
+  han, hiragana, katakana, bopomofo, hangul,
+}
 
 class PhishingWarning {
   final WarningSeverity severity;
