@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path/path.dart' as p;
 import 'package:pointycastle/api.dart';
 import 'package:pointycastle/block/aes.dart';
@@ -18,6 +17,7 @@ import 'certificate_service.dart';
 import 'logger_service.dart';
 import 'localization_service.dart';
 import 'platform_service.dart';
+import 'portable_secure_storage.dart';
 
 /// Account service for managing email accounts with secure password storage.
 ///
@@ -41,21 +41,13 @@ import 'platform_service.dart';
 class AccountService {
   static String? _accountsFilePath;
   static String? _passwordsFallbackPath;
-  // macOS: usesDataProtectionKeychain=false routes SecItem to the legacy
-  // file-based login keychain. The data protection keychain requires an
-  // `application-identifier` entitlement which ad-hoc signed CI builds
-  // don't have, causing errSecMissingEntitlement (-34018) on every call.
-  // See flutter_secure_storage issue #804.
-  static const _secureStorage = FlutterSecureStorage(
-    aOptions: AndroidOptions(),
-    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
-    lOptions: LinuxOptions(),
-    mOptions: MacOsOptions(
-      usesDataProtectionKeychain: false,
-      accessibility: KeychainAccessibility.first_unlock,
-    ),
-    wOptions: WindowsOptions(),
-  );
+  // PortableSecureStorage uses native secure storage on iOS/Android/
+  // Windows/Linux and an AES-GCM file backend on macOS — because
+  // ad-hoc signed macOS builds cannot use Keychain at all
+  // (errSecMissingEntitlement -34018 regardless of MacOsOptions
+  // configuration). See PortableSecureStorage docs for empirical
+  // evidence and threat model.
+  static final _secureStorage = PortableSecureStorage.instance;
 
   /// In-memory AES-256 key derived from the master password.
   /// `null` until the user unlocks via MasterPasswordService.verifyMasterPassword.
