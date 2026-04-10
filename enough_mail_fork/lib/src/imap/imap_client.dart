@@ -344,6 +344,9 @@ class ImapClient extends ClientBase {
   ///
   /// Requires the IMAP service to support `AUTH=PLAIN` capability.
   Future<List<Capability>> login(String name, String password) async {
+    // SECURITY: Refuse to send credentials on a plaintext connection.
+    // Prevents STARTTLS stripping attacks (RFC 3501 §6.2.3).
+    requireTlsForAuth();
     final quotedName = _quoteImapString(name);
     final quotedPassword = _quoteImapString(password);
     final cmd = Command(
@@ -366,6 +369,7 @@ class ImapClient extends ClientBase {
     String user,
     String accessToken,
   ) async {
+    requireTlsForAuth();
     final authText =
         'user=$user\u{0001}auth=Bearer $accessToken\u{0001}\u{0001}';
     final authBase64Text = base64.encode(utf8.encode(authText));
@@ -397,6 +401,7 @@ class ImapClient extends ClientBase {
     String? host,
     int? port,
   }) async {
+    requireTlsForAuth();
     host ??= serverInfo.host;
     port ??= serverInfo.port;
     final authText = 'n,u=$user,\u{0001}'
