@@ -53,7 +53,7 @@ dependencies:
   pdf: ^3.11.1  # PDF generation for printing images
 
   # PDF Viewer - native PDFium rendering (no WebView dependency)
-  pdfrx: ^1.0.100  # Native PDF viewer for Windows/macOS/Linux/Android/iOS
+  pdfrx: ^2.2.24  # Native PDF viewer for Windows/macOS/Linux/Android/iOS
 
   # Document Scanner (mobile only - uses VisionKit on iOS, ML Kit on Android)
   cunning_document_scanner: ^1.4.0  # Auto-crop, edge detection, perspective correction
