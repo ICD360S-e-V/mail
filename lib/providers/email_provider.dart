@@ -134,7 +134,7 @@ class EmailProvider with ChangeNotifier {
       LoggerService.log('DIAGNOSTICS',
           'HTTPS:443=${_connectionStatus!.httpsStatus.status}, '
           'SMTP:465=${_connectionStatus!.smtpStatus.status}, '
-          'IMAP:993=${_connectionStatus!.imapStatus.status}');
+          'IMAP:10993=${_connectionStatus!.imapStatus.status}');
       notifyListeners();
     } catch (ex, stackTrace) {
       LoggerService.logError('PORTS', ex, stackTrace);
