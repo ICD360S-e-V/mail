@@ -355,14 +355,14 @@ class _EmailViewerState extends State<EmailViewer> {
     return result == true;
   }
 
-  Future<void> _openUrlInExternalBrowser(String url) async {
+  Future<void> _openUrlInExternalBrowser(String url, {String? displayText}) async {
     // Decode HTML entities in URL (e.g., &amp; -> &)
     final decodedUrl = _decodeHtmlEntities(url);
 
     // SECURITY (1.3): Run multi-layer phishing analysis then show
     // confirmation dialog with real URL + any warnings.
     final result = await PhishingDetector.analyze(decodedUrl);
-    final confirmed = await _showLinkConfirmDialog(decodedUrl, phishingResult: result);
+    final confirmed = await _showLinkConfirmDialog(decodedUrl, displayText: displayText, phishingResult: result);
     if (!confirmed) {
       LoggerService.log('EMAIL_VIEWER', 'User cancelled opening URL: $decodedUrl');
       return;
@@ -442,7 +442,7 @@ class _EmailViewerState extends State<EmailViewer> {
                   html: email.body,
                   allowRemoteContent: _allowRemoteContent,
                   textStyle: theme.typography.body,
-                  onLinkTap: (url, {String? displayText}) => _openUrlInExternalBrowser(url),
+                  onLinkTap: (url, {String? displayText}) => _openUrlInExternalBrowser(url, displayText: displayText),
                 )
               : SelectableText.rich(
                   _buildClickableText(email.body, theme.typography.body),
