@@ -546,40 +546,46 @@ class UpdateService {
     await Process.run('hdiutil', ['detach', mountPoint]);
     await updateFile.delete();
 
-    // Relaunch app via a detached shell that waits for THIS process
-    // to fully exit before calling `open`.
+    // Relaunch via a SEPARATE script file on disk + nohup.
     //
-    // SECURITY / CORRECTNESS: Without the delay, three things go
-    // wrong simultaneously:
-    //   1. macOS LaunchServices sees the existing process still
-    //      running with the same bundle id, so `open` becomes a
-    //      no-op "bring to front" instead of launching the new
-    //      binary.
-    //   2. Even after `exit(0)`, LaunchServices may have already
-    //      cached the request and serve the old running PID, then
-    //      see it die and never try again.
-    //   3. The single-instance lock in main.dart blocks any second
-    //      instance that races against the dying parent.
+    // SECURITY / CORRECTNESS (Sparkle-inspired pattern):
+    // The process that relaunches MUST be fully independent of the
+    // process being updated. An inline `sh -c` child may be killed
+    // by SIGHUP when the parent exits (macOS process group). A
+    // script FILE persists on disk and nohup ensures SIGHUP is
+    // ignored, so the relaunch survives even if the kernel tears
+    // down the entire process group.
     //
-    // Following the same pattern Sparkle uses on macOS: spawn a
-    // detached child that polls until our PID is gone, then issues
-    // `open` against the freshly-installed bundle. The 2-second
-    // grace period covers normal Dart/Flutter shutdown teardown.
+    // Flow:
+    //   1. Write a self-deleting bash script to /tmp
+    //   2. Launch it with /usr/bin/nohup (SIGHUP-immune)
+    //   3. exit(0) kills THIS process
+    //   4. Script polls until our PID is gone
+    //   5. Script waits 2s for LaunchServices cache flush
+    //   6. Script opens the new .app bundle
+    //   7. Script deletes itself
     final myPid = pid;
-    // Single-quote-escape for sh: ' -> '\''
-    final escapedPath =
-        appBundlePath.replaceAll("'", r"'\''");
+    final scriptPath = '/tmp/icd360s_relaunch_$myPid.sh';
+    final escapedApp = appBundlePath.replaceAll("'", "'\\''");
+    final script = File(scriptPath);
+    await script.writeAsString(
+      '#!/bin/bash\n'
+      '# ICD360S auto-relaunch helper (self-deleting)\n'
+      'while kill -0 $myPid 2>/dev/null; do sleep 0.2; done\n'
+      'sleep 2\n'
+      'open \'$escapedApp\'\n'
+      'rm -f "\$0"\n',
+    );
+    await Process.run('chmod', ['+x', scriptPath]);
+
     await Process.start(
-      'sh',
-      [
-        '-c',
-        "while kill -0 $myPid 2>/dev/null; do sleep 0.2; done; "
-            "sleep 1; open '$escapedPath'",
-      ],
+      '/usr/bin/nohup',
+      [scriptPath],
       mode: ProcessStartMode.detached,
     );
+
     LoggerService.log('UPDATE',
-        'Scheduled detached relaunch (after PID $myPid exits) from $appBundlePath');
+        'Relaunch helper written to $scriptPath (PID $myPid), exiting...');
     exit(0);
   }
 
