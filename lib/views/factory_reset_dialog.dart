@@ -93,7 +93,10 @@ class FactoryResetDialog {
     // 1. SCOPE-LIMITED secure storage deletion — only delete keys we own.
     //    NOT FlutterSecureStorage.deleteAll() because that can affect other
     //    keys in shared namespaces on some platforms.
-    const storage = FlutterSecureStorage();
+    // macOS: legacy login keychain (no entitlement required for ad-hoc)
+    const storage = FlutterSecureStorage(
+      mOptions: MacOsOptions(usesDataProtectionKeychain: false),
+    );
     for (final username in accountUsernames) {
       try {
         await storage.delete(key: 'icd360s_mail_password_$username');
