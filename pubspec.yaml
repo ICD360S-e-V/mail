@@ -45,7 +45,7 @@ dependencies:
   url_launcher: ^6.3.1  # Open URLs in external browser (all platforms)
 
   # File picker
-  file_picker: ^10.3.8  # File selection for attachments
+  file_picker: ^11.0.2  # File selection for attachments
   flutter_widget_from_html_core: ^0.15.2  # Secure HTML email rendering (no WebView)
 
   # Printing
