@@ -1,13 +1,25 @@
 import 'dart:developer' as developer;
 import 'package:intl/intl.dart';
+import '../utils/pii_redactor.dart';
 
-/// Simple logging service for debugging and diagnostics
+/// Simple logging service for debugging and diagnostics.
+///
+/// All log messages pass through [PiiRedactor.sanitize] before being
+/// stored in the buffer — this is the safety net that catches any PII
+/// leaked through unstructured string interpolation.
+///
+/// Preferred usage: wrap PII values with typed helpers so redaction
+/// happens at interpolation time (before the safety net):
+/// ```dart
+/// LoggerService.log('IMAP', 'Auth for ${piiEmail(user)}');
+/// LoggerService.log('SEND', 'To ${piiRecipients(toList)}');
+/// ```
 class LoggerService {
   static final DateFormat _timeFormat = DateFormat('HH:mm:ss');
   static final List<String> _logBuffer = [];
   static const int _maxLogEntries = 1000; // Keep last 1000 entries
 
-  /// Get all logs
+  /// Get all logs (already redacted).
   static List<String> getLogs() => List.unmodifiable(_logBuffer);
 
   /// Clear all logs
@@ -16,9 +28,10 @@ class LoggerService {
     developer.log('Logs cleared', name: 'LOGGER');
   }
 
-  /// Add log to buffer
+  /// Add log to buffer after PII redaction safety net.
   static void _addToBuffer(String logMessage) {
-    _logBuffer.add(logMessage);
+    final sanitized = PiiRedactor.sanitize(logMessage);
+    _logBuffer.add(sanitized);
     // Keep only last N entries
     if (_logBuffer.length > _maxLogEntries) {
       _logBuffer.removeAt(0);
