@@ -25,22 +25,45 @@ class CertificateExpiryMonitor {
   ///
   /// Call this from CertificateService after a successful download.
   /// Returns the NotAfter DateTime, or null if parsing failed.
+  ///
+  /// PEM parsing and persistence are wrapped in SEPARATE try/catch
+  /// blocks so the log message accurately reflects which step failed.
+  /// (Previously a Keychain failure during persist was misreported as
+  /// "Failed to parse certificate expiry from PEM".)
   static Future<DateTime?> parseCertAndPersistExpiry(String pemCert) async {
+    // ── Step 1: Parse PEM ──
+    DateTime notAfter;
+    DateTime notBefore;
     try {
       final certData = X509Utils.x509CertificateFromPem(pemCert);
       final validity = certData.tbsCertificate?.validity;
       if (validity == null) {
         LoggerService.logWarning('CERT-EXPIRY',
-            'Cannot parse certificate validity (tbsCertificate or validity is null)');
+            'PEM parse: tbsCertificate or validity field is null');
         return null;
       }
-      final notAfter = validity.notAfter;
-      final notBefore = validity.notBefore;
+      notAfter = validity.notAfter;
+      notBefore = validity.notBefore;
+    } catch (ex, stackTrace) {
+      LoggerService.logError('CERT-EXPIRY',
+          'PEM parse failed: $ex', stackTrace);
+      return null;
+    }
 
-      _certNotAfter = notAfter;
-      _certNotBefore = notBefore;
+    // ── Step 2: Update in-memory cache (always succeeds) ──
+    _certNotAfter = notAfter;
+    _certNotBefore = notBefore;
+    LoggerService.log('CERT-EXPIRY',
+        'Parsed certificate validity: '
+        '${notBefore.toIso8601String()} to ${notAfter.toIso8601String()} '
+        '(${notAfter.difference(notBefore).inDays} days)');
 
-      // Persist so it survives app restarts
+    // ── Step 3: Persist to secure storage (best-effort) ──
+    // On macOS ad-hoc signed builds, flutter_secure_storage may fail
+    // with errSecMissingEntitlement (-34018). The in-memory cache
+    // above still works for the current session, so log a warning
+    // but do not treat persistence failure as a hard error.
+    try {
       await _storage.write(
         key: _kNotAfter,
         value: notAfter.toUtc().toIso8601String(),
@@ -49,18 +72,13 @@ class CertificateExpiryMonitor {
         key: _kNotBefore,
         value: notBefore.toUtc().toIso8601String(),
       );
-
-      LoggerService.log('CERT-EXPIRY',
-          'Parsed real certificate validity: '
-          '${notBefore.toIso8601String()} to ${notAfter.toIso8601String()} '
-          '(${notAfter.difference(notBefore).inDays} days)');
-
-      return notAfter;
-    } catch (ex, stackTrace) {
-      LoggerService.logError('CERT-EXPIRY',
-          'Failed to parse certificate expiry from PEM', stackTrace);
-      return null;
+    } catch (ex) {
+      LoggerService.logWarning('CERT-EXPIRY',
+          'Could not persist expiry to secure storage '
+          '(in-memory cache still works): $ex');
     }
+
+    return notAfter;
   }
 
   /// Load persisted expiry from secure storage (call on app startup).
