@@ -1,7 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.CAMERA"/>
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <!-- REQUEST_INSTALL_PACKAGES is declared ONLY in the "universal"
+         flavor manifest (src/universal/AndroidManifest.xml) because
+         only the direct-download APK from mail.icd360s.de needs
+         self-update. Store flavors (googleplay, fdroid, samsung,
+         huawei) are updated by their respective stores. -->
     <application
         android:label="ICD360S Mail"
         android:name="${applicationName}"
