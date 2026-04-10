@@ -186,6 +186,30 @@ abstract class ClientBase {
     }
   }
 
+  /// Checks that the connection is encrypted before sending credentials.
+  ///
+  /// Throws if the connection is plaintext and the host is not localhost.
+  /// This prevents STARTTLS stripping attacks (RFC 3207 §6) and
+  /// accidental plaintext auth.
+  void requireTlsForAuth() {
+    if (connectionInfo.isSecure) return;
+
+    // Exempt localhost — cannot be MITM'd (Go net/smtp pattern).
+    final host = connectionInfo.host;
+    if (host == 'localhost' ||
+        host == '127.0.0.1' ||
+        host == '::1' ||
+        host == '[::1]') {
+      return;
+    }
+
+    throw StateError(
+      'Authentication rejected: connection to "${connectionInfo.host}" '
+      'is not encrypted. Credentials would be sent in cleartext. '
+      'Use direct TLS (isSecure: true) or call startTls() first.',
+    );
+  }
+
   /// Upgrades the current connection to a secure socket
   Future<void> upgradeToSslSocket() async {
     _socketStreamSubscription.pause();
@@ -199,6 +223,12 @@ abstract class ClientBase {
     isSocketClosingExpected = true;
     _socket.destroy();
     isSocketClosingExpected = false;
+    // Update connectionInfo to reflect TLS upgrade (STARTTLS).
+    connectionInfo = ConnectionInfo(
+      connectionInfo.host,
+      connectionInfo.port,
+      isSecure: true,
+    );
     connect(secureSocket);
   }
 
