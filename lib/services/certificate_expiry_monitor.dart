@@ -1,51 +1,112 @@
+import 'package:basic_utils/basic_utils.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'certificate_service.dart';
 import 'logger_service.dart';
 
-/// Monitor certificate expiration and notify user
-/// Parses the actual certificate PEM to check real expiry date
+/// Monitor certificate expiration using the real NotAfter date parsed
+/// from the PEM certificate (via basic_utils X509 parser).
+///
+/// Previous implementation estimated expiry as 90 days from first
+/// check — this was inaccurate (drifted on restart, broke if server
+/// changed validity period).
 class CertificateExpiryMonitor {
-  static DateTime? _certExpiryDate;
+  static const _storage = FlutterSecureStorage();
+  static const _kNotAfter = 'client_cert_not_after_utc';
+  static const _kNotBefore = 'client_cert_not_before_utc';
 
-  /// Parse certificate expiration date from PEM
-  /// Returns days until expiry, or -1 if already expired, or null if parse error
+  static DateTime? _certNotAfter;
+  static DateTime? _certNotBefore;
+
+  /// Parse the real expiry from a PEM certificate string and persist it.
+  ///
+  /// Call this from CertificateService after a successful download.
+  /// Returns the NotAfter DateTime, or null if parsing failed.
+  static Future<DateTime?> parseCertAndPersistExpiry(String pemCert) async {
+    try {
+      final certData = X509Utils.x509CertificateFromPem(pemCert);
+      final notAfter = certData.tbsCertificate.validity.notAfter;
+      final notBefore = certData.tbsCertificate.validity.notBefore;
+
+      _certNotAfter = notAfter;
+      _certNotBefore = notBefore;
+
+      // Persist so it survives app restarts
+      await _storage.write(
+        key: _kNotAfter,
+        value: notAfter.toUtc().toIso8601String(),
+      );
+      await _storage.write(
+        key: _kNotBefore,
+        value: notBefore.toUtc().toIso8601String(),
+      );
+
+      LoggerService.log('CERT-EXPIRY',
+          'Parsed real certificate validity: '
+          '${notBefore.toIso8601String()} to ${notAfter.toIso8601String()} '
+          '(${notAfter.difference(notBefore).inDays} days)');
+
+      return notAfter;
+    } catch (ex, stackTrace) {
+      LoggerService.logError('CERT-EXPIRY',
+          'Failed to parse certificate expiry from PEM', stackTrace);
+      return null;
+    }
+  }
+
+  /// Load persisted expiry from secure storage (call on app startup).
+  static Future<void> loadPersistedExpiry() async {
+    try {
+      final notAfterStr = await _storage.read(key: _kNotAfter);
+      final notBeforeStr = await _storage.read(key: _kNotBefore);
+
+      if (notAfterStr != null) {
+        _certNotAfter = DateTime.parse(notAfterStr);
+      }
+      if (notBeforeStr != null) {
+        _certNotBefore = DateTime.parse(notBeforeStr);
+      }
+    } catch (ex) {
+      LoggerService.logWarning('CERT-EXPIRY',
+          'Could not load persisted expiry: $ex');
+    }
+  }
+
+  /// Get days until certificate expiry.
+  /// Returns negative if expired, null if unknown.
   static int? getDaysUntilExpiry() {
     if (!CertificateService.hasCertificates) {
       return null;
     }
 
-    try {
-      // Parse actual expiry from the PEM certificate
-      final cert = CertificateService.clientCert;
-      if (cert == null) return null;
-
-      // Extract "Not After" date from PEM using regex
-      // Server certificates contain validity info in the structure
-      // Since Dart doesn't have built-in X509 parsing, use the download timestamp
-      // and known validity (90 days as per server config)
-      if (_certExpiryDate == null) {
-        // Certificates are valid for 90 days from download (server config)
-        // Use conservative estimate: 90 days from last download
-        _certExpiryDate = DateTime.now().add(const Duration(days: 90));
-        LoggerService.log('CERT-EXPIRY',
-            'Certificate expiry estimated: $_certExpiryDate (90 days from download)');
-      }
-
-      final now = DateTime.now();
-      final daysLeft = _certExpiryDate!.difference(now).inDays;
-
+    // Try in-memory cache first
+    if (_certNotAfter != null) {
+      final daysLeft = _certNotAfter!.difference(DateTime.now().toUtc()).inDays;
       LoggerService.log('CERT-EXPIRY',
-          'Certificate expires in $daysLeft days (${_certExpiryDate!.toIso8601String()})');
+          'Certificate expires in $daysLeft days '
+          '(${_certNotAfter!.toIso8601String()})');
       return daysLeft;
-    } catch (ex, stackTrace) {
-      LoggerService.logError('CERT-EXPIRY', ex, stackTrace);
-      return null;
     }
-  }
 
-  /// Reset expiry tracking (call when certificate is re-downloaded)
-  static void resetExpiry() {
-    _certExpiryDate = DateTime.now().add(const Duration(days: 90));
-    LoggerService.log('CERT-EXPIRY', 'Expiry reset to $_certExpiryDate');
+    // If no parsed expiry available, try parsing the current cert
+    final cert = CertificateService.clientCert;
+    if (cert != null) {
+      try {
+        final certData = X509Utils.x509CertificateFromPem(cert);
+        _certNotAfter = certData.tbsCertificate.validity.notAfter;
+        _certNotBefore = certData.tbsCertificate.validity.notBefore;
+
+        final daysLeft =
+            _certNotAfter!.difference(DateTime.now().toUtc()).inDays;
+        LoggerService.log('CERT-EXPIRY',
+            'Parsed on-demand: expires in $daysLeft days');
+        return daysLeft;
+      } catch (ex) {
+        LoggerService.logWarning('CERT-EXPIRY',
+            'Could not parse certificate: $ex');
+      }
+    }
+
+    return null;
   }
 
   /// Check if certificate is expiring soon (< 30 days)
@@ -70,10 +131,20 @@ class CertificateExpiryMonitor {
       return 'Certificate status unknown';
     } else if (days < 0) {
       return 'Certificate EXPIRED - Please re-login to renew';
+    } else if (days < 7) {
+      return 'Certificate expires in $days days - Re-login urgently';
     } else if (days < 30) {
       return 'Certificate expires in $days days - Re-login recommended';
     } else {
-      return 'Certificate valid for $days+ days';
+      return 'Certificate valid for $days days';
     }
+  }
+
+  /// Clear persisted expiry (call on logout/cert wipe).
+  static Future<void> clearExpiry() async {
+    _certNotAfter = null;
+    _certNotBefore = null;
+    await _storage.delete(key: _kNotAfter);
+    await _storage.delete(key: _kNotBefore);
   }
 }
