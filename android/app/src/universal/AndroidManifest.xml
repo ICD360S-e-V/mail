@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Self-update: only the universal (direct-download) flavor needs
+         to install APKs. Store flavors are updated by their stores. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+</manifest>
