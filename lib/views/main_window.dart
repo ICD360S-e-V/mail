@@ -17,6 +17,7 @@ import '../services/account_service.dart';
 import '../services/master_password_service.dart';
 import '../services/certificate_service.dart';
 import '../services/trash_tracker_service.dart';
+import '../services/connection_monitor.dart';
 import '../utils/l10n_helper.dart';
 import 'compose_window.dart';
 import 'email_viewer.dart';
@@ -1211,6 +1212,64 @@ class _MainWindowState extends State<MainWindow> {
   }
 
   /// Build ping quality indicator
+  /// Build compact port status indicators for footer.
+  Widget _buildPortIndicators(FluentThemeData theme, EmailProvider emailProvider) {
+    final status = emailProvider.connectionStatus;
+    if (status == null) return const SizedBox.shrink();
+
+    Widget dot(String label, PortStatus portStatus) {
+      final Color color;
+      switch (portStatus.status) {
+        case 'OPEN':
+          color = Colors.green;
+          break;
+        case 'TIMEOUT':
+          color = Colors.orange;
+          break;
+        case 'CLOSED':
+          color = Colors.red;
+          break;
+        default:
+          color = Colors.grey;
+      }
+      return Tooltip(
+        message: '${portStatus.protocol}:${portStatus.port} — ${portStatus.status}',
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 7,
+              height: 7,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 3),
+            Text(
+              label,
+              style: theme.typography.caption?.copyWith(
+                fontSize: 9,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        dot('HTTPS', status.httpsStatus),
+        const SizedBox(width: 6),
+        dot('SMTP', status.smtpStatus),
+        const SizedBox(width: 6),
+        dot('IMAP', status.imapStatus),
+      ],
+    );
+  }
+
   Widget _buildPingIndicator(FluentThemeData theme) {
     final Color color;
     final String label;
@@ -1350,6 +1409,10 @@ class _MainWindowState extends State<MainWindow> {
           Row(
             children: [
               const Spacer(),
+
+              // Port status indicators
+              _buildPortIndicators(theme, emailProvider),
+              const SizedBox(width: 12),
 
               // Ping indicator
               _buildPingIndicator(theme),
