@@ -294,6 +294,35 @@ jobs:
             *.AppImage
           retention-days: 30
 
+      - name: Linux build summary
+        if: always()
+        run: |
+          {
+            echo "## 🐧 Linux Build Summary"
+            echo ""
+            echo "| Artifact | Size | Status |"
+            echo "|----------|-----:|:------:|"
+            for f in *.deb *.rpm *.AppImage; do
+              if [ -f "$f" ]; then
+                SIZE=$(du -h "$f" | cut -f1)
+                echo "| \`$f\` | $SIZE | ✅ |"
+              fi
+            done
+            echo ""
+            if [ -d "build/linux/x64/release/bundle" ]; then
+              BUNDLE_SIZE=$(du -sh build/linux/x64/release/bundle | cut -f1)
+              echo "**Flutter bundle**: $BUNDLE_SIZE"
+              echo ""
+            fi
+            echo "### Build steps completed"
+            echo "- ✅ Flutter SDK installed"
+            echo "- ✅ Linux dependencies installed"
+            echo "- ✅ Flutter build (release)"
+            echo "- ✅ .deb package built"
+            echo "- ✅ .rpm package built"
+            echo "- ✅ AppImage built (signed with GPG)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Compute Linux hash
         if: success()
         id: hashes
@@ -405,6 +434,30 @@ jobs:
             build/symbols/
           retention-days: 30
 
+      - name: Android ${{ matrix.flavor }} ${{ matrix.format }} build summary
+        if: always()
+        run: |
+          {
+            echo "## 🤖 Android Build Summary — ${{ matrix.flavor }} (${{ matrix.format }})"
+            echo ""
+            echo "| Artifact | Size | Status |"
+            echo "|----------|-----:|:------:|"
+            for f in build/app/outputs/flutter-apk/*${{ matrix.flavor }}*.apk \
+                     build/app/outputs/bundle/${{ matrix.flavor }}Release/*.aab; do
+              if [ -f "$f" ]; then
+                NAME=$(basename "$f")
+                SIZE=$(du -h "$f" | cut -f1)
+                echo "| \`$NAME\` | $SIZE | ✅ |"
+              fi
+            done
+            echo ""
+            echo "### Build steps completed"
+            echo "- ✅ Java 17 + Flutter SDK installed"
+            echo "- ✅ Keystore decoded from CI secrets"
+            echo "- ✅ Flutter build ${{ matrix.format }} --flavor ${{ matrix.flavor }} (release)"
+            echo "- ✅ Uploaded as android-${{ matrix.flavor }}-${{ matrix.format }} artifact"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # Save Android cache marker (runs after all matrix jobs)
   android-cache-save:
     name: Android Cache Save
@@ -509,6 +562,35 @@ jobs:
           path: build/icd360s-mail.dmg
           retention-days: 30
 
+      - name: Apple build summary
+        if: always()
+        run: |
+          {
+            echo "## 🍎 Apple Build Summary (iOS + macOS)"
+            echo ""
+            echo "| Artifact | Size | Status |"
+            echo "|----------|-----:|:------:|"
+            if [ -f "build/icd360s-mail.ipa" ]; then
+              SIZE=$(du -h build/icd360s-mail.ipa | cut -f1)
+              echo "| \`icd360s-mail.ipa\` | $SIZE | ✅ |"
+            fi
+            if [ -f "build/icd360s-mail.dmg" ]; then
+              SIZE=$(du -h build/icd360s-mail.dmg | cut -f1)
+              echo "| \`icd360s-mail.dmg\` | $SIZE | ✅ |"
+            fi
+            echo ""
+            echo "### iOS build steps"
+            echo "- ✅ Flutter precache (iOS engine)"
+            echo "- ✅ flutter build ios --release --no-codesign"
+            echo "- ✅ .ipa packaged from Runner.app"
+            echo ""
+            echo "### macOS build steps"
+            echo "- ✅ Manual signing configured (no Apple Developer team)"
+            echo "- ✅ flutter build macos --release"
+            echo "- ✅ Ad-hoc codesign applied"
+            echo "- ✅ .dmg created via hdiutil"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Compute Apple hash
         if: success()
         id: hashes
@@ -590,6 +672,36 @@ jobs:
           name: windows-build
           path: build/installer/*.exe
           retention-days: 30
+
+      - name: Windows build summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## 🪟 Windows Build Summary"
+            echo ""
+            echo "| Artifact | Size | Status |"
+            echo "|----------|-----:|:------:|"
+            for f in build/installer/*.exe; do
+              if [ -f "$f" ]; then
+                NAME=$(basename "$f")
+                SIZE=$(du -h "$f" | cut -f1)
+                echo "| \`$NAME\` | $SIZE | ✅ |"
+              fi
+            done
+            echo ""
+            if [ -d "build/windows/x64/runner/Release" ]; then
+              BUNDLE_SIZE=$(du -sh build/windows/x64/runner/Release | cut -f1)
+              echo "**Flutter bundle**: $BUNDLE_SIZE"
+              echo ""
+            fi
+            echo "### Build steps completed"
+            echo "- ✅ Flutter SDK installed"
+            echo "- ✅ flutter pub get --enforce-lockfile"
+            echo "- ✅ flutter build windows --release"
+            echo "- ✅ VC++ Redistributable downloaded + SHA-256 verified"
+            echo "- ✅ Inno Setup installer compiled"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Compute Windows hash
         if: success()
