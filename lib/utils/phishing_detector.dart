@@ -359,7 +359,10 @@ class PhishingDetector {
   static String? _dbCachePath;
 
   /// Persistent state for anti-replay and anti-emptying checks.
-  static const _storage = FlutterSecureStorage();
+  // macOS: legacy login keychain (no entitlement required for ad-hoc builds)
+  static const _storage = FlutterSecureStorage(
+    mOptions: MacOsOptions(usesDataProtectionKeychain: false),
+  );
   static const _kLastTimestamp = 'sb_last_timestamp';
   static const _kLastCount = 'sb_last_count';
 
