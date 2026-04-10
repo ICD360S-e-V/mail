@@ -70,6 +70,70 @@ class MasterPasswordService {
 
     // Load persisted rate limit state (defends against app-restart bypass)
     await _loadRateLimitState();
+
+    // SECURITY: Wrap any legacy hashes immediately at startup, BEFORE
+    // any user interaction. This eliminates weak hashes from disk
+    // without waiting for the user to log in. See the "wrap and
+    // re-hash" pattern (used by Dropbox, recommended by OWASP).
+    await _wrapLegacyHashAtStartup();
+  }
+
+  /// Wraps legacy (unsalted SHA-256 or iterated SHA-256) hashes in
+  /// PBKDF2-HMAC-SHA-256 without requiring the user's plaintext password.
+  ///
+  /// The existing hash becomes the "password" input to PBKDF2. On the
+  /// next successful login, [verifyMasterPassword] will upgrade to a
+  /// clean PBKDF2 derivation from the actual plaintext password.
+  ///
+  /// Format for wrapped hashes:
+  ///   `$pbkdf2-sha256-wrap1$<iter>$<salt_b64>$<hash_b64>` — from unsalted SHA-256
+  ///   `$pbkdf2-sha256-wrap2$<iter>$<legacySalt>$<salt_b64>$<hash_b64>` — from iterated SHA-256
+  static Future<void> _wrapLegacyHashAtStartup() async {
+    if (_passwordHashFilePath == null) return;
+    final file = File(_passwordHashFilePath!);
+    if (!await file.exists()) return;
+
+    try {
+      final savedHash = (await file.readAsString()).trim();
+      if (savedHash.isEmpty) return;
+
+      // Already modern format — nothing to do.
+      if (savedHash.startsWith(r'$pbkdf2-sha256')) return;
+
+      final salt = _extractSalt(savedHash);
+      if (salt != null) {
+        // Legacy v2: iterated SHA-256 with salt ("salt:hash")
+        // Extract the hash portion (after the colon).
+        final hashPortion = savedHash.split(':').last;
+        final wrapSalt = _randomBytes(_pbkdf2SaltBytes);
+        final derivator = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
+          ..init(Pbkdf2Parameters(wrapSalt, _pbkdf2Iterations, _pbkdf2KeyLength));
+        final wrapped = derivator.process(Uint8List.fromList(utf8.encode(hashPortion)));
+        final wrapSaltB64 = _b64UrlEncodeNoPad(wrapSalt);
+        final wrappedB64 = _b64UrlEncodeNoPad(wrapped);
+        // Store legacy salt so we can reproduce the legacy hash at verify time.
+        final newHash =
+            '\$pbkdf2-sha256-wrap2\$$_pbkdf2Iterations\$$salt\$$wrapSaltB64\$$wrappedB64';
+        await file.writeAsString(newHash);
+        LoggerService.log('AUTH',
+            '✓ Wrapped legacy iterated SHA-256 hash in PBKDF2 at startup');
+      } else {
+        // Legacy v1: unsalted single SHA-256 (the raw hex hash)
+        final wrapSalt = _randomBytes(_pbkdf2SaltBytes);
+        final derivator = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
+          ..init(Pbkdf2Parameters(wrapSalt, _pbkdf2Iterations, _pbkdf2KeyLength));
+        final wrapped = derivator.process(Uint8List.fromList(utf8.encode(savedHash)));
+        final wrapSaltB64 = _b64UrlEncodeNoPad(wrapSalt);
+        final wrappedB64 = _b64UrlEncodeNoPad(wrapped);
+        final newHash =
+            '\$pbkdf2-sha256-wrap1\$$_pbkdf2Iterations\$$wrapSaltB64\$$wrappedB64';
+        await file.writeAsString(newHash);
+        LoggerService.log('AUTH',
+            '✓ Wrapped legacy unsalted SHA-256 hash in PBKDF2 at startup');
+      }
+    } catch (ex, st) {
+      LoggerService.logError('AUTH', 'Legacy hash wrapping failed', st);
+    }
   }
 
   /// Load rate limit state from disk (called on initialize)
@@ -301,8 +365,60 @@ class MasterPasswordService {
       bool isValid = false;
       bool needsRehash = false;
 
-      if (savedHash.startsWith(r'$pbkdf2-sha256$')) {
-        // PHC format: $pbkdf2-sha256$<iter>$<salt_b64>$<hash_b64>
+      if (savedHash.startsWith(r'$pbkdf2-sha256-wrap1$')) {
+        // Wrapped v1: PBKDF2(unsalted_sha256(password))
+        // Format: $pbkdf2-sha256-wrap1$<iter>$<wrapSalt_b64>$<hash_b64>
+        final parts = savedHash.split(r'$');
+        if (parts.length == 5) {
+          final iter = int.tryParse(parts[2]) ?? 0;
+          if (iter > 0) {
+            try {
+              final wrapSalt = _b64UrlDecodeNoPad(parts[3]);
+              final expected = parts[4];
+              // Reproduce the legacy unsalted SHA-256 from the plaintext
+              final legacyHash = sha256.convert(utf8.encode(password)).toString();
+              // Then verify against the PBKDF2 wrapper
+              final derivator = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
+                ..init(Pbkdf2Parameters(wrapSalt, iter, _pbkdf2KeyLength));
+              final derived = derivator.process(
+                  Uint8List.fromList(utf8.encode(legacyHash)));
+              final computed = _b64UrlEncodeNoPad(derived);
+              isValid = _constantTimeEquals(expected, computed);
+              if (isValid) needsRehash = true; // upgrade to clean PBKDF2
+            } catch (_) {
+              isValid = false;
+            }
+          }
+        }
+      } else if (savedHash.startsWith(r'$pbkdf2-sha256-wrap2$')) {
+        // Wrapped v2: PBKDF2(legacy_iterated_sha256(password))
+        // Format: $pbkdf2-sha256-wrap2$<iter>$<legacySalt>$<wrapSalt_b64>$<hash_b64>
+        final parts = savedHash.split(r'$');
+        if (parts.length == 6) {
+          final iter = int.tryParse(parts[2]) ?? 0;
+          final legacySalt = parts[3];
+          if (iter > 0) {
+            try {
+              final wrapSalt = _b64UrlDecodeNoPad(parts[4]);
+              final expected = parts[5];
+              // Reproduce the legacy iterated SHA-256 hash
+              final legacyFull = _hashPasswordLegacySha256(password, salt: legacySalt);
+              final legacyHashPortion = legacyFull.split(':').last;
+              // Verify against the PBKDF2 wrapper
+              final derivator = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
+                ..init(Pbkdf2Parameters(wrapSalt, iter, _pbkdf2KeyLength));
+              final derived = derivator.process(
+                  Uint8List.fromList(utf8.encode(legacyHashPortion)));
+              final computed = _b64UrlEncodeNoPad(derived);
+              isValid = _constantTimeEquals(expected, computed);
+              if (isValid) needsRehash = true; // upgrade to clean PBKDF2
+            } catch (_) {
+              isValid = false;
+            }
+          }
+        }
+      } else if (savedHash.startsWith(r'$pbkdf2-sha256$')) {
+        // Clean PHC format: $pbkdf2-sha256$<iter>$<salt_b64>$<hash_b64>
         final parts = savedHash.split(r'$');
         if (parts.length == 5) {
           final iter = int.tryParse(parts[2]) ?? 0;
@@ -321,14 +437,14 @@ class MasterPasswordService {
           }
         }
       } else {
+        // Pre-wrap legacy formats — should not exist after startup
+        // wrapping, but handle as fallback for edge cases.
         final salt = _extractSalt(savedHash);
         if (salt != null) {
-          // Legacy salted SHA-256 iterated 100k
           final inputHash = _hashPasswordLegacySha256(password, salt: salt);
           isValid = _constantTimeEquals(savedHash, inputHash);
           if (isValid) needsRehash = true;
         } else {
-          // Super-legacy unsalted single SHA-256
           final legacyBytes = utf8.encode(password);
           final legacyHash = sha256.convert(legacyBytes).toString();
           isValid = _constantTimeEquals(savedHash, legacyHash);
