@@ -24,8 +24,14 @@ class CertificateExpiryMonitor {
   static Future<DateTime?> parseCertAndPersistExpiry(String pemCert) async {
     try {
       final certData = X509Utils.x509CertificateFromPem(pemCert);
-      final notAfter = certData.tbsCertificate.validity.notAfter;
-      final notBefore = certData.tbsCertificate.validity.notBefore;
+      final validity = certData.tbsCertificate?.validity;
+      if (validity == null) {
+        LoggerService.logWarning('CERT-EXPIRY',
+            'Cannot parse certificate validity (tbsCertificate or validity is null)');
+        return null;
+      }
+      final notAfter = validity.notAfter;
+      final notBefore = validity.notBefore;
 
       _certNotAfter = notAfter;
       _certNotBefore = notBefore;
@@ -92,8 +98,14 @@ class CertificateExpiryMonitor {
     if (cert != null) {
       try {
         final certData = X509Utils.x509CertificateFromPem(cert);
-        _certNotAfter = certData.tbsCertificate.validity.notAfter;
-        _certNotBefore = certData.tbsCertificate.validity.notBefore;
+        final validity = certData.tbsCertificate?.validity;
+        if (validity == null) {
+          LoggerService.logWarning('CERT-EXPIRY',
+              'On-demand parse: validity is null');
+          return null;
+        }
+        _certNotAfter = validity.notAfter;
+        _certNotBefore = validity.notBefore;
 
         final daysLeft =
             _certNotAfter!.difference(DateTime.now().toUtc()).inDays;
