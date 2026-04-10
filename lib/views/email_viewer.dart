@@ -18,6 +18,7 @@ import '../services/logger_service.dart';
 import '../services/platform_service.dart';
 import 'compose_window.dart';
 import 'attachment_viewer_window.dart';
+import '../utils/safe_html_renderer.dart';
 import '../utils/text_safety.dart';
 
 /// Email viewer window
@@ -32,6 +33,9 @@ class EmailViewer extends StatefulWidget {
 
 class _EmailViewerState extends State<EmailViewer> {
   final List<TapGestureRecognizer> _recognizers = [];
+
+  /// Whether the user has opted to load remote images for this email.
+  bool _allowRemoteContent = false;
 
   @override
   void dispose() {
@@ -205,23 +209,63 @@ class _EmailViewerState extends State<EmailViewer> {
            (lowerBody.contains('<body') && lowerBody.contains('<head'));
   }
 
-  /// Build email body widget - plain text with clickable links
+  /// Build email body widget.
+  ///
+  /// HTML emails are rendered with [SafeHtmlRenderer] which shows
+  /// formatted content while blocking all remote resources by default.
+  /// Plain-text emails use the existing clickable-text renderer.
   Widget _buildEmailBody(FluentThemeData theme, Email email) {
-    // Convert HTML to plain text if needed
-    String displayBody = email.body;
-    if (_isHtmlEmail(email.body)) {
-      displayBody = _stripHtmlTags(email.body);
-    }
+    final isHtml = _isHtmlEmail(email.body);
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: theme.micaBackgroundColor,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: SelectableText.rich(
-        _buildClickableText(displayBody, theme.typography.body),
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (isHtml && !_allowRemoteContent)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                Icon(FluentIcons.shield_alert,
+                    size: 14, color: theme.accentColor),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    'Remote images blocked for your privacy',
+                    style: theme.typography.caption?.copyWith(
+                      color: theme.inactiveColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                HyperlinkButton(
+                  onPressed: () {
+                    setState(() => _allowRemoteContent = true);
+                    LoggerService.log('EMAIL_VIEW',
+                        'User allowed remote content for this email');
+                  },
+                  child: const Text('Load remote images'),
+                ),
+              ],
+            ),
+          ),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: theme.micaBackgroundColor,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: isHtml
+              ? SafeHtmlRenderer(
+                  html: email.body,
+                  allowRemoteContent: _allowRemoteContent,
+                  textStyle: theme.typography.body,
+                  onLinkTap: (url) => _openUrl(url),
+                )
+              : SelectableText.rich(
+                  _buildClickableText(email.body, theme.typography.body),
+                ),
+        ),
+      ],
     );
   }
 
