@@ -1,7 +1,7 @@
 import 'package:basic_utils/basic_utils.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'certificate_service.dart';
 import 'logger_service.dart';
+import 'portable_secure_storage.dart';
 
 /// Monitor certificate expiration using the real NotAfter date parsed
 /// from the PEM certificate (via basic_utils X509 parser).
@@ -10,11 +10,10 @@ import 'logger_service.dart';
 /// check — this was inaccurate (drifted on restart, broke if server
 /// changed validity period).
 class CertificateExpiryMonitor {
-  // macOS: usesDataProtectionKeychain=false uses the legacy login keychain
-  // which works on ad-hoc signed builds (no entitlement required).
-  static const _storage = FlutterSecureStorage(
-    mOptions: MacOsOptions(usesDataProtectionKeychain: false),
-  );
+  // PortableSecureStorage uses native storage on iOS/Android/Windows/
+  // Linux and AES-GCM file backend on macOS (Keychain unavailable on
+  // ad-hoc signed builds).
+  static final _storage = PortableSecureStorage.instance;
   static const _kNotAfter = 'client_cert_not_after_utc';
   static const _kNotBefore = 'client_cert_not_before_utc';
 
