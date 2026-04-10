@@ -124,6 +124,8 @@ class PopClient extends ClientBase {
 
   /// Logs the user in with the default `USER` and `PASS` commands.
   Future<void> login(String name, String password) async {
+    // SECURITY: Refuse to send credentials on a plaintext connection.
+    requireTlsForAuth();
     await sendCommand(PopUserCommand(name));
     await sendCommand(PopPassCommand(password));
     isLoggedIn = true;
@@ -131,6 +133,7 @@ class PopClient extends ClientBase {
 
   /// Logs the user in with the `APOP` command.
   Future<void> loginWithApop(String name, String password) async {
+    requireTlsForAuth();
     await sendCommand(PopApopCommand(name, password, serverInfo.timestamp));
     isLoggedIn = true;
   }
