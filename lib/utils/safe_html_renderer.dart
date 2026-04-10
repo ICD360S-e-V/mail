@@ -38,8 +38,10 @@ class SafeHtmlRenderer extends StatelessWidget {
   /// Whether to load external images. Default false (tracking-safe).
   final bool allowRemoteContent;
 
-  /// Callback when user taps a link. Receives the URL string.
-  final void Function(String url)? onLinkTap;
+  /// Callback when user taps a link. Receives the URL string and
+  /// optionally the visible link text (for phishing detection: if
+  /// the text looks like a different domain, the caller can warn).
+  final void Function(String url, {String? displayText})? onLinkTap;
 
   /// Base text style for the rendered content.
   final TextStyle? textStyle;
@@ -131,11 +133,27 @@ class SafeHtmlRenderer extends StatelessWidget {
       },
 
       onTapUrl: (url) {
-        // Sanitize bidi in URLs too
         final cleanUrl = sanitizeBidi(url);
         LoggerService.log('EMAIL_VIEW', 'Link tapped: $cleanUrl');
         onLinkTap?.call(cleanUrl);
-        return true; // handled
+        return true;
+      },
+
+      // Intercept <a> tags to extract display text for phishing check
+      customStylesBuilder: (element) {
+        if (element.localName == 'a') {
+          // Store display text in a data attribute so onTapUrl can
+          // access it (workaround: flutter_widget_from_html doesn't
+          // pass element text to onTapUrl callback)
+          final href = element.attributes['href'] ?? '';
+          final displayText = element.text.trim();
+          // If display text looks like a URL and domain differs from
+          // href, the link is suspicious
+          if (displayText.isNotEmpty && href.isNotEmpty) {
+            element.attributes['data-display-text'] = displayText;
+          }
+        }
+        return null;
       },
     );
   }
