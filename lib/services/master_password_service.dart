@@ -38,7 +38,11 @@ class MasterPasswordService {
   // Windows Credential Manager / macOS Keychain / Linux libsecret).
   // An attacker with filesystem-only access cannot read or forge the
   // key, so they cannot reset _failedAttempts to bypass the lockout.
-  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  // macOS: usesDataProtectionKeychain=false uses the legacy login keychain
+  // which works on ad-hoc signed builds (no entitlement required).
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage(
+    mOptions: MacOsOptions(usesDataProtectionKeychain: false),
+  );
   static const String _rateLimitKeyName = 'icd360s_rate_limit_state_key_v2';
   static const int _rateLimitVersionByte = 0x02;
   static const Duration _tamperLockoutDuration = Duration(hours: 24);
