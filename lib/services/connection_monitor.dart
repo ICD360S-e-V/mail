@@ -48,13 +48,13 @@ class ConnectionMonitor {
       // Check SMTP (465) — submission over TLS
       status.smtpStatus = await checkPortAsync(server, 465, 'SMTP');
 
-      // Check IMAP (993) — IMAP over TLS
-      status.imapStatus = await checkPortAsync(server, 993, 'IMAP');
+      // Check IMAP (10993) — dedicated mTLS-only port
+      status.imapStatus = await checkPortAsync(server, 10993, 'IMAP');
 
       LoggerService.log('PORTS',
           'HTTPS:443=${status.httpsStatus.status}, '
           'SMTP:465=${status.smtpStatus.status}, '
-          'IMAP:993=${status.imapStatus.status}');
+          'IMAP:10993=${status.imapStatus.status}');
     } catch (ex, stackTrace) {
       LoggerService.logError('PORTS', ex, stackTrace);
     }
