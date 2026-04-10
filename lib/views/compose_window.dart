@@ -94,6 +94,15 @@ class _ComposeWindowState extends State<ComposeWindow> {
   /// Add attachment files (any file type allowed)
   Future<void> _addAttachments() async {
     try {
+      // SECURITY: on macOS without App Sandbox (our build is ad-hoc
+      // signed, not sandboxed), the system strips file-access
+      // entitlements from the plist. file_picker checks for them and
+      // throws ENTITLEMENT_NOT_FOUND if missing. This call tells the
+      // plugin to skip that check and open NSOpenPanel directly —
+      // which works fine outside the sandbox.
+      if (Platform.isMacOS) {
+        FilePicker.platform.skipEntitlementsChecks();
+      }
       LoggerService.log('COMPOSE', 'Opening file picker dialog...');
       final result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
