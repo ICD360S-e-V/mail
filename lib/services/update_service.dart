@@ -77,7 +77,12 @@ class UpdateService {
       'ff9c4a92347693745a06a20cc15310e897145dad6b719cbe724eda093a6195b5';
 
   /// Expected macOS bundle identifier — verified after DMG extraction.
-  static const String _expectedMacBundleId = 'de.icd360s.mail';
+  /// Expected macOS bundle identifier — verified after DMG extraction.
+  /// Must match `PRODUCT_BUNDLE_IDENTIFIER` in
+  /// `macos/Runner/Configs/AppInfo.xcconfig`. Currently the default
+  /// Flutter template ID; will change if we ever rebrand the macOS
+  /// bundle to `de.icd360s.mail`.
+  static const String _expectedMacBundleId = 'com.example.icd360sMailClient';
 
   /// Expected Apple Developer Team ID — null until we have a cert.
   /// When set, enables codesign --verify + Team ID check on updates.
