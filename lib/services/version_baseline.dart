@@ -1,6 +1,5 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
 import 'logger_service.dart';
+import 'portable_secure_storage.dart';
 
 /// Persistent monotonic version baseline for downgrade-attack protection.
 ///
@@ -30,14 +29,11 @@ import 'logger_service.dart';
 ///   - This means an attacker who wipes secure storage cannot
 ///     downgrade below the currently installed version.
 class VersionBaseline {
-  // macOS: usesDataProtectionKeychain=false routes SecItem to the legacy
-  // file-based login keychain, which (unlike the data protection keychain)
-  // does NOT require an `application-identifier` entitlement and works on
-  // ad-hoc signed builds. See actions/checkout#290 + flutter_secure_storage
-  // issue #804 for context.
-  static const _storage = FlutterSecureStorage(
-    mOptions: MacOsOptions(usesDataProtectionKeychain: false),
-  );
+  // PortableSecureStorage uses native secure storage on iOS/Android/
+  // Windows/Linux, and an AES-GCM file backend on macOS (because
+  // ad-hoc signed macOS builds cannot use Keychain — see
+  // PortableSecureStorage docs for the empirical evidence).
+  static final _storage = PortableSecureStorage.instance;
 
   /// Key for the baseline version in secure storage.
   static const _kBaseline = 'version_baseline_value';
