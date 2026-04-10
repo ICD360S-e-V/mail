@@ -398,7 +398,7 @@ class _EmailViewerState extends State<EmailViewer> {
                   html: email.body,
                   allowRemoteContent: _allowRemoteContent,
                   textStyle: theme.typography.body,
-                  onLinkTap: (url) => _openUrlInExternalBrowser(url),
+                  onLinkTap: (url, {String? displayText}) => _openUrlInExternalBrowser(url),
                 )
               : SelectableText.rich(
                   _buildClickableText(email.body, theme.typography.body),
