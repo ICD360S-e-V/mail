@@ -41,11 +41,19 @@ import 'platform_service.dart';
 class AccountService {
   static String? _accountsFilePath;
   static String? _passwordsFallbackPath;
+  // macOS: usesDataProtectionKeychain=false routes SecItem to the legacy
+  // file-based login keychain. The data protection keychain requires an
+  // `application-identifier` entitlement which ad-hoc signed CI builds
+  // don't have, causing errSecMissingEntitlement (-34018) on every call.
+  // See flutter_secure_storage issue #804.
   static const _secureStorage = FlutterSecureStorage(
     aOptions: AndroidOptions(),
     iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
     lOptions: LinuxOptions(),
-    mOptions: MacOsOptions(),
+    mOptions: MacOsOptions(
+      usesDataProtectionKeychain: false,
+      accessibility: KeychainAccessibility.first_unlock,
+    ),
     wOptions: WindowsOptions(),
   );
 
