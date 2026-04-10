@@ -96,12 +96,13 @@ class _ComposeWindowState extends State<ComposeWindow> {
     try {
       // SECURITY: on macOS without App Sandbox (our build is ad-hoc
       // signed, not sandboxed), the system strips file-access
-      // entitlements from the plist. file_picker checks for them and
-      // throws ENTITLEMENT_NOT_FOUND if missing. This call tells the
-      // plugin to skip that check and open NSOpenPanel directly —
-      // which works fine outside the sandbox.
+      // entitlements from the plist. file_picker 11.x checks for
+      // them and throws ENTITLEMENT_NOT_FOUND if missing. This
+      // call tells the plugin to skip that check and open
+      // NSOpenPanel directly — works fine outside the sandbox.
+      // Requires file_picker >= 11.0.0.
       if (Platform.isMacOS) {
-        FilePicker.platform.skipEntitlementsChecks();
+        await FilePicker.platform.skipEntitlementsChecks();
       }
       LoggerService.log('COMPOSE', 'Opening file picker dialog...');
       final result = await FilePicker.platform.pickFiles(
