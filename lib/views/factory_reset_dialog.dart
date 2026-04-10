@@ -1,11 +1,11 @@
 import 'dart:io';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path/path.dart' as p;
 import '../services/account_service.dart';
 import '../services/logger_service.dart';
 import '../services/platform_service.dart';
+import '../services/portable_secure_storage.dart';
 
 /// Factory Reset dialog with typed-confirmation phrase.
 ///
@@ -93,10 +93,9 @@ class FactoryResetDialog {
     // 1. SCOPE-LIMITED secure storage deletion — only delete keys we own.
     //    NOT FlutterSecureStorage.deleteAll() because that can affect other
     //    keys in shared namespaces on some platforms.
-    // macOS: legacy login keychain (no entitlement required for ad-hoc)
-    const storage = FlutterSecureStorage(
-      mOptions: MacOsOptions(usesDataProtectionKeychain: false),
-    );
+    // PortableSecureStorage uses native storage on iOS/Android/Windows/
+    // Linux and AES-GCM file backend on macOS (no Keychain calls).
+    final storage = PortableSecureStorage.instance;
     for (final username in accountUsernames) {
       try {
         await storage.delete(key: 'icd360s_mail_password_$username');
