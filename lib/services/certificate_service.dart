@@ -29,7 +29,11 @@ class CertificateService {
   static String? _caCert;
   static String? _currentUsername;
 
-  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  // macOS: usesDataProtectionKeychain=false uses the legacy login keychain
+  // which works on ad-hoc signed builds (no entitlement required).
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage(
+    mOptions: MacOsOptions(usesDataProtectionKeychain: false),
+  );
   static const String _kStorageClientCert = 'icd360s_mtls_client_cert';
   static const String _kStorageClientKey = 'icd360s_mtls_client_key';
   static const String _kStorageCaCert = 'icd360s_mtls_ca_cert';
