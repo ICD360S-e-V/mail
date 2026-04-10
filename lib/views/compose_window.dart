@@ -11,6 +11,7 @@ import '../providers/email_provider.dart';
 import '../services/notification_service.dart';
 import '../services/logger_service.dart';
 import '../services/email_history_service.dart';
+import '../utils/pii_redactor.dart';
 
 /// Compose email window
 class ComposeWindow extends StatefulWidget {
@@ -61,7 +62,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
     // Initialize email history service
     EmailHistoryService.initialize();
 
-    LoggerService.log('COMPOSE', 'Compose window opened${widget.replyTo != null ? " (replying to ${widget.replyTo})" : ""}');
+    LoggerService.log('COMPOSE', 'Compose window opened${widget.replyTo != null ? " (reply)" : ""}');
 
     _toController = TextEditingController(text: widget.replyTo ?? '');
     _ccController = TextEditingController();
@@ -74,7 +75,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
     // Set default account
     final emailProvider = context.read<EmailProvider>();
     _selectedAccount = emailProvider.currentAccount;
-    LoggerService.log('COMPOSE', 'Default account: ${_selectedAccount?.username ?? "none"}');
+    LoggerService.log('COMPOSE', 'Default account: ${_selectedAccount != null ? piiEmail(_selectedAccount!.username) : "none"}');
 
     // Start auto-save timer (every 5 seconds)
     _autoSaveTimer = Timer.periodic(const Duration(seconds: 5), (_) => _autoSaveDraft());
@@ -454,7 +455,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
     });
 
     try {
-      LoggerService.log('COMPOSE', 'Sending email from ${_selectedAccount!.username} to ${recipients.length} TO, ${ccRecipients.length} CC, ${bccRecipients.length} BCC with ${_attachments.length} attachments ($totalSizeMB MB)');
+      LoggerService.log('COMPOSE', 'Sending email from ${piiEmail(_selectedAccount!.username)} to:${recipients.length} cc:${ccRecipients.length} bcc:${bccRecipients.length} attachments:${_attachments.length} (${totalSizeMB}MB)');
 
       // Send using selected account with attachments.
       // Pass _lastDraftUid so the just-sent draft can be deleted by UID
@@ -561,7 +562,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
                   onChanged: _isSending ? null : (account) {
                     setState(() {
                       _selectedAccount = account;
-                      LoggerService.log('COMPOSE', 'Account changed to: ${account?.username}');
+                      LoggerService.log('COMPOSE', 'Account changed to: ${account != null ? piiEmail(account.username) : "none"}');
                     });
                   },
                     placeholder: Text(l10n.placeholderSelectAccount),
@@ -638,7 +639,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
                                 _toSuggestions = [];
                               });
 
-                              LoggerService.log('COMPOSE', 'Auto-complete: Selected $suggestion');
+                              LoggerService.log('COMPOSE', 'Auto-complete: Selected ${piiEmail(suggestion)}');
                             },
                           );
                         },
