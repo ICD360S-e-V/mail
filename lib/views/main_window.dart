@@ -220,6 +220,75 @@ class _MainWindowState extends State<MainWindow> {
     return result ?? false;
   }
 
+  /// True while a manual update check is in progress (for spinner UI).
+  bool _manualUpdateChecking = false;
+
+  /// Manually check for updates — triggered by footer button.
+  /// Bypasses the auto-update setting; user explicitly requested.
+  /// On success, downloads and installs in background, then exits the
+  /// app and relaunches the new version (macOS / Linux / Windows).
+  Future<void> _checkForUpdatesManual() async {
+    if (_manualUpdateChecking) return;
+    setState(() => _manualUpdateChecking = true);
+
+    final l10n = l10nOf(context);
+    LoggerService.log('UPDATE', 'Manual update check requested');
+
+    try {
+      final updateInfo = await UpdateService.checkForUpdates();
+
+      if (!mounted) return;
+
+      if (updateInfo == null) {
+        // Already up to date — show confirmation toast
+        NotificationService.showInfoToast(
+          'Update check',
+          'You are already on the latest version (v${UpdateService.currentVersion})',
+        );
+        LoggerService.log('UPDATE', 'Manual check: no update available');
+        return;
+      }
+
+      LoggerService.log('UPDATE',
+          'Manual check: update v${updateInfo.version} found, starting install');
+
+      // Show download progress in the notification bar
+      _showNotificationBar(
+        l10n.mainWindowNotificationUpdateAvailable,
+        l10n.mainWindowNotificationDownloading(updateInfo.version),
+        NotificationType.info,
+      );
+
+      UpdateService.onProgress = (downloaded, total, status) {
+        if (mounted) {
+          setState(() {
+            _notificationTitle = l10n.mainWindowNotificationUpdateInProgress;
+            _notificationMessage = status;
+            _notificationType = NotificationType.info;
+            _showNotification = true;
+          });
+        }
+      };
+
+      // Background install: downloads, verifies, mounts DMG (macOS),
+      // copies new .app, writes self-deleting relaunch script, then
+      // exits the current process. The relaunch script polls until
+      // the current PID is gone, waits for LaunchServices cache flush,
+      // then opens the new .app bundle.
+      await UpdateService.downloadAndInstallAuto(updateInfo);
+    } catch (ex, st) {
+      LoggerService.logError('UPDATE', ex, st);
+      if (mounted) {
+        NotificationService.showErrorToast(
+          'Update check failed',
+          ex.toString(),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _manualUpdateChecking = false);
+    }
+  }
+
   /// Check for updates from mail.icd360s.de - AUTO INSTALL
   Future<void> _checkForUpdates() async {
     // Check if auto-update is enabled in settings
@@ -1416,6 +1485,25 @@ class _MainWindowState extends State<MainWindow> {
 
               // Ping indicator
               _buildPingIndicator(theme),
+              const SizedBox(width: 6),
+
+              // Manual update check button
+              Tooltip(
+                message: _manualUpdateChecking
+                    ? 'Checking for updates...'
+                    : 'Check for updates',
+                child: IconButton(
+                  icon: _manualUpdateChecking
+                      ? const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: ProgressRing(strokeWidth: 2),
+                        )
+                      : const Icon(FluentIcons.cloud_download, size: 14),
+                  onPressed:
+                      _manualUpdateChecking ? null : _checkForUpdatesManual,
+                ),
+              ),
               const SizedBox(width: 12),
 
               // Version button (clickable)
