@@ -2,7 +2,7 @@ name: icd360s_mail_client
 description: "ICD360S Mail Client - Modern email client with threat detection"
 publish_to: 'none'
 
-version: 2.21.2+32
+version: 2.21.3+33
 
 environment:
   sdk: ^3.6.1
@@ -45,7 +45,7 @@ dependencies:
   url_launcher: ^6.3.1  # Open URLs in external browser (all platforms)
 
   # File picker
-  file_picker: ^10.3.8  # File selection for attachments
+  file_picker: ^11.0.2  # File selection for attachments
 
   # Printing
   printing: ^5.13.4  # Native print dialog for all platforms including Windows
