@@ -38,22 +38,15 @@ class DiscoverHelper {
     bool isLogEnabled = false,
   }) async {
     domain ??= getDomainFromEmail(emailAddress);
-    var url =
-        'https://autoconfig.$domain/mail/config-v1.1.xml?emailaddress=$emailAddress';
+    final url =
+        'https://autoconfig.$domain/mail/config-v1.1.xml?emailaddress=$domain';
     if (isLogEnabled) {
       print('Discover: trying $url');
     }
-    var response = await HttpHelper.httpGet(url, connectionTimeout: _timeout);
+    final response =
+        await HttpHelper.httpGet(url, connectionTimeout: _timeout);
     if (_isInvalidAutoConfigResponse(response)) {
-      url = // try insecure lookup:
-          'http://autoconfig.$domain/mail/config-v1.1.xml?emailaddress=$emailAddress';
-      if (isLogEnabled) {
-        print('Discover: trying $url');
-      }
-      response = await HttpHelper.httpGet(url, connectionTimeout: _timeout);
-      if (_isInvalidAutoConfigResponse(response)) {
-        return null;
-      }
+      return null;
     }
     final text = response.text;
 
@@ -161,6 +154,15 @@ class DiscoverHelper {
         results.firstWhereOrNull((info) => info.ready(ServerType.pop));
     final smtpInfo =
         results.firstWhereOrNull((info) => info.ready(ServerType.smtp));
+    // Close all probing sockets — we only needed to check reachability.
+    for (final info in results) {
+      try {
+        await info.socket?.close();
+      } catch (_) {
+        // ignore close errors
+      }
+      info.socket = null;
+    }
     if ((imapInfo == null && popInfo == null) || (smtpInfo == null)) {
       print(
         'failed to find settings for $baseDomain: '
