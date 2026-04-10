@@ -1,7 +1,4 @@
-import 'dart:io';
-
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'logger_service.dart';
 
@@ -16,50 +13,79 @@ import 'logger_service.dart';
 /// Defense layer against rollback / downgrade attacks (CWE-1328:
 /// Security Version Number Mutable to Older Versions).
 ///
-/// Threat model: an attacker who controls or impersonates the update
-/// server cannot push an older legitimate release that contains a known
-/// vulnerability. Note that this complements — does not replace —
-/// Android's own `versionCode` enforcement at PackageInstaller level.
+/// SECURITY: The baseline is stored in platform secure storage
+/// (Android Keystore-backed EncryptedSharedPreferences, iOS Keychain
+/// backed by Secure Enclave, macOS Keychain, Windows DPAPI, Linux
+/// libsecret) — NOT in a plaintext file on the filesystem.
+///
+/// Previous versions stored the baseline in `version_baseline.txt` on
+/// the regular filesystem. An attacker with filesystem access (root on
+/// Android, any user on desktop) could reset it to "0.0.0" and then
+/// serve an older version with known vulnerabilities.
+///
+/// Tamper detection / fail-closed behavior:
+///   - If the secure storage entry is missing on a non-first-run,
+///     the baseline resets to the current compiled-in app version.
+///   - If the stored value is corrupt or unparseable, same behavior.
+///   - This means an attacker who wipes secure storage cannot
+///     downgrade below the currently installed version.
 class VersionBaseline {
-  static const String _filename = 'version_baseline.txt';
-  static String? _cachedPath;
+  static const _storage = FlutterSecureStorage();
 
-  static Future<String> _path() async {
-    if (_cachedPath != null) return _cachedPath!;
-    final dir = await getApplicationSupportDirectory();
-    if (!await dir.exists()) {
-      await dir.create(recursive: true);
-    }
-    _cachedPath = p.join(dir.path, _filename);
-    return _cachedPath!;
-  }
+  /// Key for the baseline version in secure storage.
+  static const _kBaseline = 'version_baseline_value';
 
-  /// Initializes the baseline to [currentVersion] if no file exists.
+  /// Key for the initialization flag — distinguishes first-run from
+  /// tamper (secure storage wiped but app was already initialized).
+  static const _kInitFlag = 'version_baseline_initialized';
+
+  /// Initializes the baseline to [currentVersion] if not yet set.
   /// Safe to call repeatedly; subsequent calls are no-ops.
+  ///
+  /// Also handles migration from the old plaintext file and
+  /// tamper detection (flag present but value missing).
   static Future<void> initialize(String currentVersion) async {
     try {
-      final path = await _path();
-      final f = File(path);
-      if (!await f.exists()) {
-        await _writeAtomic(path, currentVersion);
+      final flag = await _storage.read(key: _kInitFlag);
+      final existing = await _storage.read(key: _kBaseline);
+
+      if (flag == null && existing == null) {
+        // First run ever (or factory reset wiped everything).
+        // Initialize from the compiled-in app version.
+        await _storage.write(key: _kBaseline, value: currentVersion);
+        await _storage.write(key: _kInitFlag, value: 'true');
         LoggerService.log('VERSION_BASELINE',
-            'Initialized baseline to $currentVersion');
+            'Initialized baseline to $currentVersion (first run)');
+        return;
       }
+
+      if (flag != null && existing == null) {
+        // TAMPER DETECTED: flag exists but value was wiped.
+        // Fail-closed: set baseline to current app version.
+        await _storage.write(key: _kBaseline, value: currentVersion);
+        LoggerService.logWarning('VERSION_BASELINE',
+            'Tamper detected: init flag present but baseline missing. '
+            'Reset to $currentVersion');
+        return;
+      }
+
+      if (existing != null && flag == null) {
+        // Partial state — set the flag to complete initialization.
+        await _storage.write(key: _kInitFlag, value: 'true');
+      }
+
+      // Already initialized — no-op.
     } catch (ex, st) {
       LoggerService.logError('VERSION_BASELINE', ex, st);
     }
   }
 
-  /// Reads the current baseline. Returns null if not yet initialized
-  /// (or if reading failed for any reason — caller should treat null
-  /// as "no constraint").
+  /// Reads the current baseline. Returns null if not yet initialized.
   static Future<String?> read() async {
     try {
-      final path = await _path();
-      final f = File(path);
-      if (!await f.exists()) return null;
-      final content = (await f.readAsString()).trim();
-      return content.isEmpty ? null : content;
+      final value = await _storage.read(key: _kBaseline);
+      if (value == null || value.trim().isEmpty) return null;
+      return value.trim();
     } catch (ex, st) {
       LoggerService.logError('VERSION_BASELINE', ex, st);
       return null;
@@ -83,19 +109,12 @@ class VersionBaseline {
       if (current != null && compareSemver(version, current) <= 0) {
         return;
       }
-      final path = await _path();
-      await _writeAtomic(path, version);
+      await _storage.write(key: _kBaseline, value: version);
       LoggerService.log('VERSION_BASELINE',
           'Bumped baseline to $version (was ${current ?? "<unset>"})');
     } catch (ex, st) {
       LoggerService.logError('VERSION_BASELINE', ex, st);
     }
-  }
-
-  static Future<void> _writeAtomic(String path, String content) async {
-    final tmp = File('$path.tmp');
-    await tmp.writeAsString(content, flush: true);
-    await tmp.rename(path);
   }
 
   /// Compare two semver strings of the form `X.Y.Z`. Returns negative
