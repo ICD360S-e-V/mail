@@ -388,6 +388,45 @@ class ImapClient extends ClientBase {
     return response;
   }
 
+  /// Authenticates via SASL EXTERNAL (RFC 4422 §6).
+  ///
+  /// The user identity is taken from the client certificate that was
+  /// presented during the TLS handshake — there is no password on the
+  /// wire and the username is not transmitted by the client at all.
+  /// The server (Dovecot with `auth_ssl_username_from_cert = yes`)
+  /// extracts the SASL identity from the cert subject CN/emailAddress
+  /// and looks it up in its passdb (typically a `passwd-file` with
+  /// `mechanisms = external` and `override_fields = nopassword`).
+  ///
+  /// Requires:
+  /// - The TLS connection to have presented a client cert that the
+  ///   server validated against its trusted CA file
+  ///   (`ssl_verify_client_cert = yes`).
+  /// - The capability `AUTH=EXTERNAL` to be advertised by the server
+  ///   (check via `serverInfo.supports('AUTH=EXTERNAL')`).
+  ///
+  /// The empty SASL initial response is encoded as the literal `=`
+  /// per RFC 4959 §3 (the `=` distinguishes "empty response" from
+  /// "no initial response", since an actually-empty IR would be
+  /// indistinguishable from the absence of an IR on the wire).
+  Future<List<Capability>> authenticateWithExternal() async {
+    requireTlsForAuth();
+    // We use the continuation form rather than the SASL-IR inline
+    // form (`AUTHENTICATE EXTERNAL =`) to remain compatible with
+    // servers that do not advertise SASL-IR. Dovecot accepts both,
+    // but the continuation form is the lowest-common-denominator.
+    final cmd = Command.withContinuation(
+      ['AUTHENTICATE EXTERNAL', '='],
+      logText: 'AUTHENTICATE EXTERNAL = (cert-based, no password)',
+      writeTimeout: defaultWriteTimeout,
+      responseTimeout: defaultResponseTimeout,
+    );
+    final response =
+        await sendCommand<List<Capability>>(cmd, CapabilityParser(serverInfo));
+    isLoggedIn = true;
+    return response;
+  }
+
   /// Logs in the user with the given [user] and [accessToken]
   /// via Oauth Bearer mechanism.
   ///

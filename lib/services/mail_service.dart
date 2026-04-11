@@ -78,6 +78,37 @@ class MailService {
     return email;
   }
 
+  /// Authenticate to an already-connected IMAP client, preferring SASL
+  /// EXTERNAL (cert-based, no password on the wire) when the server
+  /// advertises it.
+  ///
+  /// This is the canonical entry point for IMAP auth in this app — every
+  /// `client.login(...)` call site has been replaced with this helper.
+  /// As of v2.26.0 (A3 phase 2), our HAProxy + Dovecot stack advertises
+  /// `AUTH=EXTERNAL` after a successful mTLS handshake; the user is
+  /// extracted from the client cert subject (CN=`<user>@icd360s.de`)
+  /// and matched against `/etc/dovecot/users-external` server-side.
+  ///
+  /// Behavior:
+  /// - If `serverInfo.supports('AUTH=EXTERNAL')` → call
+  ///   `client.authenticateWithExternal()` (no password sent)
+  /// - Else → fall back to legacy `client.login(user, password)` so the
+  ///   app keeps working against any IMAP server that doesn't yet
+  ///   support cert auth (e.g. third-party IMAP, dev environments)
+  ///
+  /// In production with mail.icd360s.de the EXTERNAL path is taken
+  /// every time once the user has a valid client cert in their store.
+  Future<void> _authenticate(ImapClient client, MailAccount account) async {
+    final user = _getAuthUsername(account.username);
+    if (client.serverInfo.supports('AUTH=EXTERNAL')) {
+      LoggerService.log('IMAP', 'Auth: SASL EXTERNAL (cert-based, no password)');
+      await client.authenticateWithExternal();
+      return;
+    }
+    LoggerService.log('IMAP', 'Auth: LOGIN (server does not advertise AUTH=EXTERNAL)');
+    await client.login(user, account.password ?? '');
+  }
+
   /// Quote a string for use in an IMAP command (RFC 3501 quoted-string).
   ///
   /// SECURITY: Prevents IMAP injection when interpolating attacker-controlled
@@ -154,7 +185,7 @@ class MailService {
       // Authenticate
       LoggerService.log('IMAP', 'Authenticating...');
       try {
-        await client.login(_getAuthUsername(account.username), account.password ?? '');
+        await _authenticate(client, account);
         LoggerService.log('IMAP', '✓ Authenticated as ${account.username}');
       } catch (authEx) {
         // L3 fix: only treat as auth error if the message contains a specific
@@ -602,7 +633,7 @@ class MailService {
       account.imapPort,
       isSecure: account.useSsl,
     );
-    await imapClient.login(_getAuthUsername(account.username), account.password ?? '');
+    await _authenticate(imapClient, account);
     LoggerService.log('IMAP-SENT', '✓ Connected to IMAP for Sent folder save');
 
     // Get mailboxes
@@ -819,7 +850,7 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
         account.imapPort,
         isSecure: account.useSsl,
       );
-      await imapClient.login(_getAuthUsername(account.username), account.password ?? '');
+      await _authenticate(imapClient, account);
 
       // Find Drafts folder
       final mailboxes = await imapClient.listMailboxes();
@@ -899,7 +930,7 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
         account.imapPort,
         isSecure: account.useSsl,
       );
-      await client.login(_getAuthUsername(account.username), account.password ?? '');
+      await _authenticate(client, account);
 
       // Open source folder
       await client.selectMailboxByPath(fromFolder);
@@ -1030,7 +1061,7 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
         account.imapPort,
         isSecure: account.useSsl,
       );
-      await client.login(_getAuthUsername(account.username), account.password ?? '');
+      await _authenticate(client, account);
 
       await client.selectMailboxByPath(folder);
 
@@ -1124,7 +1155,7 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
         account.imapPort,
         isSecure: account.useSsl,
       );
-      await client.login(_getAuthUsername(account.username), account.password ?? '');
+      await _authenticate(client, account);
 
       // List all mailboxes
       final mailboxes = await client.listMailboxes();
@@ -1163,7 +1194,7 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
         account.imapPort,
         isSecure: account.useSsl,
       );
-      await client.login(_getAuthUsername(account.username), account.password ?? '');
+      await _authenticate(client, account);
 
       final mailbox = await client.selectMailboxByPath(folderName);
       count = mailbox.messagesExists;
@@ -1194,7 +1225,7 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
         account.imapPort,
         isSecure: account.useSsl,
       );
-      await client.login(_getAuthUsername(account.username), account.password ?? '');
+      await _authenticate(client, account);
 
       // Get quota using enough_mail's getQuotaRoot method
       final quotaResult = await client.getQuotaRoot(mailboxName: 'INBOX');
@@ -1300,7 +1331,7 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
         account.imapPort,
         isSecure: account.useSsl,
       );
-      await client.login(_getAuthUsername(account.username), account.password ?? '');
+      await _authenticate(client, account);
 
       // Find Trash folder
       final mailboxes = await client.listMailboxes();
