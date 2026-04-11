@@ -22,7 +22,7 @@ import 'version_baseline.dart';
 /// Auto-update service for checking and installing updates
 class UpdateService {
   static const String updateUrl = 'https://mail.icd360s.de/updates/version.json';
-  static const String currentVersion = '2.28.0';
+  static const String currentVersion = '2.28.1';
 
   // Progress callback for UI updates
   static Function(int downloaded, int total, String status)? onProgress;
@@ -556,6 +556,23 @@ class UpdateService {
       return false;
     }
 
+    // ⚠️ IMPORTANT (added v2.28.1): the user MUST drag the new .app
+    // onto the /Applications shortcut shown in the mounted DMG window
+    // — they CANNOT just double-click the app inside the DMG. Doing
+    // so triggers macOS App Translocation (Gatekeeper Path
+    // Randomization, Sierra+) which runs the binary from a randomized
+    // read-only `/private/var/folders/...` path. Translocation breaks
+    // `getApplicationSupportDirectory()` and several other relative
+    // paths in unpredictable ways and was the cause of the v2.28.0
+    // "moves up and down + Application Not Responding" hang on first
+    // launch. The DMG produced by build-all-platforms.yml since
+    // v2.28.1 includes an /Applications symlink for exactly this
+    // reason — the user just has to drag the icon onto it.
+    LoggerService.log('UPDATE',
+        '⚠️ IMPORTANT: drag the new app onto the /Applications shortcut '
+        'in the DMG window. Do NOT run the app directly from the DMG '
+        '(macOS App Translocation will hang it on first launch).');
+
     // `open <dmg>` mounts the DMG and reveals it in Finder. macOS shows
     // the standard install window with the .app icon and Applications
     // shortcut for drag-and-drop. Returns immediately (non-blocking).
@@ -568,7 +585,7 @@ class UpdateService {
 
     LoggerService.log('UPDATE',
         '✓ DMG opened in Finder. Quitting current app so user can '
-        'drag the new version to Applications.');
+        'drag the new version onto the Applications shortcut.');
 
     // Wait a moment so the user sees the Finder window pop up before
     // we vanish — without this, the app exits before macOS finishes

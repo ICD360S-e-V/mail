@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
@@ -22,30 +23,45 @@ import 'logger_service.dart';
 /// IOPlatformUUID — independent of bundle ID — so the file decrypts
 /// correctly after being moved.
 ///
+/// ## v2.28.1 — narrowed scope + hard timeout
+///
+/// The original v2.25.0 implementation did a recursive copy of the
+/// ENTIRE legacy bundle dir, which on Macs with months of accumulated
+/// state could be hundreds of MB and take many seconds — long enough
+/// to block the main isolate before `runApp()` and trip macOS's
+/// "Application not responding" detector. Combined with App
+/// Translocation (running from a randomized read-only path) it caused
+/// a hard hang on first launch of v2.28.0.
+///
+/// v2.28.1 narrows the migration to **just `secure_store.bin`** (the
+/// only file the app actually needs to keep), wraps the entire run in
+/// a 3-second timeout, and runs all best-effort cleanup of the legacy
+/// `Caches/`, `Logs/`, etc. as fire-and-forget background work that
+/// can never block startup.
+///
 /// ## Strategy
 ///
 /// 1. **Self-guarded**: if the new `secure_store.bin` already exists,
 ///    do nothing and return immediately.
-/// 2. If the legacy directory doesn't exist either (fresh install),
+/// 2. If the legacy `secure_store.bin` doesn't exist (fresh install),
 ///    do nothing and return.
-/// 3. **Copy first, verify with SHA-256, then delete.** Never delete
-///    the source until we are certain the destination is intact —
-///    this is the only persistent state the user has.
-/// 4. Best-effort cleanup of stale `Caches/`, `Saved Application
-///    State/`, and `Logs/` directories under the legacy bundle ID.
-///    Failures during cleanup are swallowed (silent) — they do not
-///    affect functionality.
-/// 5. Idempotent: safe to call on every launch. After successful
-///    migration the legacy directory is gone, so the second pass
+/// 3. Copy ONLY the `secure_store.bin` file (`File.copy`, not a
+///    directory walk). Verify with SHA-256.
+/// 4. Delete the legacy `secure_store.bin` (NOT the whole directory —
+///    leave anything else for the background cleanup).
+/// 5. Schedule best-effort cleanup of stale legacy paths in the
+///    background via [_scheduleBackgroundCleanup]. The cleanup runs
+///    after `runApp()` so it can never block startup.
+/// 6. Idempotent: safe to call on every launch. After successful
+///    migration the legacy file is gone, so the second pass
 ///    short-circuits at step 2.
-/// 6. **No-op on non-macOS platforms.**
-///
-/// ## Error handling
-///
-/// On any failure during the copy/verify phase, the legacy directory
-/// is left intact (so the user can retry by reopening the app or by
-/// manually copying the files). The error is logged and rethrown so
-/// that `main()` can surface a fatal dialog.
+/// 7. **No-op on non-macOS platforms.**
+/// 8. **Hard timeout**: the entire foreground phase is wrapped in
+///    `Future.any` with a 3-second guard. If anything blocks for
+///    longer the migration is abandoned, the legacy file is left
+///    intact, and the app starts normally — the user will see an
+///    empty credential store and need to re-enter the password once.
+///    This is preferable to a permanent hang.
 class MacOSBundleMigration {
   MacOSBundleMigration._();
 
@@ -53,14 +69,36 @@ class MacOSBundleMigration {
   static const String _newBundleId = 'de.icd360s.mailclient';
   static const String _secureStoreFileName = 'secure_store.bin';
 
+  /// Hard wall on the foreground migration phase. The original v2.25.0
+  /// recursive copy could take many seconds on a Mac with accumulated
+  /// state and trip macOS "Application not responding" detection.
+  static const Duration _foregroundTimeout = Duration(seconds: 3);
+
   /// Run the one-time migration. Safe to call on every launch.
   /// On non-macOS platforms this is a no-op.
   ///
-  /// Throws if the copy phase fails (callers should treat this as
-  /// fatal — the user has no credentials).
+  /// NEVER throws — all errors are logged and swallowed. The worst
+  /// possible outcome is that the user has to re-enter the master
+  /// password once, which is much better than the app refusing to
+  /// start.
   static Future<void> runIfNeeded() async {
     if (!Platform.isMacOS) return;
 
+    try {
+      await _doForegroundMigration().timeout(_foregroundTimeout);
+    } on TimeoutException {
+      LoggerService.logWarning(
+        'BUNDLE_MIGRATION',
+        'Migration timed out after ${_foregroundTimeout.inSeconds}s — '
+        'continuing without it. User may need to re-enter the master '
+        'password. Legacy directory left intact for manual recovery.',
+      );
+    } catch (e, st) {
+      LoggerService.logError('BUNDLE_MIGRATION', e, st);
+    }
+  }
+
+  static Future<void> _doForegroundMigration() async {
     final home = Platform.environment['HOME'];
     if (home == null || home.isEmpty) {
       LoggerService.logWarning(
@@ -79,104 +117,98 @@ class MacOSBundleMigration {
     // Self-guard: new store already in place → migration already done
     // (or was never needed). Cheapest possible no-op for the steady state.
     if (newSecureStore.existsSync()) {
+      _scheduleBackgroundCleanup(home);
       return;
     }
 
-    // Nothing to migrate — fresh install.
+    // Nothing to migrate — fresh install OR legacy file already removed.
     if (!legacySecureStore.existsSync()) {
+      _scheduleBackgroundCleanup(home);
       return;
     }
 
     LoggerService.log(
       'BUNDLE_MIGRATION',
-      'Legacy bundle dir detected — starting one-time migration',
+      'Legacy secure_store.bin detected — migrating just that one file',
     );
 
-    try {
-      // Compute source hash before copy so we can verify byte-for-byte
-      // identity at the destination.
-      final sourceBytes = await legacySecureStore.readAsBytes();
-      final sourceHash = sha256.convert(sourceBytes).toString();
+    // Compute source hash so we can verify byte-for-byte identity.
+    final sourceBytes = await legacySecureStore.readAsBytes();
+    final sourceHash = sha256.convert(sourceBytes).toString();
 
-      // Ensure destination parent exists.
-      if (!newDir.existsSync()) {
-        await newDir.create(recursive: true);
-      }
-
-      // Copy every file under the legacy bundle dir (recursive). The
-      // primary payload is `secure_store.bin` but the user may have
-      // other persistent state we don't know about (logs, cached
-      // certificates, etc.). Copy everything to be safe.
-      await _copyDirectoryRecursive(legacyDir, newDir);
-
-      // Verify the secure_store.bin survived the copy.
-      if (!newSecureStore.existsSync()) {
-        throw StateError(
-          'Migration verify failed: $_secureStoreFileName missing at destination',
-        );
-      }
-      final destBytes = await newSecureStore.readAsBytes();
-      final destHash = sha256.convert(destBytes).toString();
-      if (destHash != sourceHash) {
-        throw StateError(
-          'Migration verify failed: SHA-256 mismatch '
-          '(expected $sourceHash, got $destHash)',
-        );
-      }
-
-      LoggerService.log(
-        'BUNDLE_MIGRATION',
-        'Verify OK — copied ${sourceBytes.length} bytes, '
-        'sha256=${sourceHash.substring(0, 16)}…',
-      );
-
-      // Only now is it safe to delete the legacy directory.
-      await legacyDir.delete(recursive: true);
-
-      // Best-effort cleanup of other legacy paths. Each is wrapped
-      // independently so a failure in one doesn't block the rest.
-      await _bestEffortDelete('$home/Library/Caches/$_legacyBundleId');
-      await _bestEffortDelete(
-        '$home/Library/Saved Application State/$_legacyBundleId.savedState',
-      );
-      await _bestEffortDelete('$home/Library/Logs/$_legacyBundleId');
-      await _bestEffortDelete('$home/Library/HTTPStorages/$_legacyBundleId');
-      await _bestEffortDelete('$home/Library/WebKit/$_legacyBundleId');
-
-      LoggerService.log(
-        'BUNDLE_MIGRATION',
-        'Migration complete — legacy directories cleaned up',
-      );
-    } catch (e, st) {
-      // Do NOT delete the legacy directory on error. The user can
-      // retry by relaunching, or recover by manually copying the file.
-      LoggerService.logError('BUNDLE_MIGRATION', e, st);
-      rethrow;
+    // Ensure destination parent exists.
+    if (!newDir.existsSync()) {
+      await newDir.create(recursive: true);
     }
+
+    // SINGLE FILE COPY — no directory walk. Anything else under the
+    // legacy bundle dir is non-essential cache and gets deleted by the
+    // background cleanup task.
+    await legacySecureStore.copy(newSecureStore.path);
+
+    // Verify
+    if (!newSecureStore.existsSync()) {
+      throw StateError(
+        'Migration verify failed: $_secureStoreFileName missing at destination',
+      );
+    }
+    final destBytes = await newSecureStore.readAsBytes();
+    final destHash = sha256.convert(destBytes).toString();
+    if (destHash != sourceHash) {
+      throw StateError(
+        'Migration verify failed: SHA-256 mismatch '
+        '(expected $sourceHash, got $destHash)',
+      );
+    }
+
+    LoggerService.log(
+      'BUNDLE_MIGRATION',
+      'Verify OK — copied ${sourceBytes.length} bytes, '
+      'sha256=${sourceHash.substring(0, 16)}…',
+    );
+
+    // Only now is it safe to delete the legacy file. We do NOT delete
+    // the entire legacy directory here — that's a recursive operation
+    // that could be slow if the dir has accumulated MB of cache, and
+    // we already moved the only file we care about. Background cleanup
+    // takes care of the rest.
+    try {
+      await legacySecureStore.delete();
+    } catch (e) {
+      LoggerService.logWarning(
+        'BUNDLE_MIGRATION',
+        'Could not delete legacy secure_store.bin: $e',
+      );
+    }
+
+    _scheduleBackgroundCleanup(home);
   }
 
-  /// Recursively copy [src] into [dst]. [dst] must already exist.
-  /// Files are copied with `File.copy`, which preserves byte content
-  /// (we verify with SHA-256 afterwards anyway).
-  static Future<void> _copyDirectoryRecursive(
-    Directory src,
-    Directory dst,
-  ) async {
-    await for (final entity in src.list(recursive: false, followLinks: false)) {
-      final name = entity.uri.pathSegments.where((s) => s.isNotEmpty).last;
-      if (entity is File) {
-        final target = File('${dst.path}/$name');
-        await entity.copy(target.path);
-      } else if (entity is Directory) {
-        final targetDir = Directory('${dst.path}/$name');
-        if (!targetDir.existsSync()) {
-          await targetDir.create();
-        }
-        await _copyDirectoryRecursive(entity, targetDir);
+  /// Fire-and-forget cleanup of stale legacy paths. Runs in the
+  /// background after foreground migration finishes (or is skipped),
+  /// and CANNOT block app startup. Each path is wrapped independently
+  /// so a slow / failing delete on one doesn't affect the rest.
+  static void _scheduleBackgroundCleanup(String home) {
+    // Microtask so we don't tie up the current await chain. The
+    // microtask itself awaits but its completion is not waited on
+    // by anyone — runApp() is already running by then.
+    scheduleMicrotask(() async {
+      final paths = <String>[
+        '$home/Library/Application Support/$_legacyBundleId',
+        '$home/Library/Caches/$_legacyBundleId',
+        '$home/Library/Saved Application State/$_legacyBundleId.savedState',
+        '$home/Library/Logs/$_legacyBundleId',
+        '$home/Library/HTTPStorages/$_legacyBundleId',
+        '$home/Library/WebKit/$_legacyBundleId',
+      ];
+      for (final p in paths) {
+        await _bestEffortDelete(p);
       }
-      // Symlinks are skipped intentionally — none expected, and
-      // following them could escape the bundle dir.
-    }
+      LoggerService.logDebug(
+        'BUNDLE_MIGRATION',
+        'Background cleanup of legacy paths complete',
+      );
+    });
   }
 
   /// Delete [path] if it exists, swallowing any error. Used for
@@ -198,5 +230,4 @@ class MacOSBundleMigration {
       );
     }
   }
-
 }

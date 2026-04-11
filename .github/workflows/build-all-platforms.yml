@@ -559,12 +559,30 @@ jobs:
         run: |
           codesign --force --deep --sign - build/macos/Build/Products/Release/icd360s_mail_client.app
 
-      - name: Create macOS .dmg
+      - name: Create macOS .dmg (with /Applications symlink)
         run: |
+          # Stage the .app alongside an /Applications symlink so the
+          # mounted DMG follows the standard "drag-here" macOS install
+          # convention. Without this, double-clicking the app from the
+          # mounted DMG triggers App Translocation (Gatekeeper Path
+          # Randomization, macOS Sierra+) which runs the binary from a
+          # randomized read-only `/private/var/folders/...` path. That
+          # breaks relative paths and `getApplicationSupportDirectory()`
+          # in unpredictable ways and was responsible for the v2.28.0
+          # "moves up and down + Application Not Responding" hang on
+          # first launch (rdar/no-public-API).
+          #
+          # https://lapcatsoftware.com/articles/app-translocation.html
+          DMG_STAGING="$(mktemp -d)"
+          cp -R build/macos/Build/Products/Release/icd360s_mail_client.app "$DMG_STAGING/"
+          ln -s /Applications "$DMG_STAGING/Applications"
+
           hdiutil create -volname "ICD360S Mail Client" \
-            -srcfolder build/macos/Build/Products/Release/icd360s_mail_client.app \
+            -srcfolder "$DMG_STAGING" \
             -ov -format UDZO \
             build/icd360s-mail.dmg
+
+          rm -rf "$DMG_STAGING"
 
       - name: Upload iOS artifact
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
