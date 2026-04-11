@@ -226,7 +226,7 @@ jobs:
       # ─────────────────────────────────────────────────────────────
       - name: Cache appimagetool
         id: cache-appimagetool
-        uses: actions/cache@v4
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # v5.0.4 (Node 24)
         with:
           path: appimagetool
           key: appimagetool-x86_64-1.9.1-ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
@@ -1063,17 +1063,52 @@ jobs:
 
           echo "::notice::Release notes built from tag $TAG ($(wc -l < ${RUNNER_TEMP}/release_notes.md) lines)"
 
+      # Create GitHub Release using gh CLI directly (Node 24 native).
+      #
+      # Replaces softprops/action-gh-release@v2.6.1 which is still on
+      # node20 upstream and triggers a deprecation warning under the
+      # forced-Node24 runtime. gh CLI is pre-installed on all runners
+      # and natively uses Node 24, so no warning.
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1
-        with:
-          files: release/*
-          name: ${{ steps.notes.outputs.release_name }}
-          body_path: ${{ steps.notes.outputs.notes_path }}
-          # Tag message is the source of truth — no auto-prepended PR list
-          generate_release_notes: false
-          fail_on_unmatched_files: true
-          draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NOTES_PATH: ${{ steps.notes.outputs.notes_path }}
+          RELEASE_NAME: ${{ steps.notes.outputs.release_name }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+
+          # Determine prerelease from tag suffix (e.g. v2.24.0-beta.1)
+          PRERELEASE_FLAG=""
+          case "$TAG" in
+            *-*) PRERELEASE_FLAG="--prerelease" ;;
+          esac
+
+          # Collect all files to upload
+          FILES=()
+          if [ -d release ]; then
+            while IFS= read -r -d '' f; do
+              FILES+=("$f")
+            done < <(find release -type f -print0)
+          fi
+
+          if [ ${#FILES[@]} -eq 0 ]; then
+            echo "::error::No release artifacts found in release/"
+            exit 1
+          fi
+
+          echo "::notice::Uploading ${#FILES[@]} artifacts to release $TAG"
+
+          # Create the release. --notes-file reads the body from disk
+          # (avoids any heredoc / arbitrary-content gotcha on
+          # GITHUB_OUTPUT). --verify-tag ensures we don't accidentally
+          # create a release for a non-existent tag.
+          gh release create "$TAG" \
+            --title "$RELEASE_NAME" \
+            --notes-file "$NOTES_PATH" \
+            --verify-tag \
+            $PRERELEASE_FLAG \
+            "${FILES[@]}"
 
 
 
