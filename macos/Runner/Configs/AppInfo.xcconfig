@@ -1,14 +1,25 @@
 // Application-level settings for the Runner target.
 //
-// This may be replaced with something auto-generated from metadata (e.g., pubspec.yaml) in the
-// future. If not, the values below would default to using the project name when this becomes a
-// 'flutter create' template.
+// PRODUCT_NAME is intentionally kept as the legacy ASCII identifier
+// `icd360s_mail_client` because it is the on-disk .app filename, the
+// Mach-O binary name inside `Contents/MacOS/`, and is referenced from
+// `Runner.xcodeproj/project.pbxproj` (productReference, TEST_HOST,
+// build product file reference). Changing it would require updating
+// 5+ pbxproj entries and would also break the user's existing Dock
+// alias. The user-visible polished display name lives in
+// `macos/Runner/Info.plist` as explicit CFBundleName +
+// CFBundleDisplayName entries that override `$(PRODUCT_NAME)`.
 
-// The application's name. By default this is also the title of the Flutter window.
+// The application's name (filesystem .app + binary name).
 PRODUCT_NAME = icd360s_mail_client
 
-// The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.example.icd360sMailClient
+// The application's bundle identifier — used by macOS Gatekeeper,
+// Launch Services, code signature DR, and path_provider's
+// `getApplicationSupportDirectory()`. The runtime migration in
+// `lib/services/macos_bundle_migration.dart` handles the move from
+// the legacy `com.example.icd360sMailClient` directory to the new
+// reverse-DNS bundle on first launch after the v2.25.0 update.
+PRODUCT_BUNDLE_IDENTIFIER = de.icd360s.mailclient
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2026 com.example. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2026 ICD360S e.V. All rights reserved.

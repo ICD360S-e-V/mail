@@ -22,7 +22,7 @@ import 'version_baseline.dart';
 /// Auto-update service for checking and installing updates
 class UpdateService {
   static const String updateUrl = 'https://mail.icd360s.de/updates/version.json';
-  static const String currentVersion = '2.24.4';
+  static const String currentVersion = '2.25.0';
 
   // Progress callback for UI updates
   static Function(int downloaded, int total, String status)? onProgress;
@@ -76,13 +76,15 @@ class UpdateService {
   static const String _expectedApkCertSha256 =
       'ff9c4a92347693745a06a20cc15310e897145dad6b719cbe724eda093a6195b5';
 
-  /// Expected macOS bundle identifier — verified after DMG extraction.
-  /// Expected macOS bundle identifier — verified after DMG extraction.
+  /// Expected macOS bundle identifier — verified after DMG extraction
+  /// (when `_installMacOS` gains a codesign-verify step in a follow-up).
   /// Must match `PRODUCT_BUNDLE_IDENTIFIER` in
-  /// `macos/Runner/Configs/AppInfo.xcconfig`. Currently the default
-  /// Flutter template ID; will change if we ever rebrand the macOS
-  /// bundle to `de.icd360s.mail`.
-  static const String _expectedMacBundleId = 'com.example.icd360sMailClient';
+  /// `macos/Runner/Configs/AppInfo.xcconfig`. The legacy Flutter
+  /// template ID `com.example.icd360sMailClient` was replaced by this
+  /// reverse-DNS bundle in v2.25.0; one-time runtime migration of
+  /// `~/Library/Application Support/<bundle>/secure_store.bin` is
+  /// handled by `lib/services/macos_bundle_migration.dart`.
+  static const String _expectedMacBundleId = 'de.icd360s.mailclient';
 
   /// Expected Apple Developer Team ID — null until we have a cert.
   /// When set, enables codesign --verify + Team ID check on updates.

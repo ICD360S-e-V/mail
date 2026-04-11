@@ -13,6 +13,7 @@ import 'providers/email_provider.dart';
 import 'services/notification_service.dart';
 import 'services/logger_service.dart';
 import 'services/localization_service.dart';
+import 'services/macos_bundle_migration.dart';
 import 'services/platform_service.dart';
 import 'views/auth_wrapper.dart';
 
@@ -101,6 +102,14 @@ void main() async {
 
 Future<void> _appMain() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // One-time macOS bundle ID migration (com.example.icd360sMailClient
+  // → de.icd360s.mailclient, introduced in v2.25.0). MUST run before
+  // any code that calls `getApplicationSupportDirectory()` or any
+  // other path_provider entry point — otherwise the new bundle dir
+  // is read while empty and the user appears to be logged out.
+  // No-op on non-macOS platforms.
+  await MacOSBundleMigration.runIfNeeded();
 
   // Global Flutter error handler — replaces grey screen with visible error
   // In release mode, Flutter shows grey screen by default; this overrides it
