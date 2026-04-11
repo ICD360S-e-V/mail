@@ -2,7 +2,7 @@ name: icd360s_mail_client
 description: "ICD360S Mail Client - Modern email client with threat detection"
 publish_to: 'none'
 
-version: 2.27.0+53
+version: 2.27.1+54
 
 environment:
   sdk: ^3.6.1

@@ -71,6 +71,12 @@ class _MainWindowState extends State<MainWindow> {
     // Set up notification callback
     NotificationService.onShowNotification = _showNotificationBar;
 
+    // C2 (rolling auto-lock) — register a global hardware-keyboard
+    // handler so ANY key press resets the inactivity timer, even when
+    // no specific widget has focus. The handler returns false to let
+    // the event propagate normally (we don't consume keys).
+    HardwareKeyboard.instance.addHandler(_handleHardwareKeyEvent);
+
     // Initialize email provider
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final emailProvider = context.read<EmailProvider>();
@@ -87,22 +93,61 @@ class _MainWindowState extends State<MainWindow> {
     });
   }
 
-  /// Start auto-lock timer (15 minutes of inactivity)
+  /// Global hardware-keyboard hook for the rolling auto-lock timer.
+  /// Returning `false` means we DO NOT consume the event — Flutter's
+  /// normal focus / shortcut machinery still sees every key press.
+  bool _handleHardwareKeyEvent(KeyEvent event) {
+    if (event is KeyDownEvent && !_isLocked) {
+      _resetAutoLockTimer();
+    }
+    return false;
+  }
+
+  /// Auto-lock inactivity threshold. After this duration with NO user
+  /// activity (any pointer event, keyboard input, or explicit action
+  /// like compose/refresh), the app locks itself and demands the
+  /// master password to resume.
+  static const Duration _autoLockInactivity = Duration(minutes: 15);
+
+  /// Throttle for the rolling reset. We do NOT want to call
+  /// `Timer.cancel() + Timer()` on every pixel of mouse movement
+  /// (that would be ~thousands of calls per second on a moving cursor
+  /// and would burn CPU for nothing). Instead, the reset is rate-
+  /// limited: at most one reset every [_resetThrottle].
+  ///
+  /// Worst-case extra delay before lock = `_autoLockInactivity` +
+  /// `_resetThrottle`, which is acceptable for a 15-minute timeout.
+  static const Duration _resetThrottle = Duration(seconds: 30);
+  DateTime? _lastResetAt;
+
+  /// Start auto-lock timer (15 minutes of inactivity).
   void _startAutoLockTimer() {
     _autoLockTimer?.cancel();
-    _autoLockTimer = Timer(const Duration(minutes: 15), () {
+    _autoLockTimer = Timer(_autoLockInactivity, () {
       if (mounted && !_isLocked) {
-        LoggerService.log('SECURITY', 'Auto-lock triggered after 15 minutes of inactivity');
+        LoggerService.log('SECURITY',
+            'Auto-lock triggered after ${_autoLockInactivity.inMinutes} minutes of inactivity');
         _lockApp();
       }
     });
   }
 
-  /// Reset auto-lock timer on user activity
+  /// Reset the auto-lock timer in response to user activity (any
+  /// pointer event, keyboard event, or explicit action). This
+  /// implements C2 from the audit — true rolling inactivity timeout
+  /// rather than the old "fires N minutes after app start regardless
+  /// of activity" behavior.
+  ///
+  /// Throttled per [_resetThrottle] so a moving mouse doesn't burn CPU.
   void _resetAutoLockTimer() {
-    if (!_isLocked) {
-      _startAutoLockTimer();
+    if (_isLocked) return;
+    final now = DateTime.now();
+    if (_lastResetAt != null &&
+        now.difference(_lastResetAt!) < _resetThrottle) {
+      return;
     }
+    _lastResetAt = now;
+    _startAutoLockTimer();
   }
 
   /// Lock the application
@@ -340,6 +385,7 @@ class _MainWindowState extends State<MainWindow> {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleHardwareKeyEvent);
     _healthCheckTimer?.cancel();
     _performanceTimer?.cancel();
     _emailCheckTimer?.cancel();
@@ -520,7 +566,20 @@ class _MainWindowState extends State<MainWindow> {
       );
     }
 
-    return Shortcuts(
+    // C2 (rolling auto-lock) — wrap the entire unlocked UI with a
+    // translucent Listener so that any pointer event (tap, drag,
+    // hover, scroll wheel) on any descendant resets the inactivity
+    // timer. `HitTestBehavior.translucent` means the Listener is hit
+    // AND its descendants still receive the event normally — no
+    // gesture handling is consumed. Throttling lives inside
+    // [_resetAutoLockTimer] so a moving cursor doesn't burn CPU.
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => _resetAutoLockTimer(),
+      onPointerMove: (_) => _resetAutoLockTimer(),
+      onPointerHover: (_) => _resetAutoLockTimer(),
+      onPointerSignal: (_) => _resetAutoLockTimer(),
+      child: Shortcuts(
       shortcuts: {
         // Delete key - Delete selected email
         LogicalKeySet(LogicalKeyboardKey.delete): const DeleteEmailIntent(),
@@ -673,7 +732,8 @@ class _MainWindowState extends State<MainWindow> {
           ], // Close Column children
         ), // Close Column
       ), // Close Actions
-    ); // Close Shortcuts
+      ), // Close Shortcuts
+    ); // Close Listener (C2 rolling auto-lock)
   }
 
   /// Build notification bar
