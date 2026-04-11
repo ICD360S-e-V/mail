@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../utils/l10n_helper.dart';
 import '../models/models.dart';
 import '../providers/email_provider.dart';
+import '../services/device_registration_service.dart';
 import '../services/notification_service.dart';
 import '../services/logger_service.dart';
 import '../services/email_history_service.dart';
@@ -438,6 +439,33 @@ class _ComposeWindowState extends State<ComposeWindow> {
     if (totalRecipients > maxRecipients) {
       NotificationService.showErrorToast(l10n.errorTitle, l10n.errorTotalRecipientsExceeded(maxRecipients));
       return;
+    }
+
+    // ── mail-admin pre-flight: check sending quota ──
+    // Returns CanSendResult.unknown() on network error → fails OPEN
+    // (we never block on a server outage, the SMTP layer is the
+    // real authority).
+    final canSendResult = await DeviceRegistrationService.canSend(
+      username: _selectedAccount!.username,
+    );
+    if (!canSendResult.allowed) {
+      NotificationService.showErrorToast(
+        'Sending limit reached',
+        canSendResult.message ??
+            'You have reached your sending limit. Please try again later.',
+      );
+      LoggerService.logWarning('COMPOSE',
+          'Send blocked by mail-admin: ${canSendResult.message}');
+      return;
+    }
+    if (canSendResult.isLowQuota) {
+      // Soft warning, but allow the send
+      final hourLeft = canSendResult.remainingHour ?? -1;
+      final dayLeft = canSendResult.remainingDay ?? -1;
+      NotificationService.showInfoToast(
+        'Quota warning',
+        'Only $hourLeft sends left this hour, $dayLeft today.',
+      );
     }
 
     // Calculate total size for progress display
