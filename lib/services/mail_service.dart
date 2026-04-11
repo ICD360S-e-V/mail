@@ -78,6 +78,35 @@ class MailService {
     return email;
   }
 
+  /// Authenticate to an already-connected SMTP submission client,
+  /// preferring SASL EXTERNAL (cert-based, no password on the wire)
+  /// when the server advertises `AUTH EXTERNAL` in its EHLO response.
+  ///
+  /// Pairs with the v2.29.0 server-side migration to Dovecot
+  /// submission service (Faza A3.2.5). Same pattern as the IMAP
+  /// `_authenticate` helper above — pick mechanism by capability,
+  /// fall back to legacy LOGIN/PLAIN for any server that doesn't
+  /// advertise EXTERNAL (third-party SMTP, dev environments).
+  ///
+  /// Caller MUST have called `smtpClient.ehlo()` first so
+  /// `serverInfo.authMechanisms` is populated.
+  Future<void> _authenticateSmtp(
+      SmtpClient smtpClient, EmailAccount account) async {
+    if (smtpClient.serverInfo.supportsAuth(AuthMechanism.external)) {
+      LoggerService.log(
+          'SMTP', 'Auth: SASL EXTERNAL (cert-based, no password)');
+      await smtpClient.authenticateWithExternal();
+      return;
+    }
+    LoggerService.log(
+        'SMTP', 'Auth: PLAIN (server does not advertise AUTH EXTERNAL)');
+    await smtpClient.authenticate(
+      _getAuthUsername(account.username),
+      account.password ?? '',
+      AuthMechanism.plain,
+    );
+  }
+
   /// Authenticate to an already-connected IMAP client, preferring SASL
   /// EXTERNAL (cert-based, no password on the wire) when the server
   /// advertises it.
@@ -470,11 +499,7 @@ class MailService {
       // No need for STARTTLS - already using direct SSL/TLS
 
       LoggerService.log('SMTP', 'Authenticating as ${account.username}...');
-      await smtpClient.authenticate(
-        _getAuthUsername(account.username),
-        account.password ?? '',
-        AuthMechanism.plain,
-      );
+      await _authenticateSmtp(smtpClient, account);
       LoggerService.log('SMTP', '✓ Authentication successful');
 
       // Request DSN (Delivery Status Notification) if server supports it
@@ -580,11 +605,7 @@ class MailService {
       // No need for STARTTLS - already using direct SSL/TLS
 
       LoggerService.log('SMTP', 'Authenticating as ${account.username}...');
-      await smtpClient.authenticate(
-        _getAuthUsername(account.username),
-        account.password ?? '',
-        AuthMechanism.plain,
-      );
+      await _authenticateSmtp(smtpClient, account);
       LoggerService.log('SMTP', '✓ Authentication successful');
 
       LoggerService.log('SMTP', 'Sending message to ${recipients.length} recipient(s)...');
@@ -754,11 +775,7 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
 
       await smtpClient.ehlo();
 
-      await smtpClient.authenticate(
-        _getAuthUsername(account.username),
-        account.password ?? '',
-        AuthMechanism.plain,
-      );
+      await _authenticateSmtp(smtpClient, account);
       await smtpClient.sendMessage(mimeMessage);
 
       LoggerService.log('MDN', '✓ Read receipt sent to $receiptTo');

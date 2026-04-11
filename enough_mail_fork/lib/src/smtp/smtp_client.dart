@@ -88,7 +88,18 @@ enum AuthMechanism {
   /// OAUTH 2.0 authentication
   ///
   /// Compare https://tools.ietf.org/html/rfc6750.
-  xoauth2
+  xoauth2,
+
+  /// SASL EXTERNAL — RFC 4422 §6.
+  ///
+  /// User identity is taken from the mTLS client certificate that was
+  /// presented during the TLS handshake. No password is transmitted.
+  /// Used by ICD360S Mail Client v2.29.0+ against Dovecot submission
+  /// (Faza A3.2.5). Server-side requires
+  /// `auth_mechanisms = external` (or includes external) and
+  /// `auth_ssl_username_from_cert = yes` so the cert CN becomes the
+  /// SASL identity.
+  external,
 }
 
 /// Low-level SMTP library for Dart
@@ -204,6 +215,9 @@ class SmtpClient extends ClientBase {
           }
           if (line.message.contains('XOAUTH2')) {
             serverInfo.authMechanisms.add(AuthMechanism.xoauth2);
+          }
+          if (line.message.contains('EXTERNAL')) {
+            serverInfo.authMechanisms.add(AuthMechanism.external);
           }
         } else {
           serverInfo.capabilities.add(line.message);
@@ -421,6 +435,12 @@ class SmtpClient extends ClientBase {
   /// Signs in the user with the given [name] and [password].
   ///
   /// For `AuthMechanism.xoauth2` the [password] must be the OAuth token.
+  /// For `AuthMechanism.external` the [name] and [password] are
+  /// IGNORED — the user identity comes from the mTLS client certificate
+  /// presented during the TLS handshake. Prefer
+  /// [authenticateWithExternal] for that case to make the cert-only
+  /// nature explicit at the call site.
+  ///
   /// By default the [authMechanism] `AUTH PLAIN` is being used.
   Future<SmtpResponse> authenticate(
     String name,
@@ -444,9 +464,31 @@ class SmtpClient extends ClientBase {
       case AuthMechanism.xoauth2:
         command = SmtpAuthXOauth2Command(name, password);
         break;
+      case AuthMechanism.external:
+        command = SmtpAuthExternalCommand();
+        break;
     }
 
     return sendCommand(command);
+  }
+
+  /// Authenticates via SASL EXTERNAL (RFC 4422 §6) using the mTLS
+  /// client certificate that was presented during the TLS handshake.
+  /// No username and no password are transmitted — the server (Dovecot
+  /// submission service since A3.2.5) extracts the SASL identity from
+  /// the cert subject CN.
+  ///
+  /// The TLS connection MUST already have presented a client cert that
+  /// the server validated against its trusted CA, and the server MUST
+  /// advertise `AUTH EXTERNAL` in its EHLO response (check via
+  /// `serverInfo.supportsAuth(AuthMechanism.external)`).
+  ///
+  /// SMTP analogue of [ImapClient.authenticateWithExternal] introduced
+  /// in v2.26.0 — same wire pattern, same lessons (empty continuation
+  /// line, NOT literal `=`).
+  Future<SmtpResponse> authenticateWithExternal() {
+    requireTlsForAuth();
+    return sendCommand(SmtpAuthExternalCommand());
   }
 
   /// Signs the user out and terminates the connection
