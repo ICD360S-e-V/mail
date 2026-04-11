@@ -1,6 +1,8 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'dart:async';
 import '../models/models.dart';
 import '../services/services.dart';
+import '../services/device_registration_service.dart';
 import '../utils/pii_redactor.dart';
 
 /// Email provider for managing email accounts and messages
@@ -26,6 +28,13 @@ class EmailProvider with ChangeNotifier {
   String _performanceStats = 'CPU: 0% | RAM: 0 MB';
   bool _disposed = false;
 
+  // Mail-admin device registration state
+  /// Set to the username when the backend rejects with `device_limit_reached`.
+  /// UI shows a blocking dialog when this is non-null.
+  String? _deviceLimitReachedFor;
+  /// Heartbeat timer for the active account.
+  Timer? _heartbeatTimer;
+
   // Getters
   List<EmailAccount> get accounts => _accounts;
   List<Email> get emails => _emails;
@@ -36,6 +45,11 @@ class EmailProvider with ChangeNotifier {
   ServerHealthStatus? get serverHealth => _serverHealth;
   ConnectionStatus? get connectionStatus => _connectionStatus;
   String get performanceStats => _performanceStats;
+  String? get deviceLimitReachedFor => _deviceLimitReachedFor;
+  void clearDeviceLimitFlag() {
+    _deviceLimitReachedFor = null;
+    if (!_disposed) notifyListeners();
+  }
 
   /// Initialize provider - load accounts from secure storage
   Future<void> initialize() async {
@@ -240,6 +254,11 @@ class EmailProvider with ChangeNotifier {
       LoggerService.log('PROVIDER', '✓ Loaded ${folders.length} folders for ${account.username}');
       LoggerService.log('PROVIDER', 'Final account.folders: ${account.folders}');
       LoggerService.log('PROVIDER', 'Final account.folderCounts: ${account.folderCounts}');
+
+      // Register device with mail-admin backend (1-device-per-account
+      // enforcement, active session tracking, etc). Fire-and-forget —
+      // backend errors are logged but never block the UI.
+      _registerDeviceForAccount(account);
     } on AuthenticationException catch (authEx) {
       // Authentication failed - wrong username or password
       account.connectionStatus = AccountConnectionStatus.authError;
@@ -286,6 +305,68 @@ class EmailProvider with ChangeNotifier {
     return sorted;
   }
 
+  // ── Mail-admin backend integration ──────────────────────────
+
+  /// Track device registrations we've already done this session
+  /// (per username) to avoid hammering the endpoint on every reconnect.
+  final Set<String> _devicesRegisteredThisSession = {};
+
+  /// Fire-and-forget device registration. Catches all errors so they
+  /// never block the connection flow.
+  Future<void> _registerDeviceForAccount(EmailAccount account) async {
+    final username = account.username;
+    final password = account.password;
+    if (password == null || password.isEmpty) return;
+
+    // Skip if we already registered in this session — heartbeat will
+    // keep the last_seen fresh. We re-register on app restart.
+    if (_devicesRegisteredThisSession.contains(username)) {
+      // Just bump heartbeat
+      unawaited(DeviceRegistrationService.sendHeartbeat(username: username));
+      return;
+    }
+
+    try {
+      final result = await DeviceRegistrationService.registerDevice(
+        username: username,
+        password: password,
+      );
+
+      if (result.success) {
+        _devicesRegisteredThisSession.add(username);
+        // Start heartbeat timer if not already running
+        _ensureHeartbeatTimer();
+      } else if (result.isDeviceLimitReached) {
+        _deviceLimitReachedFor = username;
+        if (!_disposed) notifyListeners();
+        LoggerService.logWarning('PROVIDER',
+            'Device limit reached for $username — UI should show '
+            'restriction dialog');
+      }
+      // Other failures (network, unauthorized, etc.) are silent —
+      // they don't affect mail delivery via IMAP/SMTP, which uses
+      // its own credentials path.
+    } catch (ex) {
+      LoggerService.logWarning('PROVIDER',
+          'Device registration error (non-fatal): $ex');
+    }
+  }
+
+  /// Start the 5-minute heartbeat timer if not already running.
+  void _ensureHeartbeatTimer() {
+    if (_heartbeatTimer != null) return;
+    _heartbeatTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      if (_disposed) return;
+      // Send heartbeat for every account that has been registered
+      // this session.
+      for (final username in _devicesRegisteredThisSession) {
+        unawaited(DeviceRegistrationService.sendHeartbeat(username: username));
+      }
+    });
+    LoggerService.log('PROVIDER',
+        'Started device heartbeat timer (every 5 min)');
+  }
+
   /// Select account and folder
   Future<void> selectFolder(EmailAccount account, String folder) async {
     LoggerService.log('UI', 'User selected: ${account.username}/$folder');
@@ -299,6 +380,8 @@ class EmailProvider with ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
     super.dispose();
   }
 
