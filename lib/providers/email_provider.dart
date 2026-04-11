@@ -255,6 +255,9 @@ class EmailProvider with ChangeNotifier {
       LoggerService.log('PROVIDER', 'Final account.folders: ${account.folders}');
       LoggerService.log('PROVIDER', 'Final account.folderCounts: ${account.folderCounts}');
 
+      // Reset the consecutive auth-fail counter on successful auth.
+      _consecutiveAuthFailures.remove(account.username);
+
       // Register device with mail-admin backend (1-device-per-account
       // enforcement, active session tracking, etc). Fire-and-forget —
       // backend errors are logged but never block the UI.
@@ -271,6 +274,14 @@ class EmailProvider with ChangeNotifier {
       } else {
         LoggerService.log('AUTH_ERROR', '   → Likely cause: Wrong username or password');
       }
+
+      // ── Locked-out detection ──
+      // If IMAP auth fails repeatedly (>= 3 consecutive failures) for an
+      // account whose password we know is correct (already worked once
+      // this session OR was just set), it's likely the admin enabled
+      // single-device mode on another device. Probe the backend to
+      // confirm and trigger the same dialog as direct device_limit_reached.
+      _checkForLockedOut(account);
     } catch (ex, stackTrace) {
       // Other errors (network, etc.)
       account.connectionStatus = AccountConnectionStatus.networkError;
@@ -310,6 +321,80 @@ class EmailProvider with ChangeNotifier {
   /// Track device registrations we've already done this session
   /// (per username) to avoid hammering the endpoint on every reconnect.
   final Set<String> _devicesRegisteredThisSession = {};
+
+  /// Consecutive IMAP authentication failures per username. Reset on
+  /// successful auth. Used by [_checkForLockedOut] to detect when an
+  /// admin has activated single-device mode on another device.
+  final Map<String, int> _consecutiveAuthFailures = {};
+
+  /// Threshold for locked-out detection: after this many consecutive
+  /// IMAP auth failures, probe the mail-admin backend to confirm
+  /// single-device lockout vs. plain wrong-password.
+  static const int _lockoutDetectionThreshold = 3;
+
+  /// Detect if repeated IMAP auth failures are due to single-device
+  /// mode being enabled on another device. Probes the mail-admin
+  /// backend with the user's known-good password. If the backend
+  /// returns `device_limit_reached`, set the same flag that direct
+  /// register-device rejection sets, so the UI shows the same dialog.
+  Future<void> _checkForLockedOut(EmailAccount account) async {
+    final username = account.username;
+    final password = account.password;
+    if (password == null || password.isEmpty) return;
+
+    // Increment consecutive failure counter
+    final count = (_consecutiveAuthFailures[username] ?? 0) + 1;
+    _consecutiveAuthFailures[username] = count;
+
+    if (count < _lockoutDetectionThreshold) {
+      LoggerService.log('AUTH_ERROR',
+          'Auth failure $count/$_lockoutDetectionThreshold for $username '
+          '(below lockout-detection threshold)');
+      return;
+    }
+
+    // Threshold reached — only probe ONCE (don't re-probe on every
+    // subsequent failure). Reset to a sentinel that's >= threshold
+    // but won't trigger again.
+    if (count > _lockoutDetectionThreshold) return;
+
+    LoggerService.log('AUTH_ERROR',
+        'Auth failure threshold reached for $username '
+        '— probing mail-admin for single-device lockout');
+
+    try {
+      final result = await DeviceRegistrationService.registerDevice(
+        username: username,
+        password: password,
+      );
+
+      if (result.isDeviceLimitReached) {
+        LoggerService.logWarning('AUTH_ERROR',
+            'Confirmed single-device lockout for $username '
+            '— showing restriction dialog');
+        _deviceLimitReachedFor = username;
+        if (!_disposed) notifyListeners();
+      } else if (result.success) {
+        // Strange — register succeeded but IMAP didn't. Backend probably
+        // doesn't share auth state with Dovecot in real-time. Reset
+        // counter so the user can retry.
+        LoggerService.log('AUTH_ERROR',
+            'Backend register OK for $username but IMAP failed; '
+            'resetting failure counter (race condition?)');
+        _consecutiveAuthFailures.remove(username);
+      } else {
+        // result.error == "unauthorized" → password really is wrong.
+        // Don't show the lockout dialog; let the existing wrong-password
+        // UX handle it.
+        LoggerService.log('AUTH_ERROR',
+            'Backend confirms wrong password for $username '
+            '(error: ${result.error}) — not a lockout');
+      }
+    } catch (ex) {
+      LoggerService.logWarning('AUTH_ERROR',
+          'Lockout probe failed (network?): $ex');
+    }
+  }
 
   /// Fire-and-forget device registration. Catches all errors so they
   /// never block the connection flow.
