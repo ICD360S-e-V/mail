@@ -4,8 +4,8 @@ import 'package:http/io_client.dart';
 import 'certificate_expiry_monitor.dart';
 import 'le_issuer_check.dart';
 import 'logger_service.dart';
+import 'master_vault.dart';
 import 'pinned_security_context.dart';
-import 'portable_secure_storage.dart';
 
 /// Service for downloading per-user certificates from server
 /// Eliminates hardcoded certificates vulnerability
@@ -29,10 +29,20 @@ class CertificateService {
   static String? _caCert;
   static String? _currentUsername;
 
-  // PortableSecureStorage uses native storage on iOS/Android/Windows/
-  // Linux and AES-GCM file backend on macOS (Keychain unavailable on
-  // ad-hoc signed builds).
-  static final _secureStorage = PortableSecureStorage.instance;
+  // Storage backend for cert/key/CA: MasterVault on macOS (B5,
+  // v2.30.0+) which is locked behind the user's master password via
+  // Argon2id+HKDF+AES-GCM. On iOS/Android/Windows/Linux MasterVault
+  // is a thin pass-through to PortableSecureStorage which itself
+  // delegates to flutter_secure_storage (Keychain / Keystore /
+  // DPAPI / libsecret) — already password/biometric-protected at
+  // the OS level.
+  //
+  // The legacy `secure_store.bin` migration is handled inside
+  // MasterVault.unlock() — the first successful unlock after upgrade
+  // moves the cert/key/CA out of PortableSecureStorage into the
+  // master-pwd-protected vault, then deletes them from the legacy
+  // store.
+  static final _secureStorage = MasterVault.instance;
   static const String _kStorageClientCert = 'icd360s_mtls_client_cert';
   static const String _kStorageClientKey = 'icd360s_mtls_client_key';
   static const String _kStorageCaCert = 'icd360s_mtls_ca_cert';

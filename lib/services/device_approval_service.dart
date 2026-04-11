@@ -5,8 +5,8 @@ import 'dart:io';
 import 'package:http/io_client.dart';
 
 import 'logger_service.dart';
+import 'master_vault.dart';
 import 'pinned_security_context.dart';
-import 'portable_secure_storage.dart';
 
 /// Status returned by the polling endpoint.
 enum ApprovalStatus {
@@ -375,17 +375,20 @@ class DeviceApprovalService {
     }
   }
 
-  /// Persist the [bundle] into [PortableSecureStorage] under the same
-  /// keys that [CertificateService] uses. After this call, the rest of
-  /// the app sees the cert as if it had been downloaded via the legacy
-  /// password-based flow.
+  /// Persist the [bundle] into [MasterVault] (B5, v2.30.0+) under the
+  /// same keys that [CertificateService] reads from. The vault must
+  /// already be unlocked — typically the case because Faza 3
+  /// add-account is invoked from the main UI which is gated by the
+  /// master password dialog (which unlocks the vault as a side effect).
+  ///
+  /// On non-macOS this is a thin pass-through to PortableSecureStorage.
   static Future<void> storeBundle(CertBundle bundle) async {
-    final storage = PortableSecureStorage.instance;
+    final storage = MasterVault.instance;
     await storage.write(key: _kStorageClientCert, value: bundle.clientCert);
     await storage.write(key: _kStorageClientKey, value: bundle.clientKey);
     await storage.write(key: _kStorageCaCert, value: bundle.caCert);
     await storage.write(key: _kStorageUsername, value: bundle.username);
     LoggerService.log('APPROVAL',
-        'Cert bundle persisted to secure storage for ${bundle.username}');
+        'Cert bundle persisted to MasterVault for ${bundle.username}');
   }
 }

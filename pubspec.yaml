@@ -2,7 +2,7 @@ name: icd360s_mail_client
 description: "ICD360S Mail Client - Modern email client with threat detection"
 publish_to: 'none'
 
-version: 2.29.1+59
+version: 2.30.0+60
 
 environment:
   sdk: ^3.6.1
@@ -27,6 +27,12 @@ dependencies:
   intl: 0.20.2  # Date formatting (pinned by Flutter SDK)
   crypto: ^3.0.0  # SHA-256 hashing for master password
   pointycastle: ^4.0.0  # AES-256-GCM for encrypted credential fallback storage (M4)
+  # B5 (v2.30.0): Argon2id + HKDF + AES-GCM for the password-protected
+  # MasterVault (lib/services/master_vault.dart). Verified publisher
+  # dint.dev, Apache-2.0, 306 likes, native acceleration via
+  # cryptography_flutter on iOS/Android/macOS (up to 100x faster).
+  cryptography: ^2.7.0
+  cryptography_flutter: ^2.3.2
   path: ^1.9.0  # Path manipulation
   flutter_secure_storage: ^10.0.0  # Secure password storage (Keychain/Credential Manager)
   http: ^1.2.0  # HTTP client for certificate download API

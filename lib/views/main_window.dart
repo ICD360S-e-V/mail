@@ -15,6 +15,7 @@ import '../services/logger_service.dart';
 import '../services/settings_service.dart';
 import '../services/account_service.dart';
 import '../services/master_password_service.dart';
+import '../services/master_vault.dart';
 import '../services/certificate_service.dart';
 import '../services/trash_tracker_service.dart';
 import '../services/connection_monitor.dart';
@@ -166,6 +167,12 @@ class _MainWindowState extends State<MainWindow> {
     // Also clear in-memory mTLS certificates so a memory dump while locked
     // cannot recover them. They are re-downloaded on unlock.
     CertificateService.clearCertificates();
+    // SECURITY (B5, v2.30.0+): zero the MasterVault data_key + KEK +
+    // cleartext cache so the master-pwd-protected vault becomes
+    // indecipherable in memory dumps. Vault file on disk remains
+    // encrypted under the user's master password and only the next
+    // verifyMasterPassword() call can re-derive the keys.
+    MasterVault.instance.lock();
 
     setState(() => _isLocked = true);
     LoggerService.log('SECURITY', 'Application locked');

@@ -13,6 +13,7 @@ import 'account_service.dart';
 import 'aes_gcm_helpers.dart';
 import 'certificate_service.dart';
 import 'logger_service.dart';
+import 'master_vault.dart';
 import 'portable_secure_storage.dart';
 import 'platform_service.dart';
 
@@ -470,6 +471,21 @@ class MasterPasswordService {
         // encrypt/decrypt fallback storage. The key is held in memory only
         // until lockSession() is called (auto-lock or explicit logout).
         await AccountService.unlockSession(password);
+        // SECURITY (B5, v2.30.0): unlock the master vault. This derives
+        // the per-vault KEK from the master password + IOPlatformUUID
+        // via Argon2id+HKDF, decrypts the on-disk vault file, and runs
+        // the one-time migration of legacy mTLS cert/key from
+        // PortableSecureStorage to the password-locked MasterVault.
+        // MUST run BEFORE CertificateService.restoreFromSecureStorage()
+        // so that the cert is in the new vault before the cache pull.
+        try {
+          await MasterVault.instance.unlock(password);
+        } catch (vaultEx, vaultSt) {
+          LoggerService.logError('AUTH', vaultEx, vaultSt);
+          // Don't fail the password verification on vault unlock errors
+          // — the user might have just upgraded and have a corrupted
+          // vault. The CertificateService fallback path will handle it.
+        }
         // SECURITY (M7): repopulate the in-memory mTLS cert cache
         // from platform secure storage. This narrows the heap-dump
         // window for the client private key from "the entire login
