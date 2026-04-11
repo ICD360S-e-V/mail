@@ -2,10 +2,13 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 
+import 'certificate_service.dart';
 import 'le_issuer_check.dart';
 import 'logger_service.dart';
+import 'mtls_service.dart';
 import 'pinned_security_context.dart';
 import 'platform_service.dart';
 import 'portable_secure_storage.dart';
@@ -174,20 +177,44 @@ class DeviceRegistrationService {
   ///
   /// Fire-and-forget: errors are logged but never surfaced to the user.
   /// Returns true on success.
+  ///
+  /// In v2.28.0+ this prefers the mTLS path: if a per-user client cert
+  /// is loaded into [CertificateService], the request is sent via
+  /// [MtlsService.createMtlsHttpClient] (cert presented at TLS
+  /// handshake) and the body carries `timestamp` + `nonce` for replay
+  /// protection. The server uses the cert CN as the authoritative
+  /// username and ignores any username field in the body.
+  ///
+  /// If the cert is not yet available (e.g., before login completes),
+  /// falls back to the legacy v2.27.x path with `username` in the body
+  /// and no replay protection. The server-side endpoint accepts both
+  /// during the v2.27 → v2.28 transition.
   static Future<bool> sendHeartbeat({required String username}) async {
     IOClient? client;
     HttpClient? ioClient;
     try {
       final deviceId = await getOrCreateDeviceId();
       final cleanUsername = username.replaceAll('@icd360s.de', '');
+      final useMtls = CertificateService.hasCertificates &&
+          CertificateService.currentUsername == username;
 
       final payload = <String, dynamic>{
-        'username': cleanUsername,
         'device_id': deviceId,
-        'last_seen': DateTime.now().toUtc().toIso8601String(),
       };
+      if (useMtls) {
+        // NEW PATH: server takes username from cert CN, body has freshness
+        payload['timestamp'] = DateTime.now().toUtc().toIso8601String();
+        payload['nonce'] = _randomHex16();
+      } else {
+        // LEGACY PATH: server accepts username from body
+        payload['username'] = cleanUsername;
+        payload['last_seen'] = DateTime.now().toUtc().toIso8601String();
+      }
 
-      ioClient = PinnedSecurityContext.createHttpClient()
+      if (useMtls) {
+        ioClient = MtlsService.createMtlsHttpClient();
+      }
+      ioClient ??= PinnedSecurityContext.createHttpClient()
         ..connectionTimeout = const Duration(seconds: 5)
         ..idleTimeout = const Duration(seconds: 1);
       ioClient.badCertificateCallback = _validateCertificate;
@@ -202,10 +229,13 @@ class DeviceRegistrationService {
           .timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200) {
+        if (useMtls) {
+          LoggerService.logDebug('DEVICE_REG', 'Heartbeat OK (mTLS)');
+        }
         return true;
       }
       LoggerService.logWarning('DEVICE_REG',
-          'Heartbeat failed: HTTP ${response.statusCode}');
+          'Heartbeat failed: HTTP ${response.statusCode} (mtls=$useMtls)');
       return false;
     } catch (ex) {
       LoggerService.logWarning('DEVICE_REG', 'Heartbeat error: $ex');
@@ -218,6 +248,16 @@ class DeviceRegistrationService {
         ioClient?.close(force: true);
       } catch (_) {}
     }
+  }
+
+  /// Generate 16 bytes of cryptographically secure random hex (32 chars).
+  /// Used as the nonce for replay protection on cert-authenticated API
+  /// calls (heartbeat, can-send) in v2.28.0+.
+  static String _randomHex16() {
+    final r = Random.secure();
+    return List<int>.generate(16, (_) => r.nextInt(256))
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join();
   }
 
   /// Check whether the given user is allowed to send an email right now.
@@ -235,22 +275,43 @@ class DeviceRegistrationService {
     HttpClient? ioClient;
     try {
       final cleanUsername = username.replaceAll('@icd360s.de', '');
-      final uri = Uri.parse(_canSendEndpoint).replace(queryParameters: {
-        'username': cleanUsername,
-      });
+      final useMtls = CertificateService.hasCertificates &&
+          CertificateService.currentUsername == username;
 
-      ioClient = PinnedSecurityContext.createHttpClient()
+      // NEW PATH (v2.28.0+, B1 from audit): POST + mTLS + freshness.
+      // LEGACY PATH (v2.27.x): GET ?username=
+      http.Response response;
+      if (useMtls) {
+        ioClient = MtlsService.createMtlsHttpClient();
+      }
+      ioClient ??= PinnedSecurityContext.createHttpClient()
         ..connectionTimeout = const Duration(seconds: 5)
         ..idleTimeout = const Duration(seconds: 1);
       ioClient.badCertificateCallback = _validateCertificate;
       client = IOClient(ioClient);
 
-      final response =
-          await client.get(uri).timeout(const Duration(seconds: 8));
+      if (useMtls) {
+        final body = <String, dynamic>{
+          'timestamp': DateTime.now().toUtc().toIso8601String(),
+          'nonce': _randomHex16(),
+        };
+        response = await client
+            .post(
+              Uri.parse(_canSendEndpoint),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode(body),
+            )
+            .timeout(const Duration(seconds: 8));
+      } else {
+        final uri = Uri.parse(_canSendEndpoint).replace(queryParameters: {
+          'username': cleanUsername,
+        });
+        response = await client.get(uri).timeout(const Duration(seconds: 8));
+      }
 
       if (response.statusCode != 200) {
         LoggerService.logWarning('DEVICE_REG',
-            'can-send check failed: HTTP ${response.statusCode} (failing open)');
+            'can-send check failed: HTTP ${response.statusCode} (mtls=$useMtls, failing open)');
         return const CanSendResult.unknown();
       }
 

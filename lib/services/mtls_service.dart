@@ -65,6 +65,35 @@ class MtlsService {
     }
   }
 
+  /// Returns an [HttpClient] configured for mTLS — both server cert
+  /// pinning (via the SecurityContext from [getSecurityContext]) AND
+  /// client cert presentation. Used by /api/client/* endpoints in
+  /// v2.28.0+ (B1 from audit) so that nginx can validate the client
+  /// against the ICD360S Mail CA chain and extract the username from
+  /// the cert CN, eliminating the need for `device_id` as a bearer.
+  ///
+  /// Returns null if certificates are not yet available (call
+  /// [CertificateService.downloadCertificateForUser] first).
+  static HttpClient? createMtlsHttpClient() {
+    if (!CertificateService.hasCertificates) {
+      return null;
+    }
+    try {
+      final context = getSecurityContext();
+      final client = HttpClient(context: context)
+        ..connectionTimeout = const Duration(seconds: 10)
+        ..idleTimeout = const Duration(seconds: 5);
+      // For server cert validation: defer to onBadCertificate which
+      // already implements the LE issuer + hostname check.
+      client.badCertificateCallback =
+          (cert, host, port) => onBadCertificate(cert);
+      return client;
+    } catch (ex, st) {
+      LoggerService.logError('MTLS', ex, st);
+      return null;
+    }
+  }
+
   /// Callback for server certificate validation.
   ///
   /// SECURITY: This callback fires when Dart's built-in PKIX chain
