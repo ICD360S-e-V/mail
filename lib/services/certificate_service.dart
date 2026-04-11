@@ -50,11 +50,31 @@ class CertificateService {
   // the second cert overwrote the first, and the first account
   // could never restore its cert. Migration is handled at the
   // start of restoreFromSecureStorage().
+  //
+  // v2.30.3 hotfix: the original v2.30.2 layout used `::$username`
+  // directly, with `:` and `@` characters (e.g.
+  // `icd360s_mtls_client_cert::in@icd360s.de`). This caused
+  // flutter_secure_storage to fail silently on iOS Keychain (the
+  // Faza 3 cert install dialog hung forever on "Approved!
+  // Downloading…"). The new layout sanitizes the username to only
+  // [a-zA-Z0-9._-]. A best-effort migration in
+  // [_migrateUnsafeUserKeys] copies any successfully-stored v2.30.2
+  // entries into the safe format.
+  static String _safeUserSuffix(String username) =>
+      username.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
   static String _kStorageClientCertFor(String username) =>
-      'icd360s_mtls_client_cert::$username';
+      'icd360s_mtls_client_cert_${_safeUserSuffix(username)}';
   static String _kStorageClientKeyFor(String username) =>
-      'icd360s_mtls_client_key::$username';
+      'icd360s_mtls_client_key_${_safeUserSuffix(username)}';
   static String _kStorageCaCertFor(String username) =>
+      'icd360s_mtls_ca_cert_${_safeUserSuffix(username)}';
+
+  // v2.30.2 unsafe key format (kept for one-time migration only).
+  static String _unsafeKStorageClientCertFor(String username) =>
+      'icd360s_mtls_client_cert::$username';
+  static String _unsafeKStorageClientKeyFor(String username) =>
+      'icd360s_mtls_client_key::$username';
+  static String _unsafeKStorageCaCertFor(String username) =>
       'icd360s_mtls_ca_cert::$username';
 
   // Legacy global keys (v2.27.0 — v2.30.1) — used only for one-time
@@ -335,6 +355,36 @@ class CertificateService {
         'mTLS cert cache cleared from memory (lock)');
   }
 
+  /// v2.30.3 hotfix migration: copy any successfully-stored v2.30.2
+  /// `::user@host` entries into the new sanitized key format. Best
+  /// effort — silently skips if the v2.30.2 keys don't exist (which is
+  /// the common case, since the v2.30.2 write usually FAILED on iOS
+  /// and never persisted anything). Idempotent.
+  static Future<void> _migrateUnsafeUserKeys(String username) async {
+    try {
+      final cert = await _secureStorage
+          .read(key: _unsafeKStorageClientCertFor(username));
+      final key = await _secureStorage
+          .read(key: _unsafeKStorageClientKeyFor(username));
+      final ca = await _secureStorage
+          .read(key: _unsafeKStorageCaCertFor(username));
+      if (cert == null || key == null || ca == null) return;
+      await _secureStorage.write(
+          key: _kStorageClientCertFor(username), value: cert);
+      await _secureStorage.write(
+          key: _kStorageClientKeyFor(username), value: key);
+      await _secureStorage.write(
+          key: _kStorageCaCertFor(username), value: ca);
+      await _secureStorage.delete(key: _unsafeKStorageClientCertFor(username));
+      await _secureStorage.delete(key: _unsafeKStorageClientKeyFor(username));
+      await _secureStorage.delete(key: _unsafeKStorageCaCertFor(username));
+      LoggerService.log('CERT-DOWNLOAD',
+          'Migrated v2.30.2 unsafe per-user keys → safe format for $username');
+    } catch (ex, st) {
+      LoggerService.logError('CERT-DOWNLOAD', ex, st);
+    }
+  }
+
   /// One-time migration: if the legacy global keys still hold a cert
   /// (v2.27.0 — v2.30.1 layout), copy it under the per-username keys
   /// for the legacy username and delete the global entries. Idempotent.
@@ -396,6 +446,8 @@ class CertificateService {
       // Run legacy migration first so a freshly upgraded user with the
       // old global keys can still be restored under the new layout.
       await _migrateLegacyGlobalKeys();
+      // v2.30.3: also migrate from v2.30.2 unsafe `::user@host` keys.
+      await _migrateUnsafeUserKeys(username);
 
       final cert = await _secureStorage.read(key: _kStorageClientCertFor(username));
       final key = await _secureStorage.read(key: _kStorageClientKeyFor(username));

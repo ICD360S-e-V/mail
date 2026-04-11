@@ -139,19 +139,41 @@ class _AwaitingApprovalDialogState extends State<AwaitingApprovalDialog> {
       _isDownloadingCert = true;
       _statusText = 'Approved! Downloading certificate…';
     });
-    final bundle = await DeviceApprovalService.downloadCert(
-      requestId: widget.requestId,
-      oneTimeToken: token,
-    );
-    if (bundle == null) {
-      LoggerService.logWarning('APPROVAL_UI', 'Cert download failed');
+    // v2.30.3: top-level try/catch around the download+store path. In
+    // v2.30.2 a PlatformException from flutter_secure_storage during
+    // CertificateService.storeBundle (caused by `:` and `@` chars in
+    // the per-username key) propagated up through the stream.listen
+    // callback (which has no onError) and was swallowed silently —
+    // leaving this dialog stuck on "Approved! Downloading…" forever.
+    // Catching here makes any future failure visible to the user
+    // AND closes the dialog so they can retry.
+    try {
+      final bundle = await DeviceApprovalService.downloadCert(
+        requestId: widget.requestId,
+        oneTimeToken: token,
+      );
+      if (bundle == null) {
+        LoggerService.logWarning('APPROVAL_UI', 'Cert download failed');
+        _finish(AwaitingApprovalResult.certDownloadFailed);
+        return;
+      }
+      await DeviceApprovalService.storeBundle(bundle);
+      LoggerService.log('APPROVAL_UI',
+          'Cert stored for ${bundle.username} — closing dialog');
+      _finish(AwaitingApprovalResult.approvedAndStored);
+    } catch (ex, st) {
+      LoggerService.logError('APPROVAL_UI',
+          'Cert install path threw — closing with error', st);
+      LoggerService.logError('APPROVAL_UI', ex, st);
+      if (mounted && !_terminated) {
+        setState(() {
+          _statusText = 'Cert install failed:\n$ex';
+        });
+      }
+      // Give the user 1.5s to read the error before closing.
+      await Future.delayed(const Duration(milliseconds: 1500));
       _finish(AwaitingApprovalResult.certDownloadFailed);
-      return;
     }
-    await DeviceApprovalService.storeBundle(bundle);
-    LoggerService.log('APPROVAL_UI',
-        'Cert stored for ${bundle.username} — closing dialog');
-    _finish(AwaitingApprovalResult.approvedAndStored);
   }
 
   void _finish(AwaitingApprovalResult result) {
