@@ -396,6 +396,12 @@ class EmailProvider with ChangeNotifier {
     }
   }
 
+  /// Track register-device attempts that failed so we don't retry on
+  /// every folder fetch. Holds the failure timestamp; we retry after
+  /// _registerRetryCooldown elapses (next folder fetch after that).
+  final Map<String, DateTime> _registerFailedAt = {};
+  static const Duration _registerRetryCooldown = Duration(minutes: 15);
+
   /// Fire-and-forget device registration. Catches all errors so they
   /// never block the connection flow.
   Future<void> _registerDeviceForAccount(EmailAccount account) async {
@@ -411,6 +417,16 @@ class EmailProvider with ChangeNotifier {
       return;
     }
 
+    // Skip if we recently failed to register and the cooldown hasn't
+    // expired. Without this, EVERY folder fetch (which happens on every
+    // email check cycle) would retry the failed register endpoint and
+    // spam warnings into the log.
+    final lastFailure = _registerFailedAt[username];
+    if (lastFailure != null &&
+        DateTime.now().difference(lastFailure) < _registerRetryCooldown) {
+      return;
+    }
+
     try {
       final result = await DeviceRegistrationService.registerDevice(
         username: username,
@@ -419,21 +435,28 @@ class EmailProvider with ChangeNotifier {
 
       if (result.success) {
         _devicesRegisteredThisSession.add(username);
+        _registerFailedAt.remove(username);
         // Start heartbeat timer if not already running
         _ensureHeartbeatTimer();
       } else if (result.isDeviceLimitReached) {
         _deviceLimitReachedFor = username;
+        // Mark as "tried" so we don't keep retrying — the user has
+        // to acknowledge the dialog and retry manually.
+        _registerFailedAt[username] = DateTime.now();
         if (!_disposed) notifyListeners();
         LoggerService.logWarning('PROVIDER',
             'Device limit reached for $username — UI should show '
             'restriction dialog');
+      } else {
+        // Any other failure (unauthorized, network, http_5xx, etc.)
+        // — record cooldown so we don't spam the endpoint on every
+        // folder fetch. Will retry after _registerRetryCooldown.
+        _registerFailedAt[username] = DateTime.now();
       }
-      // Other failures (network, unauthorized, etc.) are silent —
-      // they don't affect mail delivery via IMAP/SMTP, which uses
-      // its own credentials path.
     } catch (ex) {
       LoggerService.logWarning('PROVIDER',
           'Device registration error (non-fatal): $ex');
+      _registerFailedAt[username] = DateTime.now();
     }
   }
 
