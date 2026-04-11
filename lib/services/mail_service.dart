@@ -1174,10 +1174,26 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
       );
       await _authenticate(client, account);
 
-      // List all mailboxes
+      // List all mailboxes.
+      //
+      // v2.30.7: filter out mailboxes flagged \NoSelect at the IMAP
+      // LIST level. Dovecot (and Cyrus, others) advertise namespace
+      // placeholders and legacy/virtual mailboxes in LIST that
+      // cannot actually be SELECT-ed — we observed an i***@ account
+      // where Dovecot returned "Spam" in LIST but SELECT failed
+      // with "Mailbox doesn't exist". Trusting LIST attributes
+      // (RFC 3501 §7.2.2) is the canonical fix; the per-folder
+      // try/catch added in email_provider.dart is defense in depth
+      // for any remaining edge cases (race conditions, mailboxes
+      // deleted between LIST and SELECT, etc.).
       final mailboxes = await client.listMailboxes();
 
       for (final mailbox in mailboxes) {
+        if (mailbox.isUnselectable) {
+          LoggerService.log('IMAP',
+              'Skipping \\NoSelect mailbox: "${mailbox.name}"');
+          continue;
+        }
         folders.add(mailbox.name);
       }
 
