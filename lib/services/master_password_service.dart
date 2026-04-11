@@ -343,6 +343,22 @@ class MasterPasswordService {
     // Unlock the credential session: derives the AES key used to decrypt
     // fallback storage. Without this, fallback passwords are inaccessible.
     await AccountService.unlockSession(password);
+    // v2.30.4: also unlock the MasterVault on FIRST set. Previously
+    // only verifyMasterPassword() did this, which meant a brand-new
+    // user (no existing master pwd file) ended up with an unlocked
+    // AccountService session but a LOCKED MasterVault. Any subsequent
+    // CertificateService.storeBundle (Faza 3 add-account, etc.) on
+    // macOS hit `Bad state: MasterVault.write before unlock` and
+    // crashed the cert install dialog. unlock() is idempotent and
+    // creates the vault file fresh if it doesn't exist yet.
+    try {
+      await MasterVault.instance.unlock(password);
+    } catch (ex, st) {
+      LoggerService.logError('AUTH', ex, st);
+      // Don't fail setMasterPassword if vault init has a transient
+      // issue — the user can still verify and unlock on next launch.
+      // But log loudly so we notice.
+    }
     LoggerService.log('AUTH', 'Master password set');
   }
 
