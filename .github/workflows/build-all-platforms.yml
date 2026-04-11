@@ -1117,16 +1117,39 @@ jobs:
 
           echo "::notice::Uploading ${#FILES[@]} artifacts to release $TAG"
 
-          # Create the release. --notes-file reads the body from disk
-          # (avoids any heredoc / arbitrary-content gotcha on
-          # GITHUB_OUTPUT). --verify-tag ensures we don't accidentally
-          # create a release for a non-existent tag.
-          gh release create "$TAG" \
-            --title "$RELEASE_NAME" \
-            --notes-file "$NOTES_PATH" \
-            --verify-tag \
-            $PRERELEASE_FLAG \
-            "${FILES[@]}"
+          # Idempotent release publish — supports clean first runs AND
+          # reruns of partially-failed previous attempts. The previous
+          # logic used `gh release create` unconditionally and crashed
+          # with "a release with the same tag name already exists" on
+          # any rerun (observed v2.30.8 when the Windows job died and
+          # the rerun couldn't republish — the existing release had
+          # 22/23 assets, missing only Setup-X.X.X.exe).
+          #
+          # Strategy:
+          #   1. If release does NOT exist → `gh release create` (also
+          #      uploads all assets in one shot, atomic).
+          #   2. If release EXISTS → update notes/title in place via
+          #      `gh release edit`, then `gh release upload --clobber`
+          #      to overwrite any partial assets from the previous run.
+          #
+          # `--clobber` is essential: re-uploading the same filename
+          # without it returns 422 Unprocessable Entity.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::notice::Release $TAG already exists — updating in place"
+            gh release edit "$TAG" \
+              --title "$RELEASE_NAME" \
+              --notes-file "$NOTES_PATH" \
+              ${PRERELEASE_FLAG:+--prerelease}
+            gh release upload "$TAG" "${FILES[@]}" --clobber
+          else
+            echo "::notice::Creating new release $TAG"
+            gh release create "$TAG" \
+              --title "$RELEASE_NAME" \
+              --notes-file "$NOTES_PATH" \
+              --verify-tag \
+              $PRERELEASE_FLAG \
+              "${FILES[@]}"
+          fi
 
 
 
