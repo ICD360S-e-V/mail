@@ -43,10 +43,58 @@ class CertificateService {
   // master-pwd-protected vault, then deletes them from the legacy
   // store.
   static final _secureStorage = MasterVault.instance;
-  static const String _kStorageClientCert = 'icd360s_mtls_client_cert';
-  static const String _kStorageClientKey = 'icd360s_mtls_client_key';
-  static const String _kStorageCaCert = 'icd360s_mtls_ca_cert';
-  static const String _kStorageUsername = 'icd360s_mtls_username';
+
+  // Per-username storage keys (v2.30.2+).
+  // The pre-v2.30.2 storage used GLOBAL keys without a username
+  // suffix, which broke when the user added a SECOND Faza 3 account:
+  // the second cert overwrote the first, and the first account
+  // could never restore its cert. Migration is handled at the
+  // start of restoreFromSecureStorage().
+  static String _kStorageClientCertFor(String username) =>
+      'icd360s_mtls_client_cert::$username';
+  static String _kStorageClientKeyFor(String username) =>
+      'icd360s_mtls_client_key::$username';
+  static String _kStorageCaCertFor(String username) =>
+      'icd360s_mtls_ca_cert::$username';
+
+  // Legacy global keys (v2.27.0 — v2.30.1) — used only for one-time
+  // migration into the per-username keys above.
+  static const String _kStorageClientCertLegacy = 'icd360s_mtls_client_cert';
+  static const String _kStorageClientKeyLegacy = 'icd360s_mtls_client_key';
+  static const String _kStorageCaCertLegacy = 'icd360s_mtls_ca_cert';
+  static const String _kStorageUsernameLegacy = 'icd360s_mtls_username';
+
+  // Registry of usernames that have a cert in secure storage. Allows
+  // [clearCertificates] (factory reset / explicit logout) to wipe ALL
+  // per-user entries without scanning the entire keystore.
+  static const String _kKnownCertUsernames = 'icd360s_mtls_known_cert_users';
+
+  /// Append [username] to the known-users JSON list (idempotent).
+  static Future<void> _registerKnownUser(String username) async {
+    try {
+      final raw = await _secureStorage.read(key: _kKnownCertUsernames);
+      final List<dynamic> list =
+          raw == null || raw.isEmpty ? <dynamic>[] : (jsonDecode(raw) as List);
+      if (!list.contains(username)) {
+        list.add(username);
+        await _secureStorage.write(
+            key: _kKnownCertUsernames, value: jsonEncode(list));
+      }
+    } catch (ex, st) {
+      LoggerService.logError('CERT-DOWNLOAD', ex, st);
+    }
+  }
+
+  /// Read the known-users registry. Returns empty list on error.
+  static Future<List<String>> _getKnownUsers() async {
+    try {
+      final raw = await _secureStorage.read(key: _kKnownCertUsernames);
+      if (raw == null || raw.isEmpty) return <String>[];
+      return (jsonDecode(raw) as List).cast<String>();
+    } catch (_) {
+      return <String>[];
+    }
+  }
 
   /// Track if network is down to avoid spamming all accounts
   static bool _networkDown = false;
@@ -160,16 +208,19 @@ class CertificateService {
         // SECURITY (M7): write-through to secure storage so the
         // certificate survives process restarts and lock/unlock
         // cycles WITHOUT having to live in the Dart heap permanently.
+        // v2.30.2: per-username keys so multiple Faza 3 accounts each
+        // get their own cert in storage.
         try {
+          final u = _currentUsername!;
           await _secureStorage.write(
-              key: _kStorageClientCert, value: _clientCert);
+              key: _kStorageClientCertFor(u), value: _clientCert);
           await _secureStorage.write(
-              key: _kStorageClientKey, value: _clientKey);
-          await _secureStorage.write(key: _kStorageCaCert, value: _caCert);
+              key: _kStorageClientKeyFor(u), value: _clientKey);
           await _secureStorage.write(
-              key: _kStorageUsername, value: _currentUsername);
+              key: _kStorageCaCertFor(u), value: _caCert);
+          await _registerKnownUser(u);
           LoggerService.log('CERT-DOWNLOAD',
-              '✓ Certificate persisted to platform secure storage');
+              '✓ Certificate persisted to platform secure storage for $u');
         } catch (ex, st) {
           LoggerService.logError('CERT-DOWNLOAD', ex, st);
           // Best-effort: cache is still populated in memory so the
@@ -232,6 +283,38 @@ class CertificateService {
   static bool get hasCertificates =>
       _clientCert != null && _clientKey != null && _caCert != null;
 
+  /// Persist a cert bundle obtained out-of-band (Faza 3 / device
+  /// approval flow) under the per-username keys, register the user
+  /// in the known-users registry, and load it into the in-memory
+  /// cache. This is the single entry point for code that already
+  /// has cert/key/CA in hand and just needs to store it.
+  static Future<void> storeBundle({
+    required String username,
+    required String clientCert,
+    required String clientKey,
+    required String caCert,
+  }) async {
+    await _secureStorage.write(
+        key: _kStorageClientCertFor(username), value: clientCert);
+    await _secureStorage.write(
+        key: _kStorageClientKeyFor(username), value: clientKey);
+    await _secureStorage.write(
+        key: _kStorageCaCertFor(username), value: caCert);
+    await _registerKnownUser(username);
+    _clientCert = clientCert;
+    _clientKey = clientKey;
+    _caCert = caCert;
+    _currentUsername = username;
+    // Persist real expiry parsed from the cert PEM.
+    try {
+      await CertificateExpiryMonitor.parseCertAndPersistExpiry(clientCert);
+    } catch (ex, st) {
+      LoggerService.logError('CERT-DOWNLOAD', ex, st);
+    }
+    LoggerService.log('CERT-DOWNLOAD',
+        'Cert bundle stored for $username (per-username keys)');
+  }
+
   /// Clear the in-memory certificate cache only (auto-lock path).
   ///
   /// SECURITY (M7): Called when the master-password session is
@@ -252,22 +335,71 @@ class CertificateService {
         'mTLS cert cache cleared from memory (lock)');
   }
 
-  /// Repopulate the in-memory cache from [_secureStorage].
+  /// One-time migration: if the legacy global keys still hold a cert
+  /// (v2.27.0 — v2.30.1 layout), copy it under the per-username keys
+  /// for the legacy username and delete the global entries. Idempotent.
   ///
-  /// SECURITY (M7): Called after a successful master-password verify
-  /// (see MasterPasswordService.verifyMasterPassword). If the
-  /// platform secure storage holds a previously-downloaded
-  /// certificate, the in-memory cache is filled from there so the
-  /// caller does not need to re-issue the network download. Returns
-  /// true if the cache is populated (either freshly restored or
-  /// already present), false otherwise.
-  static Future<bool> restoreFromSecureStorage() async {
-    if (hasCertificates) return true;
+  /// Multi-account note: the legacy layout could only ever hold ONE
+  /// cert (the most-recently-downloaded one). After migration, the
+  /// "first" account on this device gets its cert restored; any other
+  /// Faza 3 accounts must re-trigger the approval flow on their first
+  /// post-upgrade login (which will then write under per-user keys
+  /// and stay isolated).
+  static Future<void> _migrateLegacyGlobalKeys() async {
     try {
-      final cert = await _secureStorage.read(key: _kStorageClientCert);
-      final key = await _secureStorage.read(key: _kStorageClientKey);
-      final ca = await _secureStorage.read(key: _kStorageCaCert);
-      final username = await _secureStorage.read(key: _kStorageUsername);
+      final legacyUser = await _secureStorage.read(key: _kStorageUsernameLegacy);
+      if (legacyUser == null || legacyUser.isEmpty) return;
+      final cert = await _secureStorage.read(key: _kStorageClientCertLegacy);
+      final key = await _secureStorage.read(key: _kStorageClientKeyLegacy);
+      final ca = await _secureStorage.read(key: _kStorageCaCertLegacy);
+      if (cert == null || key == null || ca == null) {
+        // Partial legacy state — just clean it up.
+        await _secureStorage.delete(key: _kStorageClientCertLegacy);
+        await _secureStorage.delete(key: _kStorageClientKeyLegacy);
+        await _secureStorage.delete(key: _kStorageCaCertLegacy);
+        await _secureStorage.delete(key: _kStorageUsernameLegacy);
+        return;
+      }
+      await _secureStorage.write(
+          key: _kStorageClientCertFor(legacyUser), value: cert);
+      await _secureStorage.write(
+          key: _kStorageClientKeyFor(legacyUser), value: key);
+      await _secureStorage.write(
+          key: _kStorageCaCertFor(legacyUser), value: ca);
+      await _registerKnownUser(legacyUser);
+      await _secureStorage.delete(key: _kStorageClientCertLegacy);
+      await _secureStorage.delete(key: _kStorageClientKeyLegacy);
+      await _secureStorage.delete(key: _kStorageCaCertLegacy);
+      await _secureStorage.delete(key: _kStorageUsernameLegacy);
+      LoggerService.log('CERT-DOWNLOAD',
+          'Migrated legacy global mTLS cert keys → per-username keys for $legacyUser');
+    } catch (ex, st) {
+      LoggerService.logError('CERT-DOWNLOAD', ex, st);
+    }
+  }
+
+  /// Repopulate the in-memory cache from [_secureStorage] for a
+  /// SPECIFIC user (v2.30.2+).
+  ///
+  /// SECURITY (M7): Called by EmailProvider when (re)connecting an
+  /// account so each account loads its own per-username cert. The
+  /// in-memory cache holds at most one cert at a time — switching to
+  /// a different user replaces it.
+  ///
+  /// Multi-account: this is the correct entry point for code that
+  /// knows which account it wants. The legacy [restoreFromSecureStorage]
+  /// (no username) is preserved only for the master-password unlock
+  /// path which has no account context.
+  static Future<bool> restoreFromSecureStorageFor(String username) async {
+    if (_currentUsername == username && hasCertificates) return true;
+    try {
+      // Run legacy migration first so a freshly upgraded user with the
+      // old global keys can still be restored under the new layout.
+      await _migrateLegacyGlobalKeys();
+
+      final cert = await _secureStorage.read(key: _kStorageClientCertFor(username));
+      final key = await _secureStorage.read(key: _kStorageClientKeyFor(username));
+      final ca = await _secureStorage.read(key: _kStorageCaCertFor(username));
       if (cert == null || key == null || ca == null) {
         return false;
       }
@@ -286,21 +418,81 @@ class CertificateService {
     }
   }
 
+  /// Best-effort restore at master-password unlock time, when no
+  /// account context is available yet.
+  ///
+  /// Tries (in order):
+  ///   1. Legacy global key migration (populates per-username keys).
+  ///   2. The first known user from the registry — so the in-memory
+  ///      cache is non-empty and the IMAP/SMTP layer can establish
+  ///      the initial connection. EmailProvider will subsequently
+  ///      call [restoreFromSecureStorageFor] per account to swap in
+  ///      the correct cert before each connect.
+  static Future<bool> restoreFromSecureStorage() async {
+    if (hasCertificates) return true;
+    try {
+      await _migrateLegacyGlobalKeys();
+      final users = await _getKnownUsers();
+      if (users.isEmpty) return false;
+      return await restoreFromSecureStorageFor(users.first);
+    } catch (ex, st) {
+      LoggerService.logError('CERT-DOWNLOAD', ex, st);
+      return false;
+    }
+  }
+
   /// Clear certificates from BOTH memory cache AND persistent secure
   /// storage (explicit logout / sign-out / factory reset).
   ///
   /// After this call, the next session must re-download the cert via
   /// [downloadCertificateForUser]. Use [lockCache] for the auto-lock
   /// path that should preserve the secure-storage copy.
+  ///
+  /// v2.30.2: iterates the known-users registry so every per-username
+  /// cert triple is wiped, then deletes the registry itself and the
+  /// legacy global keys for backward compatibility.
   static Future<void> clearCertificates() async {
     lockCache();
     try {
-      await _secureStorage.delete(key: _kStorageClientCert);
-      await _secureStorage.delete(key: _kStorageClientKey);
-      await _secureStorage.delete(key: _kStorageCaCert);
-      await _secureStorage.delete(key: _kStorageUsername);
+      final users = await _getKnownUsers();
+      for (final u in users) {
+        await _secureStorage.delete(key: _kStorageClientCertFor(u));
+        await _secureStorage.delete(key: _kStorageClientKeyFor(u));
+        await _secureStorage.delete(key: _kStorageCaCertFor(u));
+      }
+      await _secureStorage.delete(key: _kKnownCertUsernames);
+      // Legacy global keys (pre-v2.30.2) — defensive cleanup.
+      await _secureStorage.delete(key: _kStorageClientCertLegacy);
+      await _secureStorage.delete(key: _kStorageClientKeyLegacy);
+      await _secureStorage.delete(key: _kStorageCaCertLegacy);
+      await _secureStorage.delete(key: _kStorageUsernameLegacy);
       LoggerService.log('CERT-DOWNLOAD',
-          'mTLS cert wiped from secure storage (explicit logout)');
+          'mTLS cert wiped from secure storage (explicit logout, ${users.length} users)');
+    } catch (ex, st) {
+      LoggerService.logError('CERT-DOWNLOAD', ex, st);
+    }
+  }
+
+  /// Clear cert for a SINGLE user (used when one account is removed
+  /// from the app while others remain). Does not touch the in-memory
+  /// cache unless it currently belongs to [username].
+  static Future<void> clearCertificatesFor(String username) async {
+    if (_currentUsername == username) lockCache();
+    try {
+      await _secureStorage.delete(key: _kStorageClientCertFor(username));
+      await _secureStorage.delete(key: _kStorageClientKeyFor(username));
+      await _secureStorage.delete(key: _kStorageCaCertFor(username));
+      // Remove from known-users registry.
+      final users = await _getKnownUsers();
+      users.remove(username);
+      if (users.isEmpty) {
+        await _secureStorage.delete(key: _kKnownCertUsernames);
+      } else {
+        await _secureStorage.write(
+            key: _kKnownCertUsernames, value: jsonEncode(users));
+      }
+      LoggerService.log('CERT-DOWNLOAD',
+          'mTLS cert wiped from secure storage for $username');
     } catch (ex, st) {
       LoggerService.logError('CERT-DOWNLOAD', ex, st);
     }

@@ -385,12 +385,45 @@ class _EmailViewerState extends State<EmailViewer> {
     }
   }
 
-  /// Check if email body is HTML
+  /// Check if email body is HTML.
+  ///
+  /// v2.30.2 fix: the previous heuristic required either `<!doctype`,
+  /// `<html`, or BOTH `<body>` AND `<head>` — which missed all HTML
+  /// FRAGMENTS sent by modern editors (CKEditor, Gmail compose,
+  /// Outlook Web, Microsoft support tooling). Those start directly
+  /// with `<div>`, `<span>`, `<p>`, etc. and were rendered as raw
+  /// text in the message view.
+  ///
+  /// New logic:
+  ///   1. Trim leading whitespace
+  ///   2. Full document: `<!doctype` or `<html`
+  ///   3. Document with body: `<body`
+  ///   4. Fragment starting with any opening tag: `<` + letter
+  ///   5. Body containing common block tags anywhere
   bool _isHtmlEmail(String body) {
-    final lowerBody = body.toLowerCase().trimLeft();
-    return lowerBody.startsWith('<!doctype') ||
-           lowerBody.startsWith('<html') ||
-           (lowerBody.contains('<body') && lowerBody.contains('<head'));
+    final trimmed = body.trimLeft();
+    if (trimmed.isEmpty) return false;
+    final lower = trimmed.toLowerCase();
+    if (lower.startsWith('<!doctype') || lower.startsWith('<html')) {
+      return true;
+    }
+    if (lower.contains('<body')) return true;
+    // Fragment heuristic: starts with `<` followed by a letter (= tag name)
+    if (trimmed.length >= 2 &&
+        trimmed[0] == '<' &&
+        RegExp(r'[a-zA-Z]').hasMatch(trimmed[1])) {
+      return true;
+    }
+    // Body contains common HTML block markers anywhere (catches plain-text
+    // emails with embedded HTML signatures)
+    return lower.contains('<div') ||
+        lower.contains('<span') ||
+        lower.contains('<p>') ||
+        lower.contains('<p ') ||
+        lower.contains('<table') ||
+        lower.contains('<br>') ||
+        lower.contains('<br/') ||
+        lower.contains('<a href');
   }
 
   /// Build email body widget.

@@ -187,19 +187,20 @@ class EmailProvider with ChangeNotifier {
     // FAZA 3 path: cert was stored by DeviceApprovalService.storeBundle()
     // before this account was added. Restore from secure storage instead
     // of re-downloading via password.
+    //
+    // v2.30.2: per-username keys — call restoreFromSecureStorageFor so
+    // each account loads its OWN cert. The previous global-key layout
+    // overwrote the first account's cert when a second account was
+    // added (the in-memory cache was correct after add but the next
+    // restore-after-unlock loaded whichever username was last written).
     LoggerService.log('PROVIDER',
         'Account ${account.username} has no password (Faza 3 cert-only) — '
         'restoring cert from secure storage');
-    final restored = await CertificateService.restoreFromSecureStorage();
+    final restored =
+        await CertificateService.restoreFromSecureStorageFor(account.username);
     if (!restored) {
       LoggerService.logWarning('PROVIDER',
           'Cert-only account ${account.username} but secure storage is empty');
-      return false;
-    }
-    if (CertificateService.currentUsername != account.username) {
-      LoggerService.logWarning('PROVIDER',
-          'Restored cert is for ${CertificateService.currentUsername} '
-          'but account is ${account.username} — refusing mismatched cert');
       return false;
     }
     LoggerService.log('PROVIDER',

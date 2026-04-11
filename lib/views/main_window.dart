@@ -16,6 +16,7 @@ import '../services/settings_service.dart';
 import '../services/account_service.dart';
 import '../services/master_password_service.dart';
 import '../services/master_vault.dart';
+import '../services/security_health_service.dart';
 import '../services/certificate_service.dart';
 import '../services/trash_tracker_service.dart';
 import '../services/connection_monitor.dart';
@@ -26,6 +27,7 @@ import 'add_account_dialog.dart';
 import 'factory_reset_dialog.dart';
 import 'log_viewer_window.dart';
 import 'changelog_window.dart';
+import 'security_health_view.dart';
 import '../utils/text_safety.dart';
 
 /// Main window with Fluent Design
@@ -108,7 +110,13 @@ class _MainWindowState extends State<MainWindow> {
   /// activity (any pointer event, keyboard input, or explicit action
   /// like compose/refresh), the app locks itself and demands the
   /// master password to resume.
-  static const Duration _autoLockInactivity = Duration(minutes: 15);
+  // v2.30.2: tightened from 15 min to 5 min as part of the RAM-dump
+  // hardening pack. Reduces the window during which MasterVault
+  // keys (`_dataKey`, `_kek`) and CertificateService cert/key live in
+  // process memory by 3×. Trade-off: user re-enters master password
+  // more often, but most actions reset the rolling timer (C2) so
+  // active use never triggers an auto-lock.
+  static const Duration _autoLockInactivity = Duration(minutes: 5);
 
   /// Throttle for the rolling reset. We do NOT want to call
   /// `Timer.cancel() + Timer()` on every pixel of mouse movement
@@ -831,6 +839,17 @@ class _MainWindowState extends State<MainWindow> {
     await showDialog(
       context: context,
       builder: (context) => const ChangelogWindow(),
+    );
+  }
+
+  /// Show security health dialog (v2.30.2 — runs platform-aware
+  /// security audit: FileVault on macOS, BitLocker on Windows, LUKS
+  /// on Linux, plus universal master pwd / vault state checks).
+  Future<void> _showSecurityHealth() async {
+    LoggerService.log('UI_CLICK', 'Footer: Security Health button clicked');
+    await showDialog(
+      context: context,
+      builder: (context) => const SecurityHealthDialog(),
     );
   }
 
@@ -1632,6 +1651,12 @@ class _MainWindowState extends State<MainWindow> {
               IconButton(
                 icon: const Icon(FluentIcons.code, size: 14),
                 onPressed: _showLogViewer,
+              ),
+              // Security Health button (v2.30.2 — checks FileVault,
+              // BitLocker, LUKS, master pwd, vault state)
+              IconButton(
+                icon: const Icon(FluentIcons.shield, size: 14),
+                onPressed: _showSecurityHealth,
               ),
             ],
           ),

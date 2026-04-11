@@ -4,8 +4,8 @@ import 'dart:io';
 
 import 'package:http/io_client.dart';
 
+import 'certificate_service.dart';
 import 'logger_service.dart';
-import 'master_vault.dart';
 import 'pinned_security_context.dart';
 
 /// Status returned by the polling endpoint.
@@ -122,13 +122,6 @@ class DeviceApprovalService {
 
   static const String _baseUrl = 'https://mail.icd360s.de/api/client';
   static const Duration _httpTimeout = Duration(seconds: 15);
-
-  /// Storage keys — MUST match the constants in `CertificateService`
-  /// because that's where the rest of the app reads from.
-  static const String _kStorageClientCert = 'icd360s_mtls_client_cert';
-  static const String _kStorageClientKey = 'icd360s_mtls_client_key';
-  static const String _kStorageCaCert = 'icd360s_mtls_ca_cert';
-  static const String _kStorageUsername = 'icd360s_mtls_username';
 
   static IOClient _newClient() {
     final http = PinnedSecurityContext.createHttpClient()
@@ -375,20 +368,23 @@ class DeviceApprovalService {
     }
   }
 
-  /// Persist the [bundle] into [MasterVault] (B5, v2.30.0+) under the
-  /// same keys that [CertificateService] reads from. The vault must
-  /// already be unlocked — typically the case because Faza 3
-  /// add-account is invoked from the main UI which is gated by the
-  /// master password dialog (which unlocks the vault as a side effect).
+  /// Persist the [bundle] via [CertificateService.storeBundle] which
+  /// writes the per-username keys (v2.30.2+) into [MasterVault]
+  /// (B5, v2.30.0+) and registers the user in the known-users list.
+  /// The vault must already be unlocked — typically the case because
+  /// Faza 3 add-account is invoked from the main UI which is gated
+  /// by the master password dialog (which unlocks the vault as a
+  /// side effect).
   ///
   /// On non-macOS this is a thin pass-through to PortableSecureStorage.
   static Future<void> storeBundle(CertBundle bundle) async {
-    final storage = MasterVault.instance;
-    await storage.write(key: _kStorageClientCert, value: bundle.clientCert);
-    await storage.write(key: _kStorageClientKey, value: bundle.clientKey);
-    await storage.write(key: _kStorageCaCert, value: bundle.caCert);
-    await storage.write(key: _kStorageUsername, value: bundle.username);
+    await CertificateService.storeBundle(
+      username: bundle.username,
+      clientCert: bundle.clientCert,
+      clientKey: bundle.clientKey,
+      caCert: bundle.caCert,
+    );
     LoggerService.log('APPROVAL',
-        'Cert bundle persisted to MasterVault for ${bundle.username}');
+        'Cert bundle persisted via CertificateService for ${bundle.username}');
   }
 }
