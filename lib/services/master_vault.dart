@@ -318,7 +318,14 @@ class MasterVault {
       secretKey: SecretKey(utf8.encode(masterPassword)),
       nonce: argonSalt,
     );
-    final masterKeyBytes = await masterKey.extractBytes();
+    // v2.30.5: extractBytes() in cryptography ^2.7.0 returns a
+    // SensitiveBytes view that is UNMODIFIABLE — assigning to
+    // [i] throws "Unsupported operation: The bytes are unmodifiable"
+    // and crashes vault creation on first run. Copy into a mutable
+    // Uint8List so the post-derive zero-out loop works AND the bytes
+    // we feed into HKDF live in our own memory (lifetimes we control).
+    final masterKeyBytesView = await masterKey.extractBytes();
+    final masterKeyBytes = Uint8List.fromList(masterKeyBytesView);
     final machine = await _machineSecret();
     final ikmBytes =
         Uint8List.fromList(masterKeyBytes + utf8.encode(machine));
@@ -330,11 +337,20 @@ class MasterVault {
     );
     // Best-effort zero of intermediate bytes (Dart doesn't expose
     // mlock; this just removes the values from our heap reference).
-    for (var i = 0; i < masterKeyBytes.length; i++) {
-      masterKeyBytes[i] = 0;
-    }
-    for (var i = 0; i < ikmBytes.length; i++) {
-      ikmBytes[i] = 0;
+    // Wrapped in try/catch so a future cryptography upgrade that
+    // also makes Uint8List views unmodifiable cannot crash the
+    // vault — zero-ing is best-effort defense-in-depth, not
+    // load-bearing.
+    try {
+      for (var i = 0; i < masterKeyBytes.length; i++) {
+        masterKeyBytes[i] = 0;
+      }
+      for (var i = 0; i < ikmBytes.length; i++) {
+        ikmBytes[i] = 0;
+      }
+    } catch (ex) {
+      LoggerService.logWarning('MASTER_VAULT',
+          'Could not zero intermediate KEK bytes (best-effort): $ex');
     }
     return kek;
   }
