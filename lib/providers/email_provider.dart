@@ -277,12 +277,49 @@ class EmailProvider with ChangeNotifier {
       account.inboxCount = inboxCount;
       LoggerService.log('PROVIDER', 'INBOX count: $inboxCount');
 
-      // Load counts for other folders
-      for (final folder in folders) {
-        final count = await _mailService.getFolderCountAsync(account, folder);
-        account.folderCounts[folder] = count;
-        LoggerService.log('PROVIDER', 'Folder "$folder" count: $count');
+      // Load counts for other folders.
+      //
+      // v2.30.7: per-folder try/catch. Some servers (Dovecot in
+      // particular) advertise folders in LIST that cannot actually
+      // be SELECT-ed — common with phantom \NoSelect placeholders,
+      // legacy Spam folders that were renamed to Junk but left in
+      // the subscription list, or shared/virtual mailboxes that
+      // disappear under the per-user namespace. Without this catch,
+      // a SINGLE bogus folder would propagate up to the outer
+      // catch block and mark the entire account as networkError —
+      // even though INBOX and every real folder worked fine.
+      //
+      // Strategy: log a warning, drop the bad folder from
+      // [account.folders] so the UI doesn't show a clickable item
+      // that 404s, and continue with the next one.
+      final liveFolders = <String>[];
+      for (final folder in sortedFolders) {
+        try {
+          final count = await _mailService.getFolderCountAsync(account, folder);
+          account.folderCounts[folder] = count;
+          liveFolders.add(folder);
+          LoggerService.log('PROVIDER', 'Folder "$folder" count: $count');
+        } catch (ex) {
+          final msg = ex.toString();
+          if (msg.contains("Mailbox doesn't exist") ||
+              msg.contains('NONEXISTENT') ||
+              msg.contains('NO mailbox')) {
+            LoggerService.logWarning('PROVIDER',
+                'Skipping phantom folder "$folder" (server LIST'
+                'ed it but SELECT failed): ${msg.split('\n').first}');
+            // Don't add to liveFolders — UI will hide it.
+          } else {
+            // Unknown error on a single folder — log but keep going.
+            // Don't fail the whole account.
+            LoggerService.logWarning('PROVIDER',
+                'Folder "$folder" count failed: ${msg.split('\n').first}');
+            liveFolders.add(folder);
+            account.folderCounts[folder] = 0;
+          }
+        }
       }
+      // Replace the folder list with the live (selectable) ones.
+      account.folders = liveFolders;
 
       // Fetch quota information
       try {
