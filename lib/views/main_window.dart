@@ -54,6 +54,11 @@ class _MainWindowState extends State<MainWindow> {
   // Lock state
   bool _isLocked = false;
 
+  // Track whether we've already shown the "device limit reached" dialog
+  // for the current EmailProvider state, to avoid re-opening on each
+  // build cycle while the flag is set.
+  bool _deviceLimitDialogShown = false;
+
   // Ping/connection quality
   Timer? _pingTimer;
   int? _pingMs;
@@ -458,6 +463,41 @@ class _MainWindowState extends State<MainWindow> {
     final themeProvider = context.watch<ThemeProvider>();
     final emailProvider = context.watch<EmailProvider>();
     final l10n = l10nOf(context);
+
+    // ── mail-admin: device limit dialog ──
+    // If the backend rejected this device with `device_limit_reached`,
+    // show a blocking dialog explaining the situation. Use a post-frame
+    // callback so we can call showDialog from the build phase safely.
+    final lockedUsername = emailProvider.deviceLimitReachedFor;
+    if (lockedUsername != null && !_deviceLimitDialogShown) {
+      _deviceLimitDialogShown = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => ContentDialog(
+            title: const Text('Device limit reached'),
+            content: Text(
+              'The account $lockedUsername is restricted to a single '
+              'device.\n\nThis device cannot be activated because another '
+              'device is already registered.\n\nContact the ICD360S '
+              'administrator to transfer access to this device.',
+            ),
+            actions: [
+              FilledButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  emailProvider.clearDeviceLimitFlag();
+                  _deviceLimitDialogShown = false;
+                },
+                child: const Text('Understood'),
+              ),
+            ],
+          ),
+        );
+      });
+    }
 
     // If locked, show lock screen (timers continue in background for notifications)
     if (_isLocked) {
