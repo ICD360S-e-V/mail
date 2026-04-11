@@ -98,7 +98,7 @@ class MailService {
   ///
   /// In production with mail.icd360s.de the EXTERNAL path is taken
   /// every time once the user has a valid client cert in their store.
-  Future<void> _authenticate(ImapClient client, MailAccount account) async {
+  Future<void> _authenticate(ImapClient client, EmailAccount account) async {
     final user = _getAuthUsername(account.username);
     if (client.serverInfo.supports('AUTH=EXTERNAL')) {
       LoggerService.log('IMAP', 'Auth: SASL EXTERNAL (cert-based, no password)');
