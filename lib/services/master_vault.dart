@@ -77,7 +77,17 @@ class MasterVault {
   static final MasterVault instance = MasterVault._();
 
   // ── Format constants ─────────────────────────────────────────────
-  static const int _formatVersion = 0x02;
+  // v0x02: 2-byte uint16 memory_KiB header — UNUSABLE because the
+  //        Argon2 default of 65536 KiB overflows uint16 (max 65535)
+  //        and is read back as 0, crashing Argon2id with
+  //        "Invalid argument (memory): 0". Any vault file written
+  //        with this format byte is corrupt and gets nuked on first
+  //        load (see _loadAndDecrypt) — the user has to re-enter the
+  //        master password to recreate it.
+  // v0x03: 4-byte uint32 LE memory_KiB header. Fits any reasonable
+  //        Argon2 memory cost up to 4 GiB.
+  static const int _formatVersion = 0x03;
+  static const int _legacyBuggyFormatVersion = 0x02;
   static const String _fileName = 'secrets_vault.bin';
 
   // ── Argon2id parameters (Bitwarden / OWASP 2026 defaults) ────────
@@ -174,7 +184,28 @@ class MasterVault {
 
       // Existing vault — parse header and decrypt.
       final blob = await file.readAsBytes();
-      await _loadAndDecrypt(blob, masterPassword);
+      try {
+        await _loadAndDecrypt(blob, masterPassword);
+      } on _LegacyBuggyVaultException {
+        // v2.30.6: any v0x02 vault file is corrupt due to the
+        // uint16 memory_KiB overflow bug. Delete it and start fresh
+        // — equivalent to a clean install for vault contents (cert
+        // bundle has to be re-downloaded via Faza 3 anyway).
+        LoggerService.logWarning('MASTER_VAULT',
+            'Detected corrupt v0x02 vault file — deleting and recreating');
+        await file.delete();
+        // Reset state from any partial decrypt attempt.
+        _wipeKeys();
+        _cache = null;
+        _argon2Salt = null;
+        await _createFreshVault(masterPassword);
+        await _runMigrationFromLegacyStorage();
+        await _persist();
+        LoggerService.log('MASTER_VAULT',
+            '✓ Fresh vault recreated after v0x02 corruption recovery '
+            '(${_cache!.length} entries after migration)');
+        return;
+      }
       // Migration may still be needed if user upgraded from a build
       // that wrote the vault but didn't yet purge legacy storage.
       if (!_migrationDone) {
@@ -364,30 +395,41 @@ class MasterVault {
   }
 
   Future<void> _loadAndDecrypt(Uint8List blob, String masterPassword) async {
-    // Header layout:
-    //   [0]       version
-    //   [1..2]    memory_KiB (uint16 LE)
-    //   [3]       iters
-    //   [4]       parallelism
-    //   [5..20]   argon2_salt (16)
-    //   [21..32]  kek_nonce (12)
-    //   [33..80]  wrapped_data_key (32 + 16 tag)
-    //   [81..92]  vault_nonce (12)
-    //   [93..N]   vault_ct + 16 tag
-    final minLen = 1 + 2 + 1 + 1 + _argon2SaltBytes +
+    // Header layout (v0x03):
+    //   [0]       version (0x03)
+    //   [1..4]    memory_KiB (uint32 LE)
+    //   [5]       iters
+    //   [6]       parallelism
+    //   [7..22]   argon2_salt (16)
+    //   [23..34]  kek_nonce (12)
+    //   [35..82]  wrapped_data_key (32 + 16 tag)
+    //   [83..94]  vault_nonce (12)
+    //   [95..N]   vault_ct + 16 tag
+    final minLen = 1 + 4 + 1 + 1 + _argon2SaltBytes +
         _gcmNonceBytes + _dataKeyBytes + _gcmTagBytes +
         _gcmNonceBytes + _gcmTagBytes;
     if (blob.length < minLen) {
       throw StateError(
           'secrets_vault.bin too short (${blob.length} bytes) — corrupt');
     }
+    if (blob[0] == _legacyBuggyFormatVersion) {
+      // v0x02 format had a fatal bug: memory_KiB stored in 2 bytes
+      // overflowed for the standard 65536-KiB Argon2 cost and was
+      // read back as 0, crashing on every unlock. Any v0x02 file is
+      // corrupt by definition. Nuke it so the caller falls back to
+      // _createFreshVault on the next unlock attempt.
+      throw const _LegacyBuggyVaultException();
+    }
     if (blob[0] != _formatVersion) {
       throw StateError(
           'Unknown vault format byte: 0x${blob[0].toRadixString(16)}');
     }
     var off = 1;
-    final memKiB = blob[off] | (blob[off + 1] << 8);
-    off += 2;
+    final memKiB = blob[off] |
+        (blob[off + 1] << 8) |
+        (blob[off + 2] << 16) |
+        (blob[off + 3] << 24);
+    off += 4;
     final iters = blob[off++];
     final paral = blob[off++];
 
@@ -482,8 +524,12 @@ class MasterVault {
 
     final builder = BytesBuilder();
     builder.addByte(_formatVersion);
+    // memory_KiB as uint32 LE (4 bytes). v0x02 stored 2 bytes which
+    // overflowed for the standard 65536-KiB Argon2 memory parameter.
     builder.addByte(_argon2MemoryKiB & 0xFF);
     builder.addByte((_argon2MemoryKiB >> 8) & 0xFF);
+    builder.addByte((_argon2MemoryKiB >> 16) & 0xFF);
+    builder.addByte((_argon2MemoryKiB >> 24) & 0xFF);
     builder.addByte(_argon2Iterations);
     builder.addByte(_argon2Parallelism);
     builder.add(_argon2Salt!);
@@ -560,4 +606,14 @@ class MasterVault {
     final r = Random.secure();
     return Uint8List.fromList(List<int>.generate(n, (_) => r.nextInt(256)));
   }
+}
+
+/// Internal sentinel: thrown by [MasterVault._loadAndDecrypt] when it
+/// encounters a v0x02 vault file. Caught by [MasterVault.unlock] which
+/// then deletes the file and recreates fresh. Not exported.
+class _LegacyBuggyVaultException implements Exception {
+  const _LegacyBuggyVaultException();
+  @override
+  String toString() =>
+      'Vault file uses the buggy v0x02 format (uint16 memory_KiB overflow)';
 }
