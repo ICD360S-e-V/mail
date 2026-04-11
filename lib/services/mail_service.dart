@@ -1314,9 +1314,12 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
         CertificateService.currentUsername != account.username) {
       return 0;
     }
-    if (account.password == null || account.password!.isEmpty) {
-      return 0;
-    }
+    // NOTE (v2.27.0): the legacy `account.password == null` guard was
+    // removed here. With Faza 3 (passwordless add-account flow), some
+    // accounts have a null password and authenticate purely via SASL
+    // EXTERNAL with the mTLS cert. The cert is what makes the IMAP
+    // session work, not the password — `_authenticate()` already
+    // selects the right mechanism.
 
     int deletedCount = 0;
 

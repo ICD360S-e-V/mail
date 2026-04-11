@@ -329,6 +329,30 @@ class DeviceRegistrationService {
     return 'unknown';
   }
 
+  /// Public helper that gathers all device-identification fields the
+  /// server expects, in one structured object. Used by both the legacy
+  /// password-based [registerDevice] flow and the v2.27.0+ passwordless
+  /// approval flow ([DeviceApprovalService.requestAccess]).
+  ///
+  /// Fields:
+  ///  - `device_id`     — UUID v4, persisted in PortableSecureStorage
+  ///  - `device_name`   — hostname (desktop) or platform string (mobile)
+  ///  - `device_type`   — macos / windows / linux / android / ios
+  ///  - `os_version`    — best-effort OS version string
+  ///  - `hostname`      — raw hostname from PlatformService
+  ///  - `client_version`— current app version from UpdateService
+  static Future<Map<String, String>> gatherDeviceInfo() async {
+    final platform = PlatformService.instance;
+    return {
+      'device_id': await getOrCreateDeviceId(),
+      'device_name': await _deviceName(),
+      'device_type': _deviceType(),
+      'os_version': await _osVersion(),
+      'hostname': platform.computerName,
+      'client_version': UpdateService.currentVersion,
+    };
+  }
+
   /// Best-effort OS version string. Uses platform-specific commands
   /// where available, falls back to `Platform.operatingSystemVersion`.
   static Future<String> _osVersion() async {
