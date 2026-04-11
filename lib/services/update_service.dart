@@ -618,22 +618,70 @@ class UpdateService {
 
     // ── Replace old app with verified new one ──
 
-    // Determine install location
+    // Determine install location: where the currently-running .app lives.
+    // Platform.resolvedExecutable is something like
+    //   /Applications/icd360s_mail_client.app/Contents/MacOS/icd360s_mail_client
+    // We want everything up to and including ".app".
     final currentExe = Platform.resolvedExecutable;
     final appBundlePath = currentExe.contains('.app/')
         ? currentExe.substring(0, currentExe.indexOf('.app/') + 4)
         : '/Applications/${path.basename(extractedApp)}';
 
-    final oldApp = Directory(appBundlePath);
-    if (oldApp.existsSync()) {
-      await Process.run('rm', ['-rf', appBundlePath]);
-    }
-    await Process.run('cp', ['-R', extractedApp, appBundlePath]);
-    LoggerService.log('UPDATE', 'Copied $extractedApp → $appBundlePath');
+    LoggerService.log('UPDATE',
+        'Install target: $appBundlePath (extracted from $extractedApp)');
 
-    // 5. Strip quarantine xattr — prevents "App can't be opened"
-    //    dialog on some macOS configurations.
+    // Use `ditto` instead of `cp -R` — ditto is the macOS-native tool for
+    // copying .app bundles. It preserves extended attributes, ACLs, resource
+    // forks, code signatures, and symlinks correctly. cp -R has known issues
+    // with .app bundles (loses some xattrs).
+    //
+    // We do NOT rm -rf first — ditto with no flags overwrites in place,
+    // which is safer (atomic at the file level, no window where the .app
+    // is missing entirely).
+    final dittoResult = await Process.run('ditto', [extractedApp, appBundlePath]);
+    if (dittoResult.exitCode != 0) {
+      LoggerService.log('UPDATE',
+          '❌ ditto failed (exit ${dittoResult.exitCode}): '
+          '${dittoResult.stderr}');
+      await Process.run('hdiutil', ['detach', mountPoint]);
+      return false;
+    }
+    LoggerService.log('UPDATE', '✓ ditto copied $extractedApp → $appBundlePath');
+
+    // Verify the install actually applied: read CFBundleShortVersionString
+    // from the INSTALLED .app and compare to the expected version. If this
+    // fails, the cp/ditto silently did nothing and we'd have relaunched the
+    // old version forever.
+    final verifyResult = await Process.run('/usr/libexec/PlistBuddy', [
+      '-c', 'Print CFBundleShortVersionString',
+      '$appBundlePath/Contents/Info.plist',
+    ]);
+    final installedVersion = (verifyResult.stdout as String).trim();
+    if (installedVersion != updateInfo.version) {
+      LoggerService.log('UPDATE',
+          '❌ Install verification failed: expected ${updateInfo.version} '
+          'at $appBundlePath, got "$installedVersion"');
+      await Process.run('hdiutil', ['detach', mountPoint]);
+      return false;
+    }
+    LoggerService.log('UPDATE',
+        '✓ Install verified: $appBundlePath now reports v$installedVersion');
+
+    // Strip quarantine xattr — prevents "App can't be opened" dialog
+    // on some macOS configurations.
     await Process.run('xattr', ['-rd', 'com.apple.quarantine', appBundlePath]);
+
+    // Force LaunchServices to re-register the new bundle so `open` doesn't
+    // hit a stale cache pointing at the old binary inode. This is the
+    // critical fix for the "update closes app but old version reopens"
+    // bug — without it, macOS's LaunchServices cache keeps mapping the
+    // bundle ID to the now-deleted old .app and the new one is ignored.
+    await Process.run(
+      '/System/Library/Frameworks/CoreServices.framework/Frameworks/'
+      'LaunchServices.framework/Support/lsregister',
+      ['-f', appBundlePath],
+    );
+    LoggerService.log('UPDATE', '✓ Refreshed LaunchServices registration');
 
     // Unmount DMG
     await Process.run('hdiutil', ['detach', mountPoint]);
@@ -655,18 +703,31 @@ class UpdateService {
     //   3. exit(0) kills THIS process
     //   4. Script polls until our PID is gone
     //   5. Script waits 2s for LaunchServices cache flush
-    //   6. Script opens the new .app bundle
-    //   7. Script deletes itself
+    //   6. Script forces another lsregister refresh (belt-and-braces)
+    //   7. Script opens the new .app bundle with `open -n` (force new
+    //      instance, do NOT reactivate any cached old one)
+    //   8. Script logs every step to /tmp/icd360s_relaunch.log so we
+    //      can debug failures
+    //   9. Script deletes itself
     final myPid = pid;
     final scriptPath = '/tmp/icd360s_relaunch_$myPid.sh';
+    final logPath = '/tmp/icd360s_relaunch.log';
     final escapedApp = appBundlePath.replaceAll("'", "'\\''");
     final script = File(scriptPath);
     await script.writeAsString(
       '#!/bin/bash\n'
       '# ICD360S auto-relaunch helper (self-deleting)\n'
+      'LOG=\'$logPath\'\n'
+      'echo "[\$(date)] relaunch script started, waiting for PID $myPid" >> "\$LOG"\n'
       'while kill -0 $myPid 2>/dev/null; do sleep 0.2; done\n'
+      'echo "[\$(date)] PID $myPid is gone" >> "\$LOG"\n'
       'sleep 2\n'
-      'open \'$escapedApp\'\n'
+      '# Force LaunchServices to refresh again (belt-and-braces)\n'
+      '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f \'$escapedApp\' >> "\$LOG" 2>&1\n'
+      'echo "[\$(date)] lsregister refreshed, opening new app" >> "\$LOG"\n'
+      '# -n forces a new instance instead of reactivating any cached old one\n'
+      '/usr/bin/open -n \'$escapedApp\' >> "\$LOG" 2>&1\n'
+      'echo "[\$(date)] open exit: \$?" >> "\$LOG"\n'
       'rm -f "\$0"\n',
     );
     await Process.run('chmod', ['+x', scriptPath]);
@@ -678,7 +739,8 @@ class UpdateService {
     );
 
     LoggerService.log('UPDATE',
-        'Relaunch helper written to $scriptPath (PID $myPid), exiting...');
+        'Relaunch helper written to $scriptPath (PID $myPid), '
+        'log at $logPath, exiting...');
     exit(0);
   }
 
