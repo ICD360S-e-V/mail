@@ -56,8 +56,10 @@ class SmtpAuthExternalCommand extends SmtpCommand {
   }
 
   @override
-  bool isCommandDone(SmtpResponse response) =>
-      response.code == 235 || response.code >= 400;
+  bool isCommandDone(SmtpResponse response) {
+    final code = response.code ?? 0;
+    return code == 235 || code >= 400;
+  }
 
   @override
   String toString() => 'AUTH EXTERNAL (cert-based, no password)';
