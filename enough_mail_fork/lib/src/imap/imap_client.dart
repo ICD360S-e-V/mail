@@ -405,19 +405,27 @@ class ImapClient extends ClientBase {
   /// - The capability `AUTH=EXTERNAL` to be advertised by the server
   ///   (check via `serverInfo.supports('AUTH=EXTERNAL')`).
   ///
-  /// The empty SASL initial response is encoded as the literal `=`
-  /// per RFC 4959 §3 (the `=` distinguishes "empty response" from
-  /// "no initial response", since an actually-empty IR would be
-  /// indistinguishable from the absence of an IR on the wire).
+  /// The IMAP wire conversation is two steps:
+  ///   C: a1 AUTHENTICATE EXTERNAL
+  ///   S: +
+  ///   C: <empty line>
+  ///   S: a1 OK Logged in
+  ///
+  /// The continuation response is an EMPTY LINE (just CRLF), which
+  /// represents the empty SASL response (no authzid → server uses the
+  /// cert subject CN as the identity). The literal `=` form is ONLY
+  /// valid when SASL-IR is used inline on the AUTHENTICATE command
+  /// itself per RFC 4959 §3 — sending `=` as a separate continuation
+  /// response makes Dovecot reply `BAD Invalid base64 data in continued
+  /// response` because it tries to decode `=` as base64. v2.28.0 used
+  /// `=` and broke all 4 production accounts; v2.28.2 uses an empty
+  /// string. Verified end-to-end with `openssl s_client` against
+  /// mail.icd360s.de:10993 — empty continuation produces `OK Logged in`.
   Future<List<Capability>> authenticateWithExternal() async {
     requireTlsForAuth();
-    // We use the continuation form rather than the SASL-IR inline
-    // form (`AUTHENTICATE EXTERNAL =`) to remain compatible with
-    // servers that do not advertise SASL-IR. Dovecot accepts both,
-    // but the continuation form is the lowest-common-denominator.
     final cmd = Command.withContinuation(
-      ['AUTHENTICATE EXTERNAL', '='],
-      logText: 'AUTHENTICATE EXTERNAL = (cert-based, no password)',
+      ['AUTHENTICATE EXTERNAL', ''],
+      logText: 'AUTHENTICATE EXTERNAL (cert-based, no password)',
       writeTimeout: defaultWriteTimeout,
       responseTimeout: defaultResponseTimeout,
     );

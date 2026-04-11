@@ -71,7 +71,7 @@ class EmailProvider with ChangeNotifier {
       for (final account in _accounts) {
         // Download UNIQUE certificate for this user
         LoggerService.log('PROVIDER', 'Downloading per-user certificate for ${account.username}...');
-        final certSuccess = await CertificateService.downloadCertificateForUser(account.username, password: account.password ?? '');
+        final certSuccess = await _ensureCertForAccount(account);
 
         if (!certSuccess) {
           LoggerService.log('PROVIDER',
@@ -86,7 +86,7 @@ class EmailProvider with ChangeNotifier {
 
       // Restore certificate for current account (last one loaded)
       if (_currentAccount != null) {
-        await CertificateService.downloadCertificateForUser(_currentAccount!.username, password: _currentAccount!.password ?? '');
+        await _ensureCertForAccount(_currentAccount!);
         LoggerService.log('PROVIDER', '✓ Certificate active for: ${_currentAccount!.username}');
       }
 
@@ -155,6 +155,58 @@ class EmailProvider with ChangeNotifier {
     }
   }
 
+  /// Acquire the per-user mTLS certificate for [account]. Returns true
+  /// when the cert is loaded into [CertificateService]'s in-memory cache.
+  ///
+  /// Two paths (added v2.28.2 to fix Faza 3 add-account flow):
+  ///
+  /// - **Legacy** — `account.password` is non-null/non-empty.
+  ///   Calls `CertificateService.downloadCertificateForUser(...)` against
+  ///   `/api/get-certificate.php` which authenticates by raw IMAP LOGIN.
+  ///   Used by all accounts created with v2.26.x or earlier and any
+  ///   account where the user explicitly set a password.
+  ///
+  /// - **Cert-only** — `account.password` is null/empty (Faza 3 flow,
+  ///   v2.27.0+ add-account dialog never asks for a password). The cert
+  ///   was already downloaded by [DeviceApprovalService] via the
+  ///   one-time-token endpoint and persisted to PortableSecureStorage.
+  ///   Calling the legacy `/api/get-certificate.php` here would 401 with
+  ///   "Authentication required" (the bug observed in v2.28.0). Instead
+  ///   we just call [CertificateService.restoreFromSecureStorage] which
+  ///   loads the previously-persisted cert into the in-memory cache.
+  ///   Verifies the loaded cert's CN matches the requested account.
+  Future<bool> _ensureCertForAccount(EmailAccount account) async {
+    final pwd = account.password;
+    if (pwd != null && pwd.isNotEmpty) {
+      // LEGACY path
+      LoggerService.log('PROVIDER',
+          'Downloading per-user certificate for ${account.username}...');
+      return CertificateService.downloadCertificateForUser(
+          account.username, password: pwd);
+    }
+    // FAZA 3 path: cert was stored by DeviceApprovalService.storeBundle()
+    // before this account was added. Restore from secure storage instead
+    // of re-downloading via password.
+    LoggerService.log('PROVIDER',
+        'Account ${account.username} has no password (Faza 3 cert-only) — '
+        'restoring cert from secure storage');
+    final restored = await CertificateService.restoreFromSecureStorage();
+    if (!restored) {
+      LoggerService.logWarning('PROVIDER',
+          'Cert-only account ${account.username} but secure storage is empty');
+      return false;
+    }
+    if (CertificateService.currentUsername != account.username) {
+      LoggerService.logWarning('PROVIDER',
+          'Restored cert is for ${CertificateService.currentUsername} '
+          'but account is ${account.username} — refusing mismatched cert');
+      return false;
+    }
+    LoggerService.log('PROVIDER',
+        '✓ Cert for ${account.username} restored from secure storage');
+    return true;
+  }
+
   /// Add new account
   Future<void> addAccount(EmailAccount account) async {
     try {
@@ -164,7 +216,7 @@ class EmailProvider with ChangeNotifier {
 
       // Download per-user certificate BEFORE connecting (SECURITY: unique cert per user)
       LoggerService.log('PROVIDER', 'Downloading per-user certificate for ${account.username}...');
-      final certSuccess = await CertificateService.downloadCertificateForUser(account.username, password: account.password ?? '');
+      final certSuccess = await _ensureCertForAccount(account);
 
       if (!certSuccess) {
         LoggerService.log('PROVIDER', '❌ Certificate download failed for ${account.username}');
@@ -507,7 +559,7 @@ class EmailProvider with ChangeNotifier {
       if (account == null) return;
 
       // Ensure certificate is loaded for current account
-      final certSuccess = await CertificateService.downloadCertificateForUser(account.username, password: account.password ?? '');
+      final certSuccess = await _ensureCertForAccount(account);
       if (!certSuccess) {
         _error = 'Certificate download failed';
         _isLoading = false;
@@ -593,7 +645,7 @@ class EmailProvider with ChangeNotifier {
         }
 
         // Download certificate for this account before checking
-        final certSuccess = await CertificateService.downloadCertificateForUser(account.username, password: account.password ?? '');
+        final certSuccess = await _ensureCertForAccount(account);
         if (!certSuccess) {
           LoggerService.log('AUTO_CHECK', '⚠️ Certificate download failed for ${account.username}, skipping');
           // If network is now flagged as down, stop entire cycle
