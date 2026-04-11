@@ -524,223 +524,55 @@ class UpdateService {
     exit(0);
   }
 
-  /// macOS: Mount DMG, copy .app to /Applications, relaunch
+  /// macOS update flow:
+  ///   1. Open the downloaded DMG in Finder via `open <dmg>`
+  ///   2. macOS auto-mounts and shows the volume window with the .app
+  ///      and an Applications symlink — the standard drag-and-drop install
+  ///   3. Quit the running app with exit(0)
+  ///
+  /// Why this approach (changed from auto cp/ditto/relaunch in v2.24.3):
+  /// - Native macOS UX — every Mac user knows the DMG drag-and-drop pattern
+  /// - Zero risk of:
+  ///   * cp/ditto silent failures
+  ///   * LaunchServices cache pointing at old inode
+  ///   * Code signing / quarantine issues
+  ///   * Permission problems writing to /Applications
+  /// - User has full control and can SEE the new version mounting
+  /// - Update loop bug from v2.23.x-v2.24.2 cannot reoccur because we
+  ///   never overwrite the old .app — the user does it themselves
+  /// - SHA-256 of the DMG file is already verified upstream of this
+  ///   method (in _downloadAndInstallAutoInternal), so what we hand to
+  ///   the user is integrity-checked
   static Future<bool> _installMacOS(File updateFile, UpdateInfo updateInfo) async {
-    final mountPoint = '/tmp/icd360s-update-mount';
+    LoggerService.log('UPDATE',
+        'Opening DMG in Finder: ${updateFile.path}');
 
-    // Mount DMG
-    await Process.run('hdiutil', ['attach', updateFile.path, '-mountpoint', mountPoint, '-nobrowse']);
-    LoggerService.log('UPDATE', 'Mounted DMG at $mountPoint');
-
-    // Find .app in mounted volume
-    final mountDir = Directory(mountPoint);
-    final apps = mountDir.listSync().where((e) => e.path.endsWith('.app')).toList();
-    if (apps.isEmpty) {
-      LoggerService.log('UPDATE', '❌ No .app found in DMG');
-      await Process.run('hdiutil', ['detach', mountPoint]);
+    // Sanity check: file exists and is non-trivial
+    if (!updateFile.existsSync() || updateFile.lengthSync() < 1024 * 1024) {
+      LoggerService.log('UPDATE',
+          '❌ Update file missing or too small: ${updateFile.path}');
       return false;
     }
 
-    // ── Verify extracted .app BEFORE replacing the running app ──
-
-    final extractedApp = apps.first.path;
-
-    // 1. Verify Info.plist: bundle ID must match expected
-    final bundleIdResult = await Process.run('/usr/libexec/PlistBuddy', [
-      '-c', 'Print CFBundleIdentifier',
-      '$extractedApp/Contents/Info.plist',
-    ]);
-    final bundleId = (bundleIdResult.stdout as String).trim();
-    if (bundleId != _expectedMacBundleId) {
+    // `open <dmg>` mounts the DMG and reveals it in Finder. macOS shows
+    // the standard install window with the .app icon and Applications
+    // shortcut for drag-and-drop. Returns immediately (non-blocking).
+    final result = await Process.run('open', [updateFile.path]);
+    if (result.exitCode != 0) {
       LoggerService.log('UPDATE',
-          '❌ Bundle ID mismatch: expected $_expectedMacBundleId, got $bundleId');
-      await Process.run('hdiutil', ['detach', mountPoint]);
+          '❌ Failed to open DMG: ${result.stderr}');
       return false;
-    }
-
-    // 2. Verify Info.plist: version matches what version.json advertised
-    final versionResult = await Process.run('/usr/libexec/PlistBuddy', [
-      '-c', 'Print CFBundleShortVersionString',
-      '$extractedApp/Contents/Info.plist',
-    ]);
-    final extractedVersion = (versionResult.stdout as String).trim();
-    if (extractedVersion != updateInfo.version) {
-      LoggerService.log('UPDATE',
-          '❌ Version mismatch: expected ${updateInfo.version}, '
-          'got $extractedVersion');
-      await Process.run('hdiutil', ['detach', mountPoint]);
-      return false;
-    }
-
-    // 3. Main binary must exist and have reasonable size
-    final mainBinaryName = bundleId.split('.').last;
-    final mainBinary = File('$extractedApp/Contents/MacOS/$mainBinaryName');
-    if (!mainBinary.existsSync()) {
-      // Try the app directory name as fallback
-      final appName = path.basenameWithoutExtension(extractedApp);
-      final altBinary = File('$extractedApp/Contents/MacOS/$appName');
-      if (!altBinary.existsSync()) {
-        LoggerService.log('UPDATE', '❌ Main binary missing from .app bundle');
-        await Process.run('hdiutil', ['detach', mountPoint]);
-        return false;
-      }
-    }
-
-    // 4. If we have an Apple Developer Team ID, verify codesign.
-    //    Currently null — scaffold for when we get a cert.
-    if (_expectedMacTeamId != null) {
-      final csResult = await Process.run('codesign', [
-        '--verify', '--deep', '--strict', extractedApp,
-      ]);
-      if (csResult.exitCode != 0) {
-        LoggerService.log('UPDATE',
-            '❌ codesign --verify failed: ${csResult.stderr}');
-        await Process.run('hdiutil', ['detach', mountPoint]);
-        return false;
-      }
-      // Check Team ID
-      final dvResult = await Process.run('codesign', ['-dv', extractedApp]);
-      final dvOutput = dvResult.stderr as String;
-      final teamMatch = RegExp(r'TeamIdentifier=(\S+)').firstMatch(dvOutput);
-      if (teamMatch?.group(1) != _expectedMacTeamId) {
-        LoggerService.log('UPDATE',
-            '❌ Team ID mismatch: expected $_expectedMacTeamId, '
-            'got ${teamMatch?.group(1)}');
-        await Process.run('hdiutil', ['detach', mountPoint]);
-        return false;
-      }
-      LoggerService.log('UPDATE',
-          '✓ codesign verified (Team ID: $_expectedMacTeamId)');
     }
 
     LoggerService.log('UPDATE',
-        '✓ App bundle verified: $bundleId v$extractedVersion');
+        '✓ DMG opened in Finder. Quitting current app so user can '
+        'drag the new version to Applications.');
 
-    // ── Replace old app with verified new one ──
+    // Wait a moment so the user sees the Finder window pop up before
+    // we vanish — without this, the app exits before macOS finishes
+    // mounting the volume and the Finder window may not appear.
+    await Future.delayed(const Duration(seconds: 1));
 
-    // Determine install location: where the currently-running .app lives.
-    // Platform.resolvedExecutable is something like
-    //   /Applications/icd360s_mail_client.app/Contents/MacOS/icd360s_mail_client
-    // We want everything up to and including ".app".
-    final currentExe = Platform.resolvedExecutable;
-    final appBundlePath = currentExe.contains('.app/')
-        ? currentExe.substring(0, currentExe.indexOf('.app/') + 4)
-        : '/Applications/${path.basename(extractedApp)}';
-
-    LoggerService.log('UPDATE',
-        'Install target: $appBundlePath (extracted from $extractedApp)');
-
-    // Use `ditto` instead of `cp -R` — ditto is the macOS-native tool for
-    // copying .app bundles. It preserves extended attributes, ACLs, resource
-    // forks, code signatures, and symlinks correctly. cp -R has known issues
-    // with .app bundles (loses some xattrs).
-    //
-    // We do NOT rm -rf first — ditto with no flags overwrites in place,
-    // which is safer (atomic at the file level, no window where the .app
-    // is missing entirely).
-    final dittoResult = await Process.run('ditto', [extractedApp, appBundlePath]);
-    if (dittoResult.exitCode != 0) {
-      LoggerService.log('UPDATE',
-          '❌ ditto failed (exit ${dittoResult.exitCode}): '
-          '${dittoResult.stderr}');
-      await Process.run('hdiutil', ['detach', mountPoint]);
-      return false;
-    }
-    LoggerService.log('UPDATE', '✓ ditto copied $extractedApp → $appBundlePath');
-
-    // Verify the install actually applied: read CFBundleShortVersionString
-    // from the INSTALLED .app and compare to the expected version. If this
-    // fails, the cp/ditto silently did nothing and we'd have relaunched the
-    // old version forever.
-    final verifyResult = await Process.run('/usr/libexec/PlistBuddy', [
-      '-c', 'Print CFBundleShortVersionString',
-      '$appBundlePath/Contents/Info.plist',
-    ]);
-    final installedVersion = (verifyResult.stdout as String).trim();
-    if (installedVersion != updateInfo.version) {
-      LoggerService.log('UPDATE',
-          '❌ Install verification failed: expected ${updateInfo.version} '
-          'at $appBundlePath, got "$installedVersion"');
-      await Process.run('hdiutil', ['detach', mountPoint]);
-      return false;
-    }
-    LoggerService.log('UPDATE',
-        '✓ Install verified: $appBundlePath now reports v$installedVersion');
-
-    // Strip quarantine xattr — prevents "App can't be opened" dialog
-    // on some macOS configurations.
-    await Process.run('xattr', ['-rd', 'com.apple.quarantine', appBundlePath]);
-
-    // Force LaunchServices to re-register the new bundle so `open` doesn't
-    // hit a stale cache pointing at the old binary inode. This is the
-    // critical fix for the "update closes app but old version reopens"
-    // bug — without it, macOS's LaunchServices cache keeps mapping the
-    // bundle ID to the now-deleted old .app and the new one is ignored.
-    await Process.run(
-      '/System/Library/Frameworks/CoreServices.framework/Frameworks/'
-      'LaunchServices.framework/Support/lsregister',
-      ['-f', appBundlePath],
-    );
-    LoggerService.log('UPDATE', '✓ Refreshed LaunchServices registration');
-
-    // Unmount DMG
-    await Process.run('hdiutil', ['detach', mountPoint]);
-    await updateFile.delete();
-
-    // Relaunch via a SEPARATE script file on disk + nohup.
-    //
-    // SECURITY / CORRECTNESS (Sparkle-inspired pattern):
-    // The process that relaunches MUST be fully independent of the
-    // process being updated. An inline `sh -c` child may be killed
-    // by SIGHUP when the parent exits (macOS process group). A
-    // script FILE persists on disk and nohup ensures SIGHUP is
-    // ignored, so the relaunch survives even if the kernel tears
-    // down the entire process group.
-    //
-    // Flow:
-    //   1. Write a self-deleting bash script to /tmp
-    //   2. Launch it with /usr/bin/nohup (SIGHUP-immune)
-    //   3. exit(0) kills THIS process
-    //   4. Script polls until our PID is gone
-    //   5. Script waits 2s for LaunchServices cache flush
-    //   6. Script forces another lsregister refresh (belt-and-braces)
-    //   7. Script opens the new .app bundle with `open -n` (force new
-    //      instance, do NOT reactivate any cached old one)
-    //   8. Script logs every step to /tmp/icd360s_relaunch.log so we
-    //      can debug failures
-    //   9. Script deletes itself
-    final myPid = pid;
-    final scriptPath = '/tmp/icd360s_relaunch_$myPid.sh';
-    final logPath = '/tmp/icd360s_relaunch.log';
-    final escapedApp = appBundlePath.replaceAll("'", "'\\''");
-    final script = File(scriptPath);
-    await script.writeAsString(
-      '#!/bin/bash\n'
-      '# ICD360S auto-relaunch helper (self-deleting)\n'
-      'LOG=\'$logPath\'\n'
-      'echo "[\$(date)] relaunch script started, waiting for PID $myPid" >> "\$LOG"\n'
-      'while kill -0 $myPid 2>/dev/null; do sleep 0.2; done\n'
-      'echo "[\$(date)] PID $myPid is gone" >> "\$LOG"\n'
-      'sleep 2\n'
-      '# Force LaunchServices to refresh again (belt-and-braces)\n'
-      '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f \'$escapedApp\' >> "\$LOG" 2>&1\n'
-      'echo "[\$(date)] lsregister refreshed, opening new app" >> "\$LOG"\n'
-      '# -n forces a new instance instead of reactivating any cached old one\n'
-      '/usr/bin/open -n \'$escapedApp\' >> "\$LOG" 2>&1\n'
-      'echo "[\$(date)] open exit: \$?" >> "\$LOG"\n'
-      'rm -f "\$0"\n',
-    );
-    await Process.run('chmod', ['+x', scriptPath]);
-
-    await Process.start(
-      '/usr/bin/nohup',
-      [scriptPath],
-      mode: ProcessStartMode.detached,
-    );
-
-    LoggerService.log('UPDATE',
-        'Relaunch helper written to $scriptPath (PID $myPid), '
-        'log at $logPath, exiting...');
     exit(0);
   }
 
