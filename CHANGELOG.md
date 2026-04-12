@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v2.39.5 - 2026-04-12
+#### Bug Fixes
+- PIN setup — don't zero masterKey before PIN can cache it - (da7a634) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.39.4 - 2026-04-12
 #### Bug Fixes
 - replace RadioButton with ComboBox — RadioButton API incompatible with fluent_ui 4.x - (d6b8f83) - Claude Code, *Claude Opus 4.6 (1M context)*
