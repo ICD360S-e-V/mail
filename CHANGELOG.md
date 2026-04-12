@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v2.39.2 - 2026-04-12
+#### Performance Improvements
+- A3 — PGP decrypt offloaded to persistent background isolate - (ee386b7) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.39.1 - 2026-04-12
 #### Bug Fixes
 - A1 review — revoke token hashed client-side, remove subject_hint leak - (831626f) - Claude Code, *Claude Opus 4.6 (1M context)*
