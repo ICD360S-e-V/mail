@@ -3,6 +3,8 @@ import 'dart:async';
 import '../models/models.dart';
 import '../services/services.dart';
 import '../services/device_registration_service.dart';
+import '../services/pin_unlock_service.dart';
+import '../services/master_vault.dart';
 import '../utils/pii_redactor.dart';
 
 /// Email provider for managing email accounts and messages
@@ -532,8 +534,10 @@ class EmailProvider with ChangeNotifier {
     // Skip if we already registered in this session — heartbeat will
     // keep the last_seen fresh. We re-register on app restart.
     if (_devicesRegisteredThisSession.contains(username)) {
-      // Just bump heartbeat
-      unawaited(DeviceRegistrationService.sendHeartbeat(username: username));
+      // Just bump heartbeat — check for revocation
+      DeviceRegistrationService.sendHeartbeat(username: username).then((result) {
+        if (result == HeartbeatResult.revoked) _onDeviceRevoked(username);
+      });
       return;
     }
 
@@ -580,19 +584,51 @@ class EmailProvider with ChangeNotifier {
     }
   }
 
+  // ── Remote revocation state ──────────────────────────────────────
+  /// Non-null when this device has been revoked by the administrator.
+  /// UI should show a blocking "Device Revoked" screen.
+  String? _revokedUsername;
+  String? get revokedUsername => _revokedUsername;
+
   /// Start the 5-minute heartbeat timer if not already running.
   void _ensureHeartbeatTimer() {
     if (_heartbeatTimer != null) return;
-    _heartbeatTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+    _heartbeatTimer = Timer.periodic(const Duration(minutes: 5), (_) async {
       if (_disposed) return;
-      // Send heartbeat for every account that has been registered
-      // this session.
-      for (final username in _devicesRegisteredThisSession) {
-        unawaited(DeviceRegistrationService.sendHeartbeat(username: username));
+      for (final username in _devicesRegisteredThisSession.toList()) {
+        final result = await DeviceRegistrationService.sendHeartbeat(
+            username: username);
+        if (result == HeartbeatResult.revoked) {
+          await _onDeviceRevoked(username);
+          return; // stop processing — app is locked
+        }
       }
     });
     LoggerService.log('PROVIDER',
         'Started device heartbeat timer (every 5 min)');
+  }
+
+  /// Handle remote device revocation: wipe credentials, lock, notify UI.
+  Future<void> _onDeviceRevoked(String username) async {
+    LoggerService.logWarning('PROVIDER',
+        '🔴 Device revoked for $username — wiping credentials');
+    // Stop heartbeat
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+    _devicesRegisteredThisSession.clear();
+    // Wipe mTLS certificate + private key
+    await CertificateService.clearCertificates();
+    // Wipe PIN
+    try {
+      await PinUnlockService.invalidatePin();
+    } catch (_) {}
+    // Wipe RAM session cache
+    wipeSessionCache();
+    // Lock vault (zeros KEK, dataKey, cache in memory)
+    MasterVault.instance.lock();
+    // Signal UI to show revoked screen
+    _revokedUsername = username;
+    if (!_disposed) notifyListeners();
   }
 
   /// Select account and folder

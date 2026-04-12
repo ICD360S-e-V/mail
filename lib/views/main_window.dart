@@ -28,6 +28,7 @@ import 'factory_reset_dialog.dart';
 import 'log_viewer_window.dart';
 import 'changelog_window.dart';
 import 'security_health_view.dart';
+import 'device_revoked_screen.dart';
 import '../utils/text_safety.dart';
 
 /// Main window with Fluent Design
@@ -530,6 +531,22 @@ class _MainWindowState extends State<MainWindow> {
     final themeProvider = context.watch<ThemeProvider>();
     final emailProvider = context.watch<EmailProvider>();
     final l10n = l10nOf(context);
+
+    // ── Remote revocation: blocking screen ──
+    // If admin revoked this device, show full-screen block immediately.
+    final revokedUser = emailProvider.revokedUsername;
+    if (revokedUser != null) {
+      return DeviceRevokedScreen(
+        username: revokedUser,
+        onRequestAccess: () {
+          // Navigate to add-account flow for re-enrollment
+          Navigator.of(context).pushReplacement(
+            FluentPageRoute(builder: (_) => const AddAccountDialog()),
+          );
+        },
+        onExit: () => exit(0),
+      );
+    }
 
     // ── mail-admin: device limit dialog ──
     // If the backend rejected this device with `device_limit_reached`,

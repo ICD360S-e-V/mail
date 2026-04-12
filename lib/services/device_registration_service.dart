@@ -7,6 +7,9 @@ import 'package:http/io_client.dart';
 
 import 'certificate_service.dart';
 import 'le_issuer_check.dart';
+
+/// Result of a heartbeat call — used to detect remote device revocation.
+enum HeartbeatResult { ok, revoked, error }
 import 'logger_service.dart';
 import 'mtls_service.dart';
 import 'pinned_security_context.dart';
@@ -189,7 +192,7 @@ class DeviceRegistrationService {
   /// falls back to the legacy v2.27.x path with `username` in the body
   /// and no replay protection. The server-side endpoint accepts both
   /// during the v2.27 → v2.28 transition.
-  static Future<bool> sendHeartbeat({required String username}) async {
+  static Future<HeartbeatResult> sendHeartbeat({required String username}) async {
     IOClient? client;
     HttpClient? ioClient;
     try {
@@ -229,17 +232,26 @@ class DeviceRegistrationService {
           .timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200) {
+        // Parse response body for revocation signal
+        try {
+          final body = jsonDecode(response.body) as Map<String, dynamic>;
+          if (body['status'] == 'revoked') {
+            LoggerService.logWarning('DEVICE_REG',
+                '🔴 DEVICE REVOKED by administrator for $cleanUsername');
+            return HeartbeatResult.revoked;
+          }
+        } catch (_) {/* non-JSON or old server — treat as ok */}
         if (useMtls) {
           LoggerService.logDebug('DEVICE_REG', 'Heartbeat OK (mTLS)');
         }
-        return true;
+        return HeartbeatResult.ok;
       }
       LoggerService.logWarning('DEVICE_REG',
           'Heartbeat failed: HTTP ${response.statusCode} (mtls=$useMtls)');
-      return false;
+      return HeartbeatResult.error;
     } catch (ex) {
       LoggerService.logWarning('DEVICE_REG', 'Heartbeat error: $ex');
-      return false;
+      return HeartbeatResult.error;
     } finally {
       try {
         client?.close();
