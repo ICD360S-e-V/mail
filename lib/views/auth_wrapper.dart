@@ -202,19 +202,21 @@ class _AuthWrapperState extends State<AuthWrapper> {
           isSetup: true,
           onPinSubmitted: (pin) async {
             try {
-              // Derive masterKey from the vault's cached argon2 salt
-              // This requires the master password which we don't have
-              // anymore. Alternative: store the masterKey temporarily
-              // during the setup flow.
-              // For now, read it from vault internal state:
               final masterKey = await vault.deriveMasterKeyFromCache();
-              if (masterKey == null) return false;
+              LoggerService.log('PIN_SETUP',
+                  'masterKey from cache: ${masterKey != null ? "${masterKey.length} bytes" : "NULL"}');
+              if (masterKey == null) {
+                LoggerService.logWarning('PIN_SETUP',
+                    'masterKey is null — vault may not have cached it');
+                return false;
+              }
               await PinUnlockService.setupPin(pin: pin, masterKey: masterKey);
               for (var i = 0; i < masterKey.length; i++) masterKey[i] = 0;
+              LoggerService.log('PIN_SETUP', '✓ PIN set successfully');
               if (mounted) Navigator.of(context).pop();
               return true;
             } catch (ex, st) {
-              LoggerService.logError('PIN_SETUP', ex, st);
+              LoggerService.logError('PIN_SETUP', 'Setup failed: $ex', st);
               return false;
             }
           },

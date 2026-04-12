@@ -290,10 +290,9 @@ class MasterPasswordService {
     final file = File(_passwordHashFilePath!);
     await file.writeAsString(phc);
 
-    // Best-effort zero masterKey from our heap.
-    for (var i = 0; i < masterKey.length; i++) {
-      masterKey[i] = 0;
-    }
+    // NOTE: Do NOT zero masterKey here — it's needed by deriveMasterKeyFromCache()
+    // for PIN setup that happens immediately after. The cache holds a separate copy.
+    // masterKey (local var) will be GC'd. _cachedMasterKey persists until lock().
 
     // Reset rate limit when password is (re)set.
     _failedAttempts = 0;
@@ -339,10 +338,8 @@ class MasterPasswordService {
           final masterKey =
               await vault.deriveMasterKey(password, parsed.salt);
           final authHash = await vault.deriveAuthHash(masterKey);
-          // Best-effort zero masterKey.
-          for (var i = 0; i < masterKey.length; i++) {
-            masterKey[i] = 0;
-          }
+          // NOTE: masterKey NOT zeroed here — _cachedMasterKey holds a
+          // separate copy for PIN setup. Local var is GC'd after scope.
           isValid = _constantTimeEqualsBytes(authHash, parsed.hash);
         }
       }
