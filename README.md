@@ -324,5 +324,7 @@ This project is licensed under the **GNU Affero General Public License v3.0** (A
 <div align="center">
   <br/>
   <a href="https://icd360s.de"><strong>icd360s.de</strong></a>
+  <br/>
+  <a href="mailto:kontakt@icd360s.de">kontakt@icd360s.de</a>
   <br/><br/>
 </div>
