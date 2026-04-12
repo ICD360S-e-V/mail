@@ -790,7 +790,8 @@ class _ComposeWindowState extends State<ComposeWindow> {
                     placeholder: l10n.placeholderRecipientsOptional,
                     enabled: !_isSending,
                     onChanged: (value) {
-                      setState(() {}); // Update CC count
+                      setState(() {});
+                      _scheduleKeyLookup();
                     },
                   ),
                   if (_getCcList().isNotEmpty)
@@ -822,7 +823,8 @@ class _ComposeWindowState extends State<ComposeWindow> {
                     placeholder: l10n.placeholderRecipientsOptional,
                     enabled: !_isSending,
                     onChanged: (value) {
-                      setState(() {}); // Update BCC count
+                      setState(() {});
+                      _scheduleKeyLookup();
                     },
                   ),
                   if (_getBccList().isNotEmpty)

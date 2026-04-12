@@ -502,36 +502,47 @@ class MailService {
       final allInternal = allRecipientEmails.every(
           (e) => e.endsWith('@icd360s.de'));
 
+      // Track if we encrypted (for BCC recipient handling)
+      var isEncrypted = false;
+
       if (allInternal && allRecipientEmails.isNotEmpty) {
         try {
-          // Lookup all recipient keys
           final keyMap =
               await PgpKeyService.lookupAllRecipients(allRecipientEmails);
           final allKeysFound = keyMap.values.every((k) => k != null);
 
           if (allKeysFound) {
-            final recipientKeys = keyMap.values
-                .whereType<PublicKey>()
-                .toList();
+            final recipientKeys = keyMap.values.toList();
 
-            // Build inner MIME body (plaintext + attachments)
-            final innerMime = mimeMessage.renderMessage();
+            // Build inner MIME body — strip transport headers (From/To/Cc/
+            // Bcc/Subject/Date/Message-ID). Only keep MIME content headers.
+            // This prevents BCC leakage and follows RFC 3156 practice.
+            var innerMime = mimeMessage.renderMessage();
+            innerMime = innerMime.replaceAll(
+                RegExp(r'^(From|To|Cc|Bcc|Subject|Date|Message-ID):.*\r?\n',
+                    multiLine: true, caseSensitive: false), '');
 
-            // Build PGP/MIME outer wrapper
+            // Extract Date and Message-ID before replacing
+            final date = mimeMessage.getHeaderValue('date') ??
+                DateCodec.encodeDate(DateTime.now());
+            final msgId = mimeMessage.getHeaderValue('message-id') ??
+                '<${DateTime.now().millisecondsSinceEpoch}@icd360s.de>';
+
             final pgpMimeRaw = await PgpKeyService.buildPgpMimeMessage(
               from: account.username,
               to: to,
               cc: cc,
-              bcc: bcc,
               subject: subject,
+              date: date,
+              messageId: msgId,
               innerMimeBody: innerMime,
               recipientKeys: recipientKeys,
             );
 
-            // Replace mimeMessage with the encrypted version
             mimeMessage = MimeMessage.parseFromText(pgpMimeRaw);
+            isEncrypted = true;
             LoggerService.log('PGP',
-                '✓ Email encrypted for ${allRecipientEmails.length} internal recipients');
+                '✓ Encrypted for ${allRecipientEmails.length} recipients');
           } else {
             final missing = keyMap.entries
                 .where((e) => e.value == null)
@@ -600,7 +611,19 @@ class MailService {
       }
 
       LoggerService.log('SMTP', 'Sending message with ${attachments.length} attachments to ${recipients.length} TO, ${ccRecipients.length} CC, ${bccRecipients.length} BCC...');
-      final response = await smtpClient.sendMessage(mimeMessage, requestDsn: supportsDsn);
+      // When encrypted, PGP/MIME outer message has no BCC header —
+      // pass all recipients explicitly so RCPT TO includes BCC.
+      final SmtpResponse response;
+      if (isEncrypted && bccRecipients.isNotEmpty) {
+        final allAddresses = allRecipientEmails
+            .map((e) => MailAddress('', e))
+            .toList();
+        response = await smtpClient.sendMessage(mimeMessage,
+            recipients: allAddresses, requestDsn: supportsDsn);
+      } else {
+        response = await smtpClient.sendMessage(mimeMessage,
+            requestDsn: supportsDsn);
+      }
 
       LoggerService.log('SMTP', '✓ Email sent to ${recipients.length} recipient(s): ${recipients.join(", ")}');
       if (ccRecipients.isNotEmpty) {
