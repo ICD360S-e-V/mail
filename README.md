@@ -271,7 +271,9 @@ Every push to `main` with a releasable commit automatically bumps the version, c
 
 ## About ICD360S e.V.
 
-[ICD360S e.V.](https://icd360s.de) is a registered German nonprofit (*eingetragener Verein*) based in Berlin.
+[ICD360S e.V.](https://icd360s.de) is a registered German nonprofit (*eingetragener Verein*) based in Neu-Ulm, Bavaria.
+
+**Registration:** Amtsgericht Memmingen, VR 201335
 
 This email client is designed for **professional communication** — both within the association and with external institutions, organizations, and individuals. Members use their `@icd360s.de` address to communicate securely with government agencies, partners, legal contacts, and each other.
 
@@ -297,15 +299,27 @@ Every active member receives a free, secure email account:
 
 The service is **free for all active members**. When a membership ends, the administrator revokes access and the app automatically wipes all credentials from the device.
 
-> This service is provided exclusively to members of ICD360S e.V. as part of their membership, in compliance with German nonprofit law (BGB §§21-79, AO §§51-68) and GDPR/DSGVO. Running a member email service is a [routine practice](https://www.ccc.de) among German nonprofits. No TKG telecommunications registration is required for internal member services.
+> **Important:** The live service at `mail.icd360s.de` is available **exclusively to members** of ICD360S e.V. Public access is not offered. This repository contains the open-source code — the operational service is private.
+
+> This service is provided in compliance with German nonprofit law (BGB §§21-79, AO §§51-68) and GDPR/DSGVO. Running a member email service is a [routine practice](https://www.ccc.de) among German nonprofits. No TKG telecommunications registration is required for internal member services.
 
 ---
+
+## Contributing
+
+Contributions are welcome. By submitting a pull request, you agree that your contribution will be licensed under the AGPL-3.0 license.
 
 ## License
 
 This project is licensed under the **GNU Affero General Public License v3.0** (AGPL-3.0) — see [LICENSE](LICENSE).
 
-If you modify and deploy this software (including as a network service), you **must** make your modified source code available under the same license and credit **ICD360S e.V.** as the original author.
+**What this means for forks and modifications:**
+
+- You **may** use, modify, and distribute this software freely.
+- You **must** keep the AGPL-3.0 license on all copies and modifications.
+- You **must** publish the complete source code of any modified version you distribute or deploy as a network service.
+- You **must** credit **ICD360S e.V.** as the original author.
+- You **may not** re-license under a more permissive license (MIT, Apache, etc.).
 
 <div align="center">
   <br/>
