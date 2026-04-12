@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/master_password_service.dart';
 import '../services/logger_service.dart';
 import '../utils/l10n_helper.dart';
+import 'factory_reset_dialog.dart';
 
 /// Master password dialog for app authentication
 class MasterPasswordDialog extends StatefulWidget {
@@ -274,10 +275,25 @@ class _MasterPasswordDialogState extends State<MasterPasswordDialog> {
         ],
       ),
       actions: [
-        // SECURITY (M6): Factory Reset button REMOVED from lock screen.
-        // Previously accessible pre-auth, allowing sabotage by anyone with
-        // 30 seconds of physical access. Reset is now available only from
-        // the main window after successful login (FactoryResetDialog).
+        // Factory Reset — available on lock screen for recovery when
+        // password is lost (e.g. after Argon2id migration). Protected
+        // by typed confirmation phrase "RESET" to prevent accidental
+        // or sabotage clicks. Uses the same FactoryResetDialog flow
+        // as post-login reset but with the phrase "RESET" instead of
+        // "DELETE" to distinguish the two paths in audit logs.
+        if (!_isFirstTime)
+          Button(
+            style: ButtonStyle(
+              foregroundColor: WidgetStatePropertyAll(Colors.red),
+            ),
+            onPressed: _isLoading ? null : () async {
+              final confirmed = await _confirmFactoryReset(context);
+              if (confirmed && context.mounted) {
+                await FactoryResetDialog.show(context);
+              }
+            },
+            child: const Text('Reset App'),
+          ),
         Button(
           onPressed: _isLoading ? null : () => Navigator.of(context).pop(false),
           child: Text(l10n.masterPasswordButtonExitApp),
@@ -301,6 +317,73 @@ class _MasterPasswordDialogState extends State<MasterPasswordDialog> {
         ),
       ],
     );
+  }
+
+  /// Confirm factory reset by typing "RESET". Prevents accidental clicks
+  /// and adds a deliberate barrier against physical-access sabotage.
+  Future<bool> _confirmFactoryReset(BuildContext context) async {
+    final controller = TextEditingController();
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final typed = controller.text.trim().toUpperCase();
+          final confirmed = typed == 'RESET';
+          return ContentDialog(
+            title: Row(
+              children: [
+                Icon(FluentIcons.warning, color: Colors.red, size: 24),
+                const SizedBox(width: 8),
+                const Text('Factory Reset'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'This will permanently delete ALL data:\n'
+                  '  - All email accounts\n'
+                  '  - All certificates and credentials\n'
+                  '  - All settings\n'
+                  '  - The master password\n\n'
+                  'This action CANNOT be undone.',
+                ),
+                const SizedBox(height: 16),
+                const Text('Type RESET to confirm:'),
+                const SizedBox(height: 8),
+                TextBox(
+                  controller: controller,
+                  placeholder: 'RESET',
+                  autofocus: true,
+                  onChanged: (_) => setDialogState(() {}),
+                  onSubmitted: (_) {
+                    if (confirmed) Navigator.pop(ctx, true);
+                  },
+                ),
+              ],
+            ),
+            actions: [
+              Button(
+                child: const Text('Cancel'),
+                onPressed: () => Navigator.pop(ctx, false),
+              ),
+              FilledButton(
+                style: ButtonStyle(
+                  backgroundColor: confirmed
+                      ? WidgetStatePropertyAll(Colors.red)
+                      : WidgetStatePropertyAll(Colors.grey),
+                ),
+                onPressed: confirmed ? () => Navigator.pop(ctx, true) : null,
+                child: const Text('Reset Everything'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    controller.dispose();
+    return result ?? false;
   }
 }
 
