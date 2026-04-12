@@ -175,6 +175,12 @@ class _MainWindowState extends State<MainWindow> {
     // Also clear in-memory mTLS certificates so a memory dump while locked
     // cannot recover them. They are re-downloaded on unlock.
     CertificateService.clearCertificates();
+    // SECURITY: Wipe all cached emails from RAM — no forensic artifact
+    // survives the lock event. Emails will be re-fetched on unlock.
+    try {
+      final provider = context.read<EmailProvider>();
+      provider.wipeSessionCache();
+    } catch (_) {/* provider may not be mounted */}
     // SECURITY (B5, v2.30.0+): zero the MasterVault data_key + KEK +
     // cleartext cache so the master-pwd-protected vault becomes
     // indecipherable in memory dumps. Vault file on disk remains

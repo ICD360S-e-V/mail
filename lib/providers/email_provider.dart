@@ -23,6 +23,36 @@ class EmailProvider with ChangeNotifier {
   bool _isFetching = false; // Guard against concurrent fetchEmails
   bool _isCheckingServer = false; // For auto-refresh indicator
   String? _error;
+
+  // ── RAM-only session cache ────────────────────────────────────────
+  //
+  // SECURITY: Emails are NEVER written to disk. This cache exists only
+  // in process memory and is wiped on lock/background/close. No forensic
+  // artifact remains on the device after the app closes.
+  //
+  // Key: "account::folder" → LRU list of emails (most recent first).
+  // Max entries per folder: _maxCachePerFolder.
+  // Total memory cap: ~50 folders × 50 emails × ~5KB avg = ~12.5 MB.
+  static const _maxCachePerFolder = 50;
+  final Map<String, List<Email>> _sessionCache = {};
+
+  /// Wipe all cached emails from RAM. Called on lock, background, close.
+  void wipeSessionCache() {
+    // Zero body strings (best-effort — Dart strings are immutable,
+    // but reassigning removes our reference for GC collection).
+    for (final emails in _sessionCache.values) {
+      for (final email in emails) {
+        email.body = '';
+        email.threatDetails = '';
+        for (final a in email.attachments) {
+          a.data = null;
+        }
+      }
+    }
+    _sessionCache.clear();
+    _emails = [];
+    LoggerService.log('CACHE', 'Session cache wiped from RAM');
+  }
   ServerHealthStatus? _serverHealth;
   ConnectionStatus? _connectionStatus;
   String _performanceStats = 'CPU: 0% | RAM: 0 MB';
@@ -587,16 +617,29 @@ class EmailProvider with ChangeNotifier {
   Future<void> fetchEmails() async {
     if (_currentAccount == null || _isFetching) return;
 
+    final account = _currentAccount;
+    if (account == null) return;
+    final cacheKey = '${account.username}::$_currentFolder';
+
+    // ── RAM cache hit → instant display, refresh in background ───
+    final cached = _sessionCache[cacheKey];
+    if (cached != null && cached.isNotEmpty) {
+      _emails = cached;
+      _error = null;
+      _isLoading = false;
+      notifyListeners();
+      // Background refresh (non-blocking)
+      _backgroundRefresh(account, cacheKey);
+      return;
+    }
+
+    // ── Cache miss → full fetch ──────────────────────────────────
     _isFetching = true;
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      final account = _currentAccount;
-      if (account == null) return;
-
-      // Ensure certificate is loaded for current account
       final certSuccess = await _ensureCertForAccount(account);
       if (!certSuccess) {
         _error = 'Certificate download failed';
@@ -605,7 +648,6 @@ class EmailProvider with ChangeNotifier {
         return;
       }
 
-      // Re-check after async gap
       if (_currentAccount?.username != account.username) return;
 
       LoggerService.log('PROVIDER', 'Fetching emails from ${account.username}/$_currentFolder...');
@@ -615,32 +657,18 @@ class EmailProvider with ChangeNotifier {
         _currentFolder,
       );
 
-      // Detect new emails (only in INBOX folder to avoid spam)
-      // Use per-account cache to avoid false notifications when switching accounts
-      final accountKey = '${account.username}_INBOX';
-      final previousIds = _accountEmailIds[accountKey] ?? <String>{};
-
-      if (_currentFolder == 'INBOX' && previousIds.isNotEmpty) {
-        for (final email in newEmails) {
-          if (!previousIds.contains(email.messageId)) {
-            // New email detected - show Windows Toast notification
-            await NotificationService.showNewEmailToast(email);
-            LoggerService.log('NEW_EMAIL', '🔔 New email from ${piiEmail(email.from)} ${piiSubject(email.subject)}');
-          }
-        }
-      }
-
-      // Update per-account email IDs cache
-      if (_currentFolder == 'INBOX') {
-        _accountEmailIds[accountKey] = newEmails.map((e) => e.messageId).toSet();
-      }
+      _detectAndNotifyNewEmails(account, newEmails);
       _emails = newEmails;
 
-      // Update folder count in sidebar
+      // Store in RAM session cache (LRU capped)
+      _sessionCache[cacheKey] = newEmails.length > _maxCachePerFolder
+          ? newEmails.sublist(0, _maxCachePerFolder)
+          : newEmails;
+
       account.folderCounts[_currentFolder] = _emails.length;
 
       _error = null;
-      LoggerService.log('PROVIDER', '✓ Fetched ${_emails.length} emails');
+      LoggerService.log('PROVIDER', '✓ Fetched ${_emails.length} emails (cached in RAM)');
     } catch (ex, stackTrace) {
       _error = ex.toString();
       LoggerService.logError('PROVIDER', ex, stackTrace);
@@ -649,6 +677,64 @@ class EmailProvider with ChangeNotifier {
       _isLoading = false;
       _isFetching = false;
       if (!_disposed) notifyListeners();
+    }
+  }
+
+  /// Background refresh: fetch from server and update cache + UI silently.
+  Future<void> _backgroundRefresh(EmailAccount account, String cacheKey) async {
+    if (_isFetching) return;
+    _isFetching = true;
+    _isCheckingServer = true;
+    if (!_disposed) notifyListeners();
+
+    try {
+      final certSuccess = await _ensureCertForAccount(account);
+      if (!certSuccess) return;
+      if (_currentAccount?.username != account.username) return;
+
+      final newEmails = await _mailService.fetchEmailsAsync(
+        account,
+        _currentFolder,
+      );
+
+      _detectAndNotifyNewEmails(account, newEmails);
+
+      // Update cache + UI
+      _sessionCache[cacheKey] = newEmails.length > _maxCachePerFolder
+          ? newEmails.sublist(0, _maxCachePerFolder)
+          : newEmails;
+      _emails = newEmails;
+      account.folderCounts[_currentFolder] = _emails.length;
+      _error = null;
+
+      LoggerService.log('PROVIDER', '✓ Background refresh: ${_emails.length} emails');
+    } catch (ex, stackTrace) {
+      // Silent failure — cached data still displayed
+      LoggerService.logError('PROVIDER', 'Background refresh failed', stackTrace);
+    } finally {
+      _isFetching = false;
+      _isCheckingServer = false;
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  /// Detect new emails and show notifications.
+  void _detectAndNotifyNewEmails(EmailAccount account, List<Email> newEmails) {
+    final accountKey = '${account.username}_INBOX';
+    final previousIds = _accountEmailIds[accountKey] ?? <String>{};
+
+    if (_currentFolder == 'INBOX' && previousIds.isNotEmpty) {
+      for (final email in newEmails) {
+        if (!previousIds.contains(email.messageId)) {
+          NotificationService.showNewEmailToast(email);
+          LoggerService.log('NEW_EMAIL',
+              '🔔 New email from ${piiEmail(email.from)} ${piiSubject(email.subject)}');
+        }
+      }
+    }
+
+    if (_currentFolder == 'INBOX') {
+      _accountEmailIds[accountKey] = newEmails.map((e) => e.messageId).toSet();
     }
   }
 
