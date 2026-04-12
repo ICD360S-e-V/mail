@@ -5,6 +5,16 @@ import 'package:path/path.dart' as p;
 import 'logger_service.dart';
 import 'platform_service.dart';
 
+/// How much email content to show in system notifications.
+enum NotificationPrivacyLevel {
+  /// "New email" — no sender, no subject. Maximum privacy.
+  none,
+  /// "New email from Marcel" — sender only, no subject. Default.
+  senderOnly,
+  /// "New email from Marcel: Meeting tomorrow" — full content.
+  full,
+}
+
 /// Settings service for user preferences (cross-platform)
 class SettingsService {
   static const String _settingsFileName = 'settings.json';
@@ -129,6 +139,28 @@ class SettingsService {
   static Future<bool> getNotificationsEnabled() async {
     final settings = await loadSettings();
     return settings['notificationsEnabled'] as bool? ?? true;
+  }
+
+  /// Get notification privacy level. Default: senderOnly.
+  static Future<NotificationPrivacyLevel> getNotificationPrivacyLevel() async {
+    final settings = await loadSettings();
+    final value = settings['notificationPrivacyLevel'] as String?;
+    return switch (value) {
+      'none' => NotificationPrivacyLevel.none,
+      'full' => NotificationPrivacyLevel.full,
+      _ => NotificationPrivacyLevel.senderOnly,
+    };
+  }
+
+  /// Save notification privacy level.
+  static Future<void> setNotificationPrivacyLevel(
+      NotificationPrivacyLevel level) async {
+    final settings = await loadSettings();
+    settings['notificationPrivacyLevel'] = level.name;
+    final path = _getSettingsPath();
+    await File(path).writeAsString(jsonEncode(settings));
+    LoggerService.log('SETTINGS',
+        'Notification privacy level set to: ${level.name}');
   }
 
   /// Get theme preference

@@ -4,6 +4,7 @@ import '../models/models.dart';
 import '../utils/pii_redactor.dart';
 import 'logger_service.dart';
 import 'localization_service.dart';
+import 'settings_service.dart';
 
 /// Cross-platform notification service for in-app and system notifications.
 /// Uses flutter_local_notifications for macOS, Linux, Android, iOS.
@@ -82,28 +83,59 @@ class NotificationService {
     try {
       final from = _extractName(email.from);
       final l10nService = LocalizationService.instance;
-      final title = l10nService.getText(
-        (l10n) => l10n.notificationNewEmailFrom(from),
-        'New Email from $from'
-      );
-      final message = l10nService.getText(
-        (l10n) => l10n.notificationEmailSubjectThreat(email.subject, email.threatLevel),
-        '${email.subject}\nThreat: ${email.threatLevel}'
-      );
+      final privacyLevel = await SettingsService.getNotificationPrivacyLevel();
 
-      // Show in-app notification (InfoBar)
-      onShowNotification?.call('📧 $title', message, NotificationType.info);
+      // Build title/body based on privacy level (Proton Mail pattern):
+      //   none       → "New email" / "Tap to open"
+      //   senderOnly → "New email from Marcel" / "Tap to open"
+      //   full       → "New email from Marcel" / subject + threat level
+      final String title;
+      final String body;
+      final String inAppMessage;
 
-      // Show system notification (non-Windows platforms)
+      switch (privacyLevel) {
+        case NotificationPrivacyLevel.none:
+          title = l10nService.getText(
+            (l10n) => l10n.notificationNewEmail,
+            'New email',
+          );
+          body = '';
+          inAppMessage = title;
+        case NotificationPrivacyLevel.senderOnly:
+          title = l10nService.getText(
+            (l10n) => l10n.notificationNewEmailFrom(from),
+            'New email from $from',
+          );
+          body = '';
+          inAppMessage = title;
+        case NotificationPrivacyLevel.full:
+          title = l10nService.getText(
+            (l10n) => l10n.notificationNewEmailFrom(from),
+            'New email from $from',
+          );
+          body = email.subject;
+          inAppMessage = l10nService.getText(
+            (l10n) => l10n.notificationEmailSubjectThreat(
+                email.subject, email.threatLevel),
+            '${email.subject}\nThreat: ${email.threatLevel}',
+          );
+      }
+
+      // In-app notification (InfoBar) — always shows full for UX
+      // (the app is already unlocked if visible)
+      onShowNotification?.call('📧 $title', inAppMessage, NotificationType.info);
+
+      // System notification — respects privacy level
       if (!Platform.isWindows) {
         await _showSystemNotification(
           title: title,
-          body: email.subject,
+          body: body.isNotEmpty ? body : null,
           payload: 'email:${email.messageId}',
         );
       }
 
-      LoggerService.log('NOTIFICATION', 'Notification shown for email from ${piiEmail(email.from)}');
+      LoggerService.log('NOTIFICATION',
+          'Notification shown (privacy=${privacyLevel.name}) for ${piiEmail(email.from)}');
     } catch (ex, stackTrace) {
       LoggerService.logError('NOTIFICATION', ex, stackTrace);
     }
@@ -112,7 +144,7 @@ class NotificationService {
   /// Show system notification (cross-platform except Windows)
   static Future<void> _showSystemNotification({
     required String title,
-    required String body,
+    String? body,
     String? payload,
   }) async {
     // Skip on Windows
