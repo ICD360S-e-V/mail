@@ -203,11 +203,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
           onPinSubmitted: (pin) async {
             try {
               final masterKey = await vault.deriveMasterKeyFromCache();
-              LoggerService.log('PIN_SETUP',
-                  'masterKey from cache: ${masterKey != null ? "${masterKey.length} bytes" : "NULL"}');
               if (masterKey == null) {
                 LoggerService.logWarning('PIN_SETUP',
-                    'masterKey is null — vault may not have cached it');
+                    'masterKey cache is null — cannot setup PIN');
                 return false;
               }
               await PinUnlockService.setupPin(pin: pin, masterKey: masterKey);

@@ -268,7 +268,7 @@ class MasterVault {
   void lock() {
     if (!Platform.isMacOS) return;
     if (!isUnlocked) return;
-    _wipeKeys();
+    _wipeKeys(wipeMasterKeyCache: true);
     _cache = null;
     _argon2Salt = null;
     _migrationDone = false;
@@ -440,7 +440,19 @@ class MasterVault {
     String masterPassword,
     Uint8List argonSalt,
   ) async {
-    final masterKeyBytes = await deriveMasterKey(masterPassword, argonSalt);
+    // Derive masterKey inline — intentionally does NOT call deriveMasterKey()
+    // so that _cachedMasterKey is never overwritten by an internal KEK
+    // derivation. The cache must only be set by the public deriveMasterKey()
+    // call in setMasterPassword / verifyMasterPassword (the auth-hash salt),
+    // so that deriveMasterKeyFromCache() always returns the key that matches
+    // the on-disk PHC hash — the value PinUnlockService needs for PIN setup.
+    _initCryptoHandles();
+    final masterKeyRaw = await _argon2!.deriveKey(
+      secretKey: SecretKey(utf8.encode(masterPassword)),
+      nonce: argonSalt,
+    );
+    final masterKeyBytesView = await masterKeyRaw.extractBytes();
+    final masterKeyBytes = Uint8List.fromList(masterKeyBytesView);
     final machine = await _machineSecret();
     final ikmBytes =
         Uint8List.fromList(masterKeyBytes + utf8.encode(machine));
@@ -741,8 +753,12 @@ class MasterVault {
         '✓ Migration complete: $migrated legacy secrets moved to vault');
   }
 
-  void _wipeKeys() {
-    if (_cachedMasterKey != null) {
+  void _wipeKeys({bool wipeMasterKeyCache = false}) {
+    // _cachedMasterKey is intentionally NOT wiped here by default.
+    // It is set by the public deriveMasterKey() in MasterPasswordService
+    // and must survive vault unlock failures so PIN setup can use it.
+    // It is only wiped on explicit lock() (user locks app).
+    if (wipeMasterKeyCache && _cachedMasterKey != null) {
       for (var i = 0; i < _cachedMasterKey!.length; i++) {
         _cachedMasterKey![i] = 0;
       }
