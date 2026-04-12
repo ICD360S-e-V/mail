@@ -1,0 +1,56 @@
+name: Auto Version Bump
+
+on:
+  push:
+    branches: [main]
+    # Tag pushes do NOT trigger this workflow — only branch pushes.
+    # The bump commit uses [skip ci] to prevent re-triggering.
+
+# Prevent concurrent version bumps
+concurrency:
+  group: auto-version
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    name: Determine & Apply Version Bump
+    runs-on: ubuntu-latest
+    # Skip if the push commit message contains [skip ci] (the bump commit itself)
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+
+    steps:
+      - name: Checkout (full history required for cocogitto)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # PAT required: GITHUB_TOKEN pushes do NOT trigger other workflows.
+          # The tag push must trigger build-all-platforms.yml.
+          token: ${{ secrets.RELEASE_PAT }}
+
+      - name: Setup Git identity
+        run: |
+          git config user.name "release-bot"
+          git config user.email "release-bot@users.noreply.github.com"
+
+      - name: Run cocogitto auto-bump
+        id: cog_bump
+        uses: cocogitto/cocogitto-action@v3
+        with:
+          command: bump
+          args: --auto --skip-ci
+          git-user: "release-bot"
+          git-user-email: "release-bot@users.noreply.github.com"
+
+      - name: Push version bump + tag
+        if: steps.cog_bump.outputs.version != ''
+        run: |
+          echo "New version: v${{ steps.cog_bump.outputs.version }}"
+          git push origin main
+          git push origin "v${{ steps.cog_bump.outputs.version }}"
+
+      - name: No bump needed
+        if: steps.cog_bump.outputs.version == ''
+        run: echo "No releasable commits since last tag — skipping."

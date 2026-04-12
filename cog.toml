@@ -1,0 +1,28 @@
+# Cocogitto configuration — automated semantic versioning
+# Commit types map to version bumps:
+#   fix:/hotfix:  → patch (2.31.0 → 2.31.1)
+#   feat:/security: → minor (2.31.0 → 2.32.0)
+#   BREAKING CHANGE / feat!: → major (2.31.0 → 3.0.0)
+#   ci:/docs:/chore:/style:/test: → no bump
+
+tag_prefix = "v"
+
+pre_bump_hooks = [
+    "scripts/update-pubspec-version.sh {{version}}",
+]
+
+[commit_types]
+hotfix   = { changelog_title = "Hotfixes",                 bump_patch = true }
+security = { changelog_title = "Security Fixes",           bump_minor = true }
+perf     = { changelog_title = "Performance Improvements", bump_patch = true }
+bump     = { changelog_title = "Version Bumps",            omit_from_changelog = true }
+refactor = { changelog_title = "Code Refactoring" }
+build    = { omit_from_changelog = true }
+ci       = { omit_from_changelog = true }
+chore    = { omit_from_changelog = true }
+docs     = { omit_from_changelog = true }
+style    = { omit_from_changelog = true }
+test     = { omit_from_changelog = true }
+
+[changelog]
+path = "CHANGELOG.md"
