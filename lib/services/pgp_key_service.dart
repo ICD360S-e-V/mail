@@ -259,10 +259,11 @@ class PgpKeyService {
     if (!alreadyHasSelf) allKeys.add(_cachedPublicKey);
 
     // dart_pg 2.x: encryptCleartext for text encryption
+    // Cast dynamic lists to the expected types for dart_pg
     final encrypted = OpenPGP.encryptCleartext(
       innerMimeBody,
-      encryptionKeys: allKeys,
-      signingKeys: [_cachedPrivateKey],
+      encryptionKeys: List.from(allKeys),
+      signingKeys: List.from([_cachedPrivateKey]),
     );
     final ciphertext = encrypted.armor();
 

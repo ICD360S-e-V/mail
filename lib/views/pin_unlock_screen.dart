@@ -357,7 +357,7 @@ class _PinUnlockScreenState extends State<PinUnlockScreen>
           height: 72,
           margin: const EdgeInsets.all(4),
           alignment: Alignment.center,
-          child: Icon(FluentIcons.backspace, size: 24,
+          child: Icon(FluentIcons.back, size: 24,
               color: theme.typography.body?.color),
         ),
       ),

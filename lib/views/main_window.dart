@@ -901,7 +901,7 @@ class _MainWindowState extends State<MainWindow> {
                     style: FluentTheme.of(dialogCtx).typography.bodyStrong),
                 const SizedBox(height: 8),
                 RadioButton(
-                  checked: privacyLevel == NotificationPrivacyLevel.none,
+                  selected: privacyLevel == NotificationPrivacyLevel.none,
                   onChanged: (v) {
                     if (v) {
                       setDialogState(() => privacyLevel = NotificationPrivacyLevel.none);
@@ -912,7 +912,7 @@ class _MainWindowState extends State<MainWindow> {
                 ),
                 const SizedBox(height: 4),
                 RadioButton(
-                  checked: privacyLevel == NotificationPrivacyLevel.senderOnly,
+                  selected: privacyLevel == NotificationPrivacyLevel.senderOnly,
                   onChanged: (v) {
                     if (v) {
                       setDialogState(() => privacyLevel = NotificationPrivacyLevel.senderOnly);
@@ -923,7 +923,7 @@ class _MainWindowState extends State<MainWindow> {
                 ),
                 const SizedBox(height: 4),
                 RadioButton(
-                  checked: privacyLevel == NotificationPrivacyLevel.full,
+                  selected: privacyLevel == NotificationPrivacyLevel.full,
                   onChanged: (v) {
                     if (v) {
                       setDialogState(() => privacyLevel = NotificationPrivacyLevel.full);

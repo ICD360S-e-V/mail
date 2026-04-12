@@ -2,6 +2,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:window_manager/window_manager.dart';
 import '../utils/l10n_helper.dart';
 import '../services/master_password_service.dart';
+import '../services/master_vault.dart';
 import '../services/pin_unlock_service.dart';
 import '../services/settings_service.dart';
 import '../services/log_upload_service.dart';
