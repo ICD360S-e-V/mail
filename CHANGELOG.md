@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v2.33.0 - 2026-04-12
+#### Security Fixes
+- harden PIN unlock — Argon2id KDF, persistent attempts, lockout delays - (85beb05) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.32.0 - 2026-04-12
 #### Features
 - PIN unlock with randomized keypad (6-digit, anti-shoulder-surf) - (238e4e9) - Claude Code, *Claude Opus 4.6 (1M context)*
