@@ -1,4 +1,6 @@
 # Cocogitto configuration — automated semantic versioning
+# Skip validation of old commits that predate Conventional Commits adoption.
+from_latest_tag = true
 # Commit types map to version bumps:
 #   fix:/hotfix:  → patch (2.31.0 → 2.31.1)
 #   feat:/security: → minor (2.31.0 → 2.32.0)
