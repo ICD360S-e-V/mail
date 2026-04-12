@@ -533,7 +533,6 @@ class _ComposeWindowState extends State<ComposeWindow> {
             body: _bodyController.text,
             password: _securePasswordController.text,
             senderEmail: _selectedAccount!.username,
-            subjectHint: _subjectController.text,
             expiryDays: _secureExpiryDays,
           );
 

@@ -35,11 +35,11 @@ class SecureMailService {
 
   /// Encrypt message body with password and upload to server.
   /// Returns the secure URL for the recipient.
+  /// Encrypt and upload. No subject/metadata sent to server (zero-knowledge).
   static Future<SecureMailResult> encryptAndUpload({
     required String body,
     required String password,
     required String senderEmail,
-    String subjectHint = '',
     int expiryDays = 7,
   }) async {
     // 1. Derive key from password
@@ -68,7 +68,6 @@ class SecureMailService {
     final result = await _upload(
       ciphertext: blobBytes,
       senderEmail: senderEmail,
-      subjectHint: subjectHint,
       expiryDays: expiryDays,
     );
 
@@ -108,14 +107,22 @@ The server cannot read the content.''';
   }
 
   /// Revoke access to a secure message.
+  /// Hashes the token client-side before sending (server stores only hashes).
   static Future<bool> revoke(String token) async {
     try {
+      // Hash token client-side — matches server's SHA-256(token) storage
+      final tokenHash = SHA256Digest()
+          .process(Uint8List.fromList(utf8.encode(token)));
+      final tokenHashHex = tokenHash
+          .map((b) => b.toRadixString(16).padLeft(2, '0'))
+          .join();
+
       final client = _createClient();
       final request = await client
           .postUrl(Uri.parse(_revokeEndpoint))
           .timeout(const Duration(seconds: 10));
       request.headers.set('Content-Type', 'application/json');
-      request.write(jsonEncode({'token': token}));
+      request.write(jsonEncode({'token_hash': tokenHashHex}));
 
       final response =
           await request.close().timeout(const Duration(seconds: 10));
@@ -139,7 +146,6 @@ The server cannot read the content.''';
   static Future<SecureMailResult> _upload({
     required Uint8List ciphertext,
     required String senderEmail,
-    required String subjectHint,
     required int expiryDays,
   }) async {
     final client = _createClient();
@@ -147,10 +153,10 @@ The server cannot read the content.''';
         .postUrl(Uri.parse(_sendEndpoint))
         .timeout(const Duration(seconds: 15));
     request.headers.set('Content-Type', 'application/json');
+    // Zero-knowledge: only ciphertext + sender + expiry. No subject/metadata.
     request.write(jsonEncode({
       'ciphertext': base64.encode(ciphertext),
       'sender_email': senderEmail,
-      'subject_hint': subjectHint,
       'expiry_days': expiryDays,
     }));
 
