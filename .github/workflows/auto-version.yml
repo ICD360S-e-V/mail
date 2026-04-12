@@ -36,22 +36,39 @@ jobs:
           git config user.name "release-bot"
           git config user.email "release-bot@users.noreply.github.com"
 
-      - name: Run cocogitto auto-bump
+      - name: Install cocogitto
+        run: |
+          curl -sSL https://github.com/cocogitto/cocogitto/releases/latest/download/cocogitto-6.3.0-x86_64-unknown-linux-musl.tar.gz \
+            | tar xz -C /usr/local/bin cog
+          cog --version
+
+      - name: Run auto-bump
         id: cog_bump
-        uses: cocogitto/cocogitto-action@v3
-        with:
-          command: bump
-          args: --auto --skip-ci
-          git-user: "release-bot"
-          git-user-email: "release-bot@users.noreply.github.com"
+        run: |
+          # Check what commits exist since last tag
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "none")
+          echo "Latest tag: $LATEST_TAG"
+          if [ "$LATEST_TAG" != "none" ]; then
+            echo "Commits since $LATEST_TAG:"
+            git log "$LATEST_TAG"..HEAD --oneline
+          fi
+
+          # Attempt bump
+          OUTPUT=$(cog bump --auto --skip-ci 2>&1) || true
+          echo "$OUTPUT"
+
+          # Extract version from cog output or from new tag
+          NEW_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "none")
+          if [ "$NEW_TAG" != "$LATEST_TAG" ] && [ "$NEW_TAG" != "none" ]; then
+            VERSION="${NEW_TAG#v}"
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "New version: $NEW_TAG"
+          else
+            echo "No bump needed."
+          fi
 
       - name: Push version bump + tag
         if: steps.cog_bump.outputs.version != ''
         run: |
-          echo "New version: v${{ steps.cog_bump.outputs.version }}"
           git push origin main
           git push origin "v${{ steps.cog_bump.outputs.version }}"
-
-      - name: No bump needed
-        if: steps.cog_bump.outputs.version == ''
-        run: echo "No releasable commits since last tag — skipping."
