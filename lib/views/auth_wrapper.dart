@@ -95,19 +95,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
         }
       }
     } else {
-      // Returning user — try PIN first if configured
+      // Cold start — ALWAYS master password (never PIN)
+      // PIN is only for lock/auto-lock within a session
       if (mounted) {
         setState(() => _isChecking = false);
-
-        final hasPin = await PinUnlockService.hasPinConfigured();
-        if (hasPin) {
-          final pinResult = await _showPinUnlock();
-          if (pinResult && mounted) {
-            setState(() => _isAuthenticated = true);
-            return;
-          }
-          // PIN failed/expired — fall through to master password
-        }
 
         final result = await _showMasterPasswordDialog();
         if (result && mounted) {

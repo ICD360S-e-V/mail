@@ -194,12 +194,13 @@ class _MainWindowState extends State<MainWindow> {
     setState(() => _isLocked = true);
     LoggerService.log('SECURITY', 'Application locked');
 
-    // Try PIN unlock first (quick), fallback to master password
+    // Lock/auto-lock → PIN first (quick unlock), master password as fallback
     bool unlocked = false;
     final hasPin = await PinUnlockService.hasPinConfigured();
 
     if (hasPin) {
       unlocked = await _showPinUnlockForLock();
+      // PIN failed (3 attempts) → fallback to master password
     }
 
     if (!unlocked) {

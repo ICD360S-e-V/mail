@@ -30,7 +30,7 @@ class PinUnlockService {
   static const _storageKey = 'pin_v1_blob';
   static const _pinLength = 6;
   static const _maxAgeDays = 7;
-  static const maxFailedAttempts = 5;
+  static const maxFailedAttempts = 3;
   static const _keyBytes = 32;
   static const _blobVersion = 0x10;
   static const _blobSchema = 2; // bump to invalidate all existing PINs
@@ -120,15 +120,9 @@ class PinUnlockService {
       return null;
     }
 
-    // Age guard (sliding window)
-    final lastUsedMs = data['last_used'] as int? ?? 0;
-    final age = DateTime.now()
-        .difference(DateTime.fromMillisecondsSinceEpoch(lastUsedMs));
-    if (age.inDays >= _maxAgeDays) {
-      LoggerService.log('PIN', 'PIN expired (${age.inDays}d)');
-      await invalidatePin();
-      return null;
-    }
+    // PIN does not expire — it's valid until disabled or 3 wrong attempts.
+    // Cold start always requires master password; PIN is only for
+    // lock/auto-lock within a session.
 
     // Device guard
     final currentDeviceId = await _deviceId();

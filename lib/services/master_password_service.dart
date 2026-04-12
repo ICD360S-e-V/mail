@@ -47,8 +47,9 @@ class MasterPasswordService {
   static int _failedAttempts = 0;
   static DateTime? _lockoutUntil;
 
-  /// Free attempts before lockouts kick in
-  static const int _freeAttempts = 5;
+  /// Free attempts before PERMANENT lockout (factory reset required).
+  /// 3 wrong master passwords = app immune to brute force.
+  static const int _freeAttempts = 3;
 
   /// Initialize service and load persisted rate limit state
   static Future<void> initialize() async {
@@ -224,15 +225,17 @@ class MasterPasswordService {
     }
   }
 
-  /// Compute the lockout duration for the next failed attempt based on
-  /// total failed attempts so far. Returns Duration.zero for the first
-  /// few "free" attempts.
+  /// After 3 wrong attempts → PERMANENT lockout. Factory reset required.
+  /// This makes the app immune to brute force attacks.
   static Duration _computeLockoutDuration(int failedAttempts) {
-    if (failedAttempts <= _freeAttempts) return Duration.zero;
-    if (failedAttempts <= 10) return const Duration(seconds: 60);
-    if (failedAttempts <= 15) return const Duration(minutes: 5);
-    if (failedAttempts <= 20) return const Duration(hours: 1);
-    return const Duration(hours: 24);
+    if (failedAttempts < _freeAttempts) return Duration.zero;
+    // Permanent lockout — 100 years (effectively permanent)
+    return const Duration(days: 36500);
+  }
+
+  /// Check if permanently locked (3 wrong master passwords).
+  static bool isPermanentlyLocked() {
+    return _failedAttempts >= _freeAttempts;
   }
 
   /// Check if master password is set
