@@ -91,7 +91,137 @@ class PgpKeyService {
   static void clearCache() {
     _cachedPrivateKey = null;
     _cachedPublicKey = null;
+    _recipientKeyCache.clear();
     LoggerService.log('PGP', 'PGP key cache cleared');
+  }
+
+  // ── Recipient Key Discovery (internal @icd360s.de only) ──────────
+
+  static final Map<String, PublicKey> _recipientKeyCache = {};
+  static const _pubkeyEndpoint =
+      'https://mail.icd360s.de/api/pubkeys';
+
+  /// Fetch a recipient's public key from server. Cached in RAM.
+  /// Returns null if recipient has no key (404).
+  static Future<PublicKey?> fetchRecipientKey(String email) async {
+    if (!email.endsWith('@icd360s.de')) return null;
+
+    final cached = _recipientKeyCache[email.toLowerCase()];
+    if (cached != null) return cached;
+
+    final username = email.split('@').first;
+    final url = Uri.parse('$_pubkeyEndpoint/$username.asc');
+
+    try {
+      final baseClient = MtlsService.createMtlsHttpClient();
+      final client = baseClient ??
+          (PinnedSecurityContext.createHttpClient()
+            ..badCertificateCallback = (cert, host, port) {
+              if (host == 'mail.icd360s.de') {
+                return isTrustedLetsEncryptIssuer(cert.issuer);
+              }
+              return false;
+            });
+
+      final request = await client.getUrl(url)
+          .timeout(const Duration(seconds: 8));
+      final response = await request.close()
+          .timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 404) {
+        client.close();
+        return null;
+      }
+      if (response.statusCode != 200) {
+        client.close();
+        return null;
+      }
+
+      final armored = await response.transform(utf8.decoder).join();
+      client.close();
+
+      final key = OpenPGP.readPublicKey(armored);
+      _recipientKeyCache[email.toLowerCase()] = key;
+      LoggerService.log('PGP', '✓ Fetched public key for $email');
+      return key;
+    } catch (ex) {
+      LoggerService.logWarning('PGP', 'Key fetch failed for $email: $ex');
+      return null;
+    }
+  }
+
+  /// Check if all recipients have PGP keys (internal only).
+  static Future<Map<String, PublicKey?>> lookupAllRecipients(
+      List<String> emails) async {
+    final results = <String, PublicKey?>{};
+    await Future.wait(emails.map((email) async {
+      results[email] = await fetchRecipientKey(email);
+    }));
+    return results;
+  }
+
+  // ── PGP/MIME Outbound (RFC 3156) ────────────────────────────────��
+
+  /// Build a complete RFC 3156 PGP/MIME encrypted message as raw string.
+  /// Encrypts to all recipients + self. Signs with sender's private key.
+  static Future<String> buildPgpMimeMessage({
+    required String from,
+    required String to,
+    String cc = '',
+    String bcc = '',
+    required String subject,
+    required String innerMimeBody,
+    required List<PublicKey> recipientKeys,
+  }) async {
+    if (_cachedPrivateKey == null || _cachedPublicKey == null) {
+      throw StateError('PGP keys not loaded — unlock vault first');
+    }
+
+    // Encrypt to all recipients + self
+    final allKeys = <PublicKey>[...recipientKeys];
+    if (!allKeys.any((k) => k.fingerprint == _cachedPublicKey!.fingerprint)) {
+      allKeys.add(_cachedPublicKey!);
+    }
+
+    final literalMsg = OpenPGP.createTextMessage(innerMimeBody);
+    final encrypted = OpenPGP.encrypt(
+      literalMsg,
+      encryptionKeys: allKeys,
+      signingKeys: [_cachedPrivateKey!],
+    );
+    final ciphertext = encrypted.armor();
+
+    // Build RFC 3156 outer wrapper
+    final boundary = 'pgp-${DateTime.now().millisecondsSinceEpoch}';
+    final buf = StringBuffer()
+      ..writeln('MIME-Version: 1.0')
+      ..writeln('From: $from')
+      ..writeln('To: $to');
+    if (cc.isNotEmpty) buf.writeln('Cc: $cc');
+    buf
+      ..writeln('Subject: $subject')
+      ..writeln('Content-Type: multipart/encrypted;')
+      ..writeln('\tprotocol="application/pgp-encrypted";')
+      ..writeln('\tboundary="$boundary"')
+      ..writeln()
+      ..writeln('This is an OpenPGP/MIME encrypted message (RFC 3156).')
+      ..writeln()
+      ..writeln('--$boundary')
+      ..writeln('Content-Type: application/pgp-encrypted')
+      ..writeln('Content-Description: PGP/MIME version identification')
+      ..writeln()
+      ..writeln('Version: 1')
+      ..writeln()
+      ..writeln('--$boundary')
+      ..writeln('Content-Type: application/octet-stream')
+      ..writeln('Content-Description: OpenPGP encrypted message')
+      ..writeln('Content-Disposition: inline; filename="encrypted.asc"')
+      ..writeln()
+      ..writeln(ciphertext)
+      ..writeln()
+      ..writeln('--$boundary--');
+
+    return buf.toString();
   }
 
   // ── Decrypt (RFC 3156 PGP/MIME) ──────────────────────────────────

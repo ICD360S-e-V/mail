@@ -12,6 +12,7 @@ import '../services/device_registration_service.dart';
 import '../services/notification_service.dart';
 import '../services/logger_service.dart';
 import '../services/email_history_service.dart';
+import '../services/pgp_key_service.dart';
 import '../utils/pii_redactor.dart';
 
 /// Compose email window
@@ -55,6 +56,11 @@ class _ComposeWindowState extends State<ComposeWindow> {
   // Auto-complete suggestions
   List<String> _toSuggestions = [];
   bool _showToSuggestions = false;
+
+  // E2EE: per-recipient PGP key status
+  final Map<String, bool> _recipientHasKey = {}; // email → has PGP key
+  bool _encryptionPossible = false;
+  Timer? _keyLookupTimer;
 
   @override
   void initState() {
@@ -373,8 +379,37 @@ class _ComposeWindowState extends State<ComposeWindow> {
     }
   }
 
+  /// Look up PGP keys for all current recipients (debounced).
+  void _scheduleKeyLookup() {
+    _keyLookupTimer?.cancel();
+    _keyLookupTimer = Timer(const Duration(milliseconds: 500), _lookupKeys);
+  }
+
+  Future<void> _lookupKeys() async {
+    final allEmails = [
+      ..._parseRecipients(_toController.text),
+      ..._parseRecipients(_ccController.text),
+      ..._parseRecipients(_bccController.text),
+    ];
+    if (allEmails.isEmpty) {
+      setState(() => _encryptionPossible = false);
+      return;
+    }
+    final results = await PgpKeyService.lookupAllRecipients(allEmails);
+    if (!mounted) return;
+    setState(() {
+      _recipientHasKey.clear();
+      for (final entry in results.entries) {
+        _recipientHasKey[entry.key] = entry.value != null;
+      }
+      _encryptionPossible = results.values.every((k) => k != null) &&
+          allEmails.every((e) => e.endsWith('@icd360s.de'));
+    });
+  }
+
   @override
   void dispose() {
+    _keyLookupTimer?.cancel();
     LoggerService.log('COMPOSE', 'Compose window closed');
     _autoSaveTimer?.cancel();
     _uiRefreshTimer?.cancel();
@@ -636,8 +671,41 @@ class _ComposeWindowState extends State<ComposeWindow> {
                       if (firstEmail != null && firstEmail.contains('@') && firstEmail.split('@').last.contains('.')) {
                         _checkTargetServerSize(firstEmail);
                       }
+
+                      // E2EE: look up PGP keys for recipients
+                      _scheduleKeyLookup();
                     },
                   ),
+                  // E2EE encryption status indicator
+                  if (_recipientHasKey.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Row(
+                        children: [
+                          Icon(
+                            _encryptionPossible
+                                ? FluentIcons.lock_solid
+                                : FluentIcons.unlock,
+                            size: 12,
+                            color: _encryptionPossible
+                                ? const Color(0xFF107C10)
+                                : FluentTheme.of(context).inactiveColor,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            _encryptionPossible
+                                ? 'End-to-end encrypted'
+                                : 'Some recipients have no encryption key',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: _encryptionPossible
+                                  ? const Color(0xFF107C10)
+                                  : FluentTheme.of(context).inactiveColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   // Auto-complete suggestions dropdown
                   if (_showToSuggestions && _toSuggestions.isNotEmpty)
                     Container(

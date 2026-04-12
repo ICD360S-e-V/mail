@@ -493,7 +493,58 @@ class MailService {
       messageBuilder.setHeader('Delivery-Status-Notification-To', account.username);
       messageBuilder.setHeader('X-Delivery-Status-Notification', 'SUCCESS,FAILURE,DELAY');
 
-      final mimeMessage = messageBuilder.buildMimeMessage();
+      var mimeMessage = messageBuilder.buildMimeMessage();
+
+      // ── E2EE: Encrypt for internal @icd360s.de recipients ──────────
+      final allRecipientEmails = [
+        ...recipients, ...ccRecipients, ...bccRecipients,
+      ];
+      final allInternal = allRecipientEmails.every(
+          (e) => e.endsWith('@icd360s.de'));
+
+      if (allInternal && allRecipientEmails.isNotEmpty) {
+        try {
+          // Lookup all recipient keys
+          final keyMap =
+              await PgpKeyService.lookupAllRecipients(allRecipientEmails);
+          final allKeysFound = keyMap.values.every((k) => k != null);
+
+          if (allKeysFound) {
+            final recipientKeys = keyMap.values
+                .whereType<PublicKey>()
+                .toList();
+
+            // Build inner MIME body (plaintext + attachments)
+            final innerMime = mimeMessage.renderMessage();
+
+            // Build PGP/MIME outer wrapper
+            final pgpMimeRaw = await PgpKeyService.buildPgpMimeMessage(
+              from: account.username,
+              to: to,
+              cc: cc,
+              bcc: bcc,
+              subject: subject,
+              innerMimeBody: innerMime,
+              recipientKeys: recipientKeys,
+            );
+
+            // Replace mimeMessage with the encrypted version
+            mimeMessage = MimeMessage.parseFromText(pgpMimeRaw);
+            LoggerService.log('PGP',
+                '✓ Email encrypted for ${allRecipientEmails.length} internal recipients');
+          } else {
+            final missing = keyMap.entries
+                .where((e) => e.value == null)
+                .map((e) => e.key)
+                .join(', ');
+            LoggerService.logWarning('PGP',
+                'Keys missing for: $missing — sending plaintext');
+          }
+        } catch (ex) {
+          LoggerService.logWarning('PGP',
+              'Encryption failed, sending plaintext: $ex');
+        }
+      }
 
       // Calculate total message size
       final messageSizeKB = (mimeMessage.toString().length / 1024).round();
