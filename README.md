@@ -271,25 +271,44 @@ Every push to `main` with a releasable commit automatically bumps the version, c
 
 ## About ICD360S e.V.
 
-ICD360S e.V. is a German nonprofit (*eingetragener Verein*) based in Berlin.
+[ICD360S e.V.](https://icd360s.de) is a registered German nonprofit (*eingetragener Verein*) based in Berlin.
 
-This email client is built exclusively for our members as a **free service**. Every member receives a unique `@icd360s.de` email address and a personal encryption key upon joining. Access is managed through an administrator-approved device registration flow — each new device must be individually authorized before it can access the mail system.
+This email client is designed for **professional communication** — both within the association and with external institutions, organizations, and individuals. Members use their `@icd360s.de` address to communicate securely with government agencies, partners, legal contacts, and each other.
 
-**What you get:**
-- Unlimited incoming emails
-- 500 MB mailbox storage
-- 10 emails per day sending limit (max 3 per hour)
-- End-to-end encrypted communication with all other members
-- Cross-platform access (Windows, macOS, Linux, Android, iOS)
+### Membership Benefits
 
-**How it works:**
-1. You become a member of ICD360S e.V.
+Every active member receives a free, secure email account:
+
+| | Benefit |
+|---|---|
+| | **Unlimited** incoming emails |
+| | **500 MB** mailbox storage per account |
+| | **10 emails/day** sending limit (3 per hour) |
+| | **End-to-end encrypted** communication with all members |
+| | **Cross-platform** access — Windows, macOS, Linux, Android, iOS |
+| | **Professional @icd360s.de** email address |
+
+### How to Get Access
+
+1. Become a member of ICD360S e.V.
 2. The administrator creates your email account and approves your device.
-3. The app automatically generates your encryption keys on first login.
-4. All your communication with other members is end-to-end encrypted — no one, not even us, can read your emails.
+3. The app generates your encryption keys automatically on first login.
+4. Start communicating — internally encrypted, externally professional.
 
-The service is free for all active members. When a membership ends, the administrator revokes the device and the app automatically wipes all credentials.
+The service is **free for all active members**. When a membership ends, the administrator revokes access and the app automatically wipes all credentials from the device.
+
+> This service is provided exclusively to members of ICD360S e.V. as part of their membership, in compliance with German nonprofit law (BGB §§21-79, AO §§51-68) and GDPR/DSGVO. Running a member email service is a [routine practice](https://www.ccc.de) among German nonprofits. No TKG telecommunications registration is required for internal member services.
+
+---
+
+## License
+
+This project is licensed under the **MIT License** — see [LICENSE](LICENSE).
+
+If you use this code, please credit **ICD360S e.V.** as the original author.
 
 <div align="center">
+  <br/>
   <a href="https://icd360s.de"><strong>icd360s.de</strong></a>
+  <br/><br/>
 </div>
