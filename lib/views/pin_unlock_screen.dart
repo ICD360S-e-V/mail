@@ -102,6 +102,17 @@ class _PinUnlockScreenState extends State<PinUnlockScreen>
     HapticFeedback.lightImpact();
     setState(() {
       _pin = _pin.substring(0, _pin.length - 1);
+      // Reshuffle when backspaced to empty (prevents partial-entry inference)
+      if (_pin.isEmpty) _reshuffleKeypad();
+    });
+  }
+
+  void _onClearAll() {
+    if (_isLoading || _pin.isEmpty) return;
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _pin = '';
+      _reshuffleKeypad();
     });
   }
 
@@ -156,6 +167,20 @@ class _PinUnlockScreenState extends State<PinUnlockScreen>
 
   Future<void> _handleUnlock() async {
     setState(() => _isLoading = true);
+
+    // Check for lockout delay before attempting
+    final delay = await PinUnlockService.getLockoutDelay();
+    if (delay > 0) {
+      for (var s = delay; s > 0; s--) {
+        if (!mounted) return;
+        setState(() {
+          _message = 'Wait ${s}s before retry';
+          _isError = true;
+        });
+        await Future.delayed(const Duration(seconds: 1));
+      }
+    }
+
     final success = await widget.onPinSubmitted(_pin);
     if (!mounted) return;
 
@@ -200,7 +225,10 @@ class _PinUnlockScreenState extends State<PinUnlockScreen>
               ),
               const SizedBox(height: 24),
               // PIN dots with shake animation
-              _buildPinDots(theme),
+              Semantics(
+                label: '${_pin.length} of $_pinLength digits entered',
+                child: _buildPinDots(theme),
+              ),
               const SizedBox(height: 12),
               // Message
               if (_message != null)
@@ -323,6 +351,7 @@ class _PinUnlockScreenState extends State<PinUnlockScreen>
       button: true,
       child: GestureDetector(
         onTap: _onBackspace,
+        onLongPress: _onClearAll, // long-press clears all digits
         child: Container(
           width: 72,
           height: 72,

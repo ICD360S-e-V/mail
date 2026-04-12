@@ -3,10 +3,6 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:cryptography/cryptography.dart';
-import 'package:pointycastle/digests/sha256.dart';
-import 'package:pointycastle/key_derivators/api.dart';
-import 'package:pointycastle/key_derivators/pbkdf2.dart';
-import 'package:pointycastle/macs/hmac.dart';
 
 import 'aes_gcm_helpers.dart';
 import 'account_service.dart';
@@ -16,47 +12,54 @@ import 'master_vault.dart';
 import 'portable_secure_storage.dart';
 import 'update_service.dart';
 
-/// PIN-based quick unlock with device-bound key wrapping.
+/// PIN-based quick unlock with randomized keypad.
 ///
-/// Architecture:
-///   Master password unlock (first time / expiry):
-///     masterPassword → Argon2id → masterKey
-///     PIN + pinSalt → PBKDF2(600k) → HKDF(deviceSecret) → pinKEK
-///     wrappedMasterKey = AES-GCM(masterKey, pinKEK)
-///     store wrappedMasterKey in PortableSecureStorage
+/// Security model:
+///   PIN (6 digits) → Argon2id(19 MiB, 2 iter, 1 thread) → pinRaw
+///   pinKEK = HKDF-SHA256(pinRaw, salt=deviceSecret)
+///   wrappedMasterKey = AES-256-GCM(masterKey, pinKEK)
 ///
-///   PIN unlock (quick):
-///     PIN → same derivation → pinKEK → decrypt wrappedMasterKey
-///     masterKey → unlock vault + session (bypasses Argon2id)
-///
-/// Security:
-///   - PIN is 6 digits (10^6 combinations)
-///   - Offline brute force requires device-bound secret (IOPlatformUUID)
-///   - In-app rate limiting: 5 attempts then master password required
-///   - PIN expires after 72 hours since last use
-///   - PIN invalidated on app version change
+/// Defenses:
+///   - Argon2id memory-hard: GPU brute-force ~7,600 H/s → 10^6 PINs in ~2 min
+///     but device-bound secret makes offline attack require device access
+///   - Failed attempts persisted to disk (survives app kill/restart)
+///   - Progressive lockout delays: 0/2/5/10/30s
+///   - PIN expires after 7 days since last use (sliding window)
+///   - PIN invalidated on major version change or device change
 class PinUnlockService {
   static const _storageKey = 'pin_v1_blob';
   static const _pinLength = 6;
-  static const _maxAgeHours = 72;
+  static const _maxAgeDays = 7;
   static const maxFailedAttempts = 5;
-  static const _pbkdf2Iterations = 600000;
   static const _keyBytes = 32;
   static const _blobVersion = 0x10;
+  static const _blobSchema = 2; // bump to invalidate all existing PINs
 
-  static int _failedAttempts = 0;
+  // Argon2id parameters for PIN KDF (RFC 9106 minimum recommended)
+  static const _argon2Memory = 19456; // 19 MiB — GPU-resistant
+  static const _argon2Iterations = 2;
+  static const _argon2Parallelism = 1; // single thread for PIN
 
-  // ── Query ──────────────────────────────────────────────────────────────
+  /// Progressive lockout delays in seconds after each failed attempt.
+  static const _lockoutDelays = [0, 2, 5, 10, 30];
+
+  // ── Query ──────────────────────────────────────────────────────────
 
   static Future<bool> hasPinConfigured() async =>
       await PortableSecureStorage.instance.containsKey(key: _storageKey);
 
-  static int get failedAttempts => _failedAttempts;
+  /// Seconds the caller must wait before accepting next PIN attempt.
+  /// Returns 0 if no delay is needed.
+  static Future<int> getLockoutDelay() async {
+    final data = await _readBlob();
+    if (data == null) return 0;
+    final attempts = data['failed_attempts'] as int? ?? 0;
+    if (attempts <= 0) return 0;
+    return _lockoutDelays[min(attempts - 1, _lockoutDelays.length - 1)];
+  }
 
-  // ── Setup ──────────────────────────────────────────��───────────────────
+  // ── Setup ──────────────────────────────────────────────────────────
 
-  /// Store a PIN that wraps [masterKey]. Call after successful master
-  /// password unlock when the user sets up or changes their PIN.
   static Future<void> setupPin({
     required String pin,
     required Uint8List masterKey,
@@ -70,57 +73,59 @@ class PinUnlockService {
     final wrapped = AesGcmHelpers.encrypt(
         pinKEK, masterKey, versionByte: _blobVersion);
 
-    final blob = jsonEncode({
+    // Zero pinKEK
+    for (var i = 0; i < pinKEK.length; i++) pinKEK[i] = 0;
+
+    final blob = {
       'salt': base64.encode(pinSalt),
       'wrapped': base64.encode(wrapped),
       'set_at': DateTime.now().millisecondsSinceEpoch,
       'last_used': DateTime.now().millisecondsSinceEpoch,
-      'app_version': UpdateService.currentVersion,
+      'major_version': _majorVersion(),
+      'blob_schema': _blobSchema,
       'device_id': deviceId,
-    });
+      'failed_attempts': 0,
+    };
 
-    await PortableSecureStorage.instance.write(
-        key: _storageKey, value: base64.encode(utf8.encode(blob)));
-    _failedAttempts = 0;
-    LoggerService.log('PIN', 'PIN configured');
+    await _writeBlob(blob);
+    LoggerService.log('PIN', 'PIN configured (Argon2id 19 MiB)');
   }
 
-  // ── Verify ─────────────────────────────────────────────────────────────
+  // ── Verify ─────────────────────────────────────────────────────────
 
-  /// Returns unwrapped masterKey on success, null on failure.
-  /// Caller MUST zero the returned bytes after use.
   static Future<Uint8List?> verifyPin(String pin) async {
-    if (_failedAttempts >= maxFailedAttempts) {
-      LoggerService.log('PIN', 'PIN locked — too many attempts');
-      return null;
-    }
+    final data = await _readBlob();
+    if (data == null) return null;
 
-    final raw = await PortableSecureStorage.instance.read(key: _storageKey);
-    if (raw == null) return null;
-
-    Map<String, dynamic> data;
-    try {
-      data = jsonDecode(utf8.decode(base64.decode(raw)))
-          as Map<String, dynamic>;
-    } catch (_) {
+    // Persisted attempt counter (survives app restart)
+    final attempts = data['failed_attempts'] as int? ?? 0;
+    if (attempts >= maxFailedAttempts) {
+      LoggerService.log('PIN', 'PIN locked — $attempts failed attempts');
       await invalidatePin();
       return null;
     }
 
-    // Version guard
-    if (data['app_version'] != UpdateService.currentVersion) {
+    // Schema guard (bump _blobSchema to force re-setup)
+    if ((data['blob_schema'] as int? ?? 0) < _blobSchema) {
+      LoggerService.log('PIN', 'PIN schema outdated — invalidated');
+      await invalidatePin();
+      return null;
+    }
+
+    // Major version guard (invalidate on major bump, not every release)
+    if (data['major_version'] != _majorVersion()) {
       LoggerService.log('PIN',
-          'App version changed (${data['app_version']} → ${UpdateService.currentVersion}) — PIN invalidated');
+          'Major version changed (${data['major_version']} → ${_majorVersion()}) — PIN invalidated');
       await invalidatePin();
       return null;
     }
 
-    // Age guard
+    // Age guard (sliding window)
     final lastUsedMs = data['last_used'] as int? ?? 0;
     final age = DateTime.now()
         .difference(DateTime.fromMillisecondsSinceEpoch(lastUsedMs));
-    if (age.inHours >= _maxAgeHours) {
-      LoggerService.log('PIN', 'PIN expired (${age.inHours}h)');
+    if (age.inDays >= _maxAgeDays) {
+      LoggerService.log('PIN', 'PIN expired (${age.inDays}d)');
       await invalidatePin();
       return null;
     }
@@ -133,42 +138,39 @@ class PinUnlockService {
       return null;
     }
 
-    // Decrypt
-    final pinSalt = base64.decode(data['salt'] as String);
-    final wrapped = base64.decode(data['wrapped'] as String);
-    final pinKEK = await _deriveKEK(pin, Uint8List.fromList(pinSalt), currentDeviceId);
+    // Derive pinKEK and attempt decrypt
+    final pinSalt = Uint8List.fromList(base64.decode(data['salt'] as String));
+    final wrapped = Uint8List.fromList(base64.decode(data['wrapped'] as String));
+    final pinKEK = await _deriveKEK(pin, pinSalt, currentDeviceId);
     final masterKey = AesGcmHelpers.decrypt(
-        pinKEK, Uint8List.fromList(wrapped), expectedVersionByte: _blobVersion);
+        pinKEK, wrapped, expectedVersionByte: _blobVersion);
+
+    // Zero pinKEK
+    for (var i = 0; i < pinKEK.length; i++) pinKEK[i] = 0;
 
     if (masterKey == null) {
-      _failedAttempts++;
+      // Wrong PIN — persist incremented counter
+      data['failed_attempts'] = attempts + 1;
+      await _writeBlob(data);
       LoggerService.log('PIN',
-          'Incorrect PIN ($_failedAttempts/$maxFailedAttempts)');
-      if (_failedAttempts >= maxFailedAttempts) {
+          'Incorrect PIN (${attempts + 1}/$maxFailedAttempts)');
+      if (attempts + 1 >= maxFailedAttempts) {
         await invalidatePin();
       }
       return null;
     }
 
-    // Success — update last_used
-    _failedAttempts = 0;
+    // Success — reset counter, update last_used
+    data['failed_attempts'] = 0;
     data['last_used'] = DateTime.now().millisecondsSinceEpoch;
-    await PortableSecureStorage.instance.write(
-      key: _storageKey,
-      value: base64.encode(utf8.encode(jsonEncode(data))),
-    );
+    await _writeBlob(data);
     LoggerService.log('PIN', 'PIN verified');
     return Uint8List.fromList(masterKey);
   }
 
-  /// Full unlock flow after PIN verification.
+  /// Full unlock after PIN verification.
   static Future<void> unlockWithMasterKey(Uint8List masterKey) async {
-    // Unlock vault (bypasses Argon2id — masterKey is already derived)
     await MasterVault.instance.unlockWithKey(masterKey);
-    // Unlock credential session — pass masterKey as password-equivalent
-    // AccountService derives its session key from a password string, so we
-    // encode masterKey as base64 and use that as the "password" input.
-    // This is not ideal but avoids a large refactor of AccountService.
     await AccountService.unlockSession(base64.encode(masterKey));
     await CertificateService.restoreFromSecureStorage();
     LoggerService.log('PIN', 'App unlocked via PIN');
@@ -177,20 +179,28 @@ class PinUnlockService {
   /// Delete PIN — requires master password on next unlock.
   static Future<void> invalidatePin() async {
     await PortableSecureStorage.instance.delete(key: _storageKey);
-    _failedAttempts = 0;
     LoggerService.log('PIN', 'PIN invalidated');
   }
 
-  // ── Crypto ────────���────────────────────────────────────────────────────
+  // ── Crypto (Argon2id + HKDF) ──────────────────────────────────────
 
   static Future<Uint8List> _deriveKEK(
       String pin, Uint8List pinSalt, String deviceId) async {
-    // PBKDF2-HMAC-SHA256 over PIN digits
-    final derivator = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
-      ..init(Pbkdf2Parameters(pinSalt, _pbkdf2Iterations, _keyBytes));
-    final pinRaw = derivator.process(Uint8List.fromList(utf8.encode(pin)));
+    // Argon2id — memory-hard, GPU-resistant
+    final argon2 = Argon2id(
+      memory: _argon2Memory,
+      iterations: _argon2Iterations,
+      parallelism: _argon2Parallelism,
+      hashLength: _keyBytes,
+    );
+    final pinKey = await argon2.deriveKey(
+      secretKey: SecretKey(utf8.encode(pin)),
+      nonce: pinSalt,
+    );
+    final pinRawView = await pinKey.extractBytes();
+    final pinRaw = Uint8List.fromList(pinRawView);
 
-    // HKDF with device ID as salt — binds to this device
+    // HKDF with device ID — binds to this device
     final hkdf = Hkdf(hmac: Hmac.sha256(), outputLength: _keyBytes);
     final kek = await hkdf.deriveKey(
       secretKey: SecretKey(pinRaw),
@@ -205,22 +215,40 @@ class PinUnlockService {
     return Uint8List.fromList(kekBytes);
   }
 
+  // ── Storage helpers ────────────────────────────────────────────────
+
+  static Future<Map<String, dynamic>?> _readBlob() async {
+    final raw = await PortableSecureStorage.instance.read(key: _storageKey);
+    if (raw == null) return null;
+    try {
+      return jsonDecode(utf8.decode(base64.decode(raw)))
+          as Map<String, dynamic>;
+    } catch (_) {
+      await invalidatePin();
+      return null;
+    }
+  }
+
+  static Future<void> _writeBlob(Map<String, dynamic> data) async {
+    await PortableSecureStorage.instance.write(
+      key: _storageKey,
+      value: base64.encode(utf8.encode(jsonEncode(data))),
+    );
+  }
+
   static Future<String> _deviceId() async {
-    // Reuse the same machine secret as PortableSecureStorage/MasterVault
     final storage = PortableSecureStorage.instance;
-    // Access the machine secret through a read — if no PIN exists we just
-    // need the device ID for comparison. The actual machine secret derivation
-    // is in PortableSecureStorage._machineSecret() which we can't call
-    // directly (private). Use a stable key in storage instead.
     var id = await storage.read(key: 'icd360s_device_pin_id');
     if (id == null) {
-      // Generate and persist a stable device ID for PIN binding
-      final bytes = _randomBytes(32);
-      id = base64.encode(bytes);
+      id = base64.encode(_randomBytes(32));
       await storage.write(key: 'icd360s_device_pin_id', value: id);
     }
     return id;
   }
+
+  /// Major version only (e.g., "2" from "2.31.0")
+  static String _majorVersion() =>
+      UpdateService.currentVersion.split('.').first;
 
   static Uint8List _randomBytes(int n) {
     final r = Random.secure();
