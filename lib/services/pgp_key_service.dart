@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart' show compute, listEquals;
 import 'logger_service.dart';
 import 'master_vault.dart';
 import 'mtls_service.dart';
+import 'pgp_isolate_worker.dart';
 import 'le_issuer_check.dart';
 import 'pinned_security_context.dart';
 
@@ -25,6 +26,9 @@ class PgpKeyService {
   static dynamic _cachedPrivateKey; // PrivateKeyInterface
   static dynamic _cachedPublicKey;  // KeyInterface
   static Future<dynamic>? _keyGenFuture;
+
+  // Background isolate worker for non-blocking decrypt
+  static PgpIsolateWorker? _worker;
 
   // Recipient key cache (RAM only)
   static final Map<String, dynamic> _recipientKeyCache = {};
@@ -52,6 +56,7 @@ class PgpKeyService {
         _cachedPrivateKey =
             OpenPGP.decryptPrivateKey(existingArmor, passphrase);
         _cachedPublicKey = _cachedPrivateKey.publicKey;
+        await _startWorker(existingArmor, passphrase);
         LoggerService.log('PGP', 'Loaded existing PGP key for $email');
         return _cachedPrivateKey;
       } catch (ex) {
@@ -64,9 +69,11 @@ class PgpKeyService {
     // compute() requires a top-level or static function (not a lambda)
     final privateKey = await compute(_generateKeyIsolate, [email, passphrase]);
 
-    await vault.write(key: _vaultKeyPrivate, value: privateKey.armor());
+    final armoredKey = privateKey.armor();
+    await vault.write(key: _vaultKeyPrivate, value: armoredKey);
     _cachedPrivateKey = privateKey;
     _cachedPublicKey = privateKey.publicKey;
+    await _startWorker(armoredKey, passphrase);
 
     await _uploadPublicKey(privateKey.publicKey, email);
     LoggerService.log('PGP', '✓ PGP keypair generated and uploaded');
@@ -83,24 +90,40 @@ class PgpKeyService {
     _cachedPrivateKey = null;
     _cachedPublicKey = null;
     _recipientKeyCache.clear();
-    LoggerService.log('PGP', 'PGP key cache cleared');
+    _worker?.close();
+    _worker = null;
+    LoggerService.log('PGP', 'PGP key cache + worker cleared');
   }
 
-  // ── Decrypt (RFC 3156 PGP/MIME) ──────────────────────────────────
+  // ── Decrypt (via background isolate worker) ───────────────────────
 
+  /// Decrypt a single PGP message. Runs on background isolate.
   static Future<String> decrypt(String armoredCiphertext) async {
-    if (_cachedPrivateKey == null) {
-      throw StateError('PGP key not loaded — unlock vault first');
+    if (_worker == null) {
+      throw StateError('PGP worker not started — unlock vault first');
     }
-    final message = OpenPGP.decrypt(
-      armoredCiphertext,
-      decryptionKeys: [_cachedPrivateKey],
+    final results = await _worker!.decryptBatch([armoredCiphertext]);
+    final plaintext = results.first;
+    if (plaintext == null) throw StateError('Decryption failed');
+    return plaintext;
+  }
+
+  /// Decrypt a batch of PGP messages. One isolate call, zero UI blocking.
+  static Future<List<String?>> decryptBatch(List<String> ciphertexts) async {
+    if (_worker == null) {
+      throw StateError('PGP worker not started — unlock vault first');
+    }
+    return _worker!.decryptBatch(ciphertexts);
+  }
+
+  /// Start the background decrypt worker.
+  static Future<void> _startWorker(String armoredKey, String passphrase) async {
+    _worker?.close();
+    _worker = await PgpIsolateWorker.spawn(
+      armoredKey: armoredKey,
+      passphrase: passphrase,
     );
-    final literal = message.literalData;
-    if (literal == null) {
-      throw StateError('Decryption produced no literal data');
-    }
-    return utf8.decode(literal.binary, allowMalformed: true);
+    LoggerService.log('PGP', '✓ Decrypt worker started (background isolate)');
   }
 
   // ── PGP/MIME Detection + Extraction ──────────────────────────────
