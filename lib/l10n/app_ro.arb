@@ -249,6 +249,8 @@
   "mailServiceEmailNotFound": "Email negăsit în {folder}. Ar putea fi deja mutat sau șters.",
   "accountServiceSecurityErrorServer": "Eroare de Securitate: Doar serverul {allowedServer} este permis. Acest client este blocat la serverul de mail ICD360S.",
   "accountServiceSecurityErrorPorts": "Eroare de Securitate: Doar porturile securizate (IMAP:10993, SMTP:465) sunt permise pentru mTLS.",
+  "notificationNewEmail": "Email nou",
+  "notificationTapToView": "Apasă pentru a deschide",
   "notificationNewEmailFrom": "Email nou de la {from}",
   "notificationEmailSubjectThreat": "{subject}\nAmenințare: {threat}",
   "certExpiryStatusUnknown": "Status certificat necunoscut",

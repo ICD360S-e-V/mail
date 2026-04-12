@@ -7,15 +7,15 @@ import 'package:http/io_client.dart';
 
 import 'certificate_service.dart';
 import 'le_issuer_check.dart';
-
-/// Result of a heartbeat call — used to detect remote device revocation.
-enum HeartbeatResult { ok, revoked, error }
 import 'logger_service.dart';
 import 'mtls_service.dart';
 import 'pinned_security_context.dart';
 import 'platform_service.dart';
 import 'portable_secure_storage.dart';
 import 'update_service.dart';
+
+/// Result of a heartbeat call — used to detect remote device revocation.
+enum HeartbeatResult { ok, revoked, error }
 
 /// Client API for the mail-admin backend on mail.icd360s.de.
 ///

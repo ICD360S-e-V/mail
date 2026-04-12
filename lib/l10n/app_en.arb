@@ -540,6 +540,8 @@
     }
   },
   "accountServiceSecurityErrorPorts": "Security Error: Only secure ports (IMAP:10993, SMTP:465) are allowed for mTLS.",
+  "notificationNewEmail": "New email",
+  "notificationTapToView": "Tap to open",
   "notificationNewEmailFrom": "New Email from {from}",
   "@notificationNewEmailFrom": {
     "placeholders": {

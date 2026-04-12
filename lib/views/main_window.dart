@@ -18,6 +18,8 @@ import '../services/master_password_service.dart';
 import '../services/master_vault.dart';
 import '../services/security_health_service.dart';
 import '../services/certificate_service.dart';
+import '../services/pin_unlock_service.dart';
+import 'pin_unlock_screen.dart';
 import '../services/trash_tracker_service.dart';
 import '../services/connection_monitor.dart';
 import '../utils/l10n_helper.dart';
@@ -685,6 +687,18 @@ class _MainWindowState extends State<MainWindow> {
             // Spacer to push buttons to far right
             const Spacer(),
 
+            // Settings button — notification privacy + PIN management
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: IconButton(
+                icon: const Icon(FluentIcons.settings, size: 16),
+                onPressed: () async {
+                  _resetAutoLockTimer();
+                  await _showSettingsDialog(context);
+                },
+              ),
+            ),
+
             // Factory Reset button (requires typed "DELETE" confirmation).
             // SECURITY (M6): Only accessible post-login, not on the lock screen.
             Padding(
@@ -862,6 +876,127 @@ class _MainWindowState extends State<MainWindow> {
     await showDialog(
       context: context,
       builder: (context) => const ChangelogWindow(),
+    );
+  }
+
+  /// Settings dialog — notification privacy + PIN management.
+  Future<void> _showSettingsDialog(BuildContext ctx) async {
+    LoggerService.log('UI_CLICK', 'Footer: Settings button clicked');
+    var privacyLevel = await SettingsService.getNotificationPrivacyLevel();
+    final hasPin = await PinUnlockService.hasPinConfigured();
+
+    if (!ctx.mounted) return;
+    await showDialog(
+      context: ctx,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (dialogCtx, setDialogState) {
+          return ContentDialog(
+            title: const Text('Settings'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Notification Privacy ────────────────────────
+                Text('Notification Content',
+                    style: FluentTheme.of(dialogCtx).typography.bodyStrong),
+                const SizedBox(height: 8),
+                RadioButton(
+                  checked: privacyLevel == NotificationPrivacyLevel.none,
+                  onChanged: (v) {
+                    if (v) {
+                      setDialogState(() => privacyLevel = NotificationPrivacyLevel.none);
+                      SettingsService.setNotificationPrivacyLevel(NotificationPrivacyLevel.none);
+                    }
+                  },
+                  content: const Text('Minimal — "New email" only'),
+                ),
+                const SizedBox(height: 4),
+                RadioButton(
+                  checked: privacyLevel == NotificationPrivacyLevel.senderOnly,
+                  onChanged: (v) {
+                    if (v) {
+                      setDialogState(() => privacyLevel = NotificationPrivacyLevel.senderOnly);
+                      SettingsService.setNotificationPrivacyLevel(NotificationPrivacyLevel.senderOnly);
+                    }
+                  },
+                  content: const Text('Sender only — "New email from Marcel"'),
+                ),
+                const SizedBox(height: 4),
+                RadioButton(
+                  checked: privacyLevel == NotificationPrivacyLevel.full,
+                  onChanged: (v) {
+                    if (v) {
+                      setDialogState(() => privacyLevel = NotificationPrivacyLevel.full);
+                      SettingsService.setNotificationPrivacyLevel(NotificationPrivacyLevel.full);
+                    }
+                  },
+                  content: const Text('Full — sender + subject'),
+                ),
+
+                const SizedBox(height: 20),
+                // ── PIN Management ─────────────────────────────
+                Text('PIN Unlock',
+                    style: FluentTheme.of(dialogCtx).typography.bodyStrong),
+                const SizedBox(height: 8),
+                if (hasPin)
+                  Button(
+                    child: const Text('Disable PIN'),
+                    onPressed: () async {
+                      await PinUnlockService.invalidatePin();
+                      if (dialogCtx.mounted) {
+                        Navigator.pop(dialogCtx);
+                        NotificationService.showSuccessToast(
+                            'PIN disabled', 'Master password required on next unlock');
+                      }
+                    },
+                  )
+                else
+                  Button(
+                    child: const Text('Set up PIN'),
+                    onPressed: () async {
+                      Navigator.pop(dialogCtx);
+                      // Navigate to PIN setup — need masterKey from vault
+                      final vault = MasterVault.instance;
+                      final masterKey = await vault.deriveMasterKeyFromCache();
+                      if (masterKey == null || !ctx.mounted) return;
+                      await Navigator.of(ctx).push(
+                        FluentPageRoute(
+                          builder: (_) => PinUnlockScreen(
+                            isSetup: true,
+                            onPinSubmitted: (pin) async {
+                              try {
+                                await PinUnlockService.setupPin(
+                                    pin: pin, masterKey: masterKey);
+                                for (var i = 0; i < masterKey.length; i++) {
+                                  masterKey[i] = 0;
+                                }
+                                if (ctx.mounted) Navigator.of(ctx).pop();
+                                NotificationService.showSuccessToast(
+                                    'PIN set', 'Quick unlock enabled');
+                                return true;
+                              } catch (ex) {
+                                return false;
+                              }
+                            },
+                            onFallbackToPassword: () {
+                              if (ctx.mounted) Navigator.of(ctx).pop();
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+              ],
+            ),
+            actions: [
+              FilledButton(
+                child: const Text('Close'),
+                onPressed: () => Navigator.pop(dialogCtx),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
