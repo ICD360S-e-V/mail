@@ -2,6 +2,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:window_manager/window_manager.dart';
 import '../utils/l10n_helper.dart';
 import '../services/master_password_service.dart';
+import '../services/pin_unlock_service.dart';
 import '../services/settings_service.dart';
 import '../services/log_upload_service.dart';
 import '../services/notification_service.dart';
@@ -9,6 +10,7 @@ import '../services/logger_service.dart';
 import '../services/platform_service.dart';
 import 'first_run_consent_dialog.dart';
 import 'master_password_dialog.dart';
+import 'pin_unlock_screen.dart';
 import 'main_window.dart';
 
 /// Authentication wrapper - shows master password dialog at startup
@@ -78,9 +80,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
     final hasPassword = await MasterPasswordService.hasMasterPassword();
 
     if (!hasPassword) {
-      // First-time setup - show dialog to set password
+      // First-time setup — set master password, then offer PIN setup
       if (mounted) {
         final result = await _showMasterPasswordDialog();
+        if (result && mounted) {
+          await _offerPinSetup();
+        }
         if (mounted) {
           setState(() {
             _isAuthenticated = result;
@@ -89,15 +94,135 @@ class _AuthWrapperState extends State<AuthWrapper> {
         }
       }
     } else {
-      // Show login dialog
+      // Returning user — try PIN first if configured
       if (mounted) {
         setState(() => _isChecking = false);
+
+        final hasPin = await PinUnlockService.hasPinConfigured();
+        if (hasPin) {
+          final pinResult = await _showPinUnlock();
+          if (pinResult && mounted) {
+            setState(() => _isAuthenticated = true);
+            return;
+          }
+          // PIN failed/expired — fall through to master password
+        }
+
         final result = await _showMasterPasswordDialog();
+        if (result && mounted) {
+          // After master password success, offer PIN setup if not configured
+          final hasPinNow = await PinUnlockService.hasPinConfigured();
+          if (!hasPinNow) {
+            await _offerPinSetup();
+          }
+        }
         if (mounted) {
           setState(() => _isAuthenticated = result);
         }
       }
     }
+  }
+
+  /// Show PIN unlock screen. Returns true if PIN unlock succeeded.
+  Future<bool> _showPinUnlock() async {
+    final result = await Navigator.of(context).push<bool>(
+      FluentPageRoute(
+        builder: (_) => PinUnlockScreen(
+          onPinSubmitted: (pin) async {
+            final masterKey = await PinUnlockService.verifyPin(pin);
+            if (masterKey == null) return false;
+            try {
+              await PinUnlockService.unlockWithMasterKey(masterKey);
+              // Zero masterKey
+              for (var i = 0; i < masterKey.length; i++) masterKey[i] = 0;
+              if (mounted) Navigator.of(context).pop(true);
+              return true;
+            } catch (ex, st) {
+              LoggerService.logError('PIN_UNLOCK', ex, st);
+              for (var i = 0; i < masterKey.length; i++) masterKey[i] = 0;
+              return false;
+            }
+          },
+          onFallbackToPassword: () {
+            if (mounted) Navigator.of(context).pop(false);
+          },
+        ),
+      ),
+    );
+
+    if (result == true && PlatformService.instance.isDesktop) {
+      try {
+        await windowManager.maximize();
+      } catch (_) {}
+    }
+    return result ?? false;
+  }
+
+  /// Offer PIN setup after successful master password unlock.
+  Future<void> _offerPinSetup() async {
+    if (!mounted) return;
+    final wantPin = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => ContentDialog(
+        title: const Text('Set up quick PIN unlock?'),
+        content: const Text(
+          'Set a 6-digit PIN for quick unlock. The PIN uses a '
+          'randomized keypad for maximum security against shoulder '
+          'surfing and smudge attacks.\n\n'
+          'Your master password is still required every 72 hours '
+          'and after 5 wrong PIN attempts.',
+        ),
+        actions: [
+          Button(
+            child: const Text('Skip'),
+            onPressed: () => Navigator.pop(ctx, false),
+          ),
+          FilledButton(
+            child: const Text('Set PIN'),
+            onPressed: () => Navigator.pop(ctx, true),
+          ),
+        ],
+      ),
+    );
+    if (wantPin != true || !mounted) return;
+
+    // Get masterKey from vault for wrapping under PIN
+    final vault = MasterVault.instance;
+    // We need the masterKey that was just derived — it's in the vault's
+    // internal state. Since we just unlocked, derive it again from the
+    // password hash's argon2 salt. Actually, the simplest approach:
+    // PinUnlockService.setupPin needs the masterKey. We'll get it by
+    // re-reading from MasterPasswordService the password that was just
+    // verified, but that's not accessible. Instead, we show PIN setup
+    // as a separate screen where the user enters the PIN.
+    await Navigator.of(context).push<void>(
+      FluentPageRoute(
+        builder: (_) => PinUnlockScreen(
+          isSetup: true,
+          onPinSubmitted: (pin) async {
+            try {
+              // Derive masterKey from the vault's cached argon2 salt
+              // This requires the master password which we don't have
+              // anymore. Alternative: store the masterKey temporarily
+              // during the setup flow.
+              // For now, read it from vault internal state:
+              final masterKey = await vault.deriveMasterKeyFromCache();
+              if (masterKey == null) return false;
+              await PinUnlockService.setupPin(pin: pin, masterKey: masterKey);
+              for (var i = 0; i < masterKey.length; i++) masterKey[i] = 0;
+              if (mounted) Navigator.of(context).pop();
+              return true;
+            } catch (ex, st) {
+              LoggerService.logError('PIN_SETUP', ex, st);
+              return false;
+            }
+          },
+          onFallbackToPassword: () {
+            if (mounted) Navigator.of(context).pop();
+          },
+        ),
+      ),
+    );
   }
 
   Future<bool> _showMasterPasswordDialog() async {

@@ -106,6 +106,11 @@ class MasterVault {
   static const _hkdfSalt = 'icd360s.macos.v2.master-vault.salt';
 
   // ── In-memory state (zeroized on lock) ───────────────────────────
+  /// Cached masterKey bytes — kept in memory while unlocked so
+  /// PinUnlockService can wrap it under a PIN during setup.
+  /// Zeroed on lock().
+  Uint8List? _cachedMasterKey;
+
   /// Cached KEK. Re-used for every persist while unlocked. Re-derived
   /// on next unlock from on-disk argon2 salt + entered password.
   SecretKey? _kek;
@@ -216,6 +221,39 @@ class MasterVault {
     } catch (ex, st) {
       // Wrong password is the only common failure mode here. Make
       // sure we DON'T leak the cache or keys on partial failure.
+      _wipeKeys();
+      _cache = null;
+      _argon2Salt = null;
+      LoggerService.logError('MASTER_VAULT', ex, st);
+      rethrow;
+    }
+  }
+
+  /// Unlock with a pre-derived masterKey (from PinUnlockService).
+  /// Bypasses Argon2id — the masterKey IS the Argon2id output cached
+  /// by the PIN service. Only usable when the vault file already exists.
+  Future<void> unlockWithKey(Uint8List masterKey) async {
+    if (!Platform.isMacOS) return;
+    if (isUnlocked) return;
+    LoggerService.log('MASTER_VAULT', 'Unlocking vault with cached key…');
+    try {
+      _initCryptoHandles();
+      final path = await _path();
+      final file = File(path);
+      if (!await file.exists()) {
+        throw StateError('unlockWithKey: vault file not found');
+      }
+      final blob = await file.readAsBytes();
+      // Parse header to get argon2Salt, then derive KEK from masterKey
+      // (same as _loadAndDecrypt but skipping Argon2id)
+      await _loadAndDecryptWithKey(blob, masterKey);
+      if (!_migrationDone) {
+        await _runMigrationFromLegacyStorage();
+        if (_migrationDone) await _persist();
+      }
+      LoggerService.log('MASTER_VAULT',
+          '✓ Vault unlocked via cached key (${_cache!.length} entries)');
+    } catch (ex, st) {
       _wipeKeys();
       _cache = null;
       _argon2Salt = null;
@@ -355,6 +393,7 @@ class MasterVault {
   /// cheap HKDF-Expand with distinct info labels (Bitwarden pattern).
   ///
   /// Returns a mutable copy of the raw 32-byte master key.
+  /// Also caches it in [_cachedMasterKey] for PIN setup.
   Future<Uint8List> deriveMasterKey(
     String masterPassword,
     Uint8List argonSalt,
@@ -364,10 +403,17 @@ class MasterVault {
       secretKey: SecretKey(utf8.encode(masterPassword)),
       nonce: argonSalt,
     );
-    // v2.30.5: extractBytes() returns an unmodifiable SensitiveBytes
-    // view — copy into a mutable Uint8List we control.
     final masterKeyBytesView = await masterKey.extractBytes();
-    return Uint8List.fromList(masterKeyBytesView);
+    final bytes = Uint8List.fromList(masterKeyBytesView);
+    // Cache for PIN setup (zeroed on lock)
+    _cachedMasterKey = Uint8List.fromList(bytes);
+    return bytes;
+  }
+
+  /// Return cached masterKey for PIN wrapping. Returns null if locked.
+  Future<Uint8List?> deriveMasterKeyFromCache() async {
+    if (_cachedMasterKey == null) return null;
+    return Uint8List.fromList(_cachedMasterKey!);
   }
 
   /// Derive auth hash from master key via HKDF-Expand.
@@ -418,6 +464,78 @@ class MasterVault {
           'Could not zero intermediate KEK bytes (best-effort): $ex');
     }
     return kek;
+  }
+
+  /// Derive KEK from a pre-computed masterKey (bypasses Argon2id).
+  Future<SecretKey> _deriveKEKFromMasterKey(Uint8List masterKey) async {
+    final machine = await _machineSecret();
+    final ikmBytes = Uint8List.fromList(masterKey + utf8.encode(machine));
+    final hkdfKey = SecretKey(ikmBytes);
+    final kek = await _hkdf!.deriveKey(
+      secretKey: hkdfKey,
+      nonce: utf8.encode(_hkdfSalt),
+      info: utf8.encode(_hkdfInfoKek),
+    );
+    try {
+      for (var i = 0; i < ikmBytes.length; i++) ikmBytes[i] = 0;
+    } catch (_) {}
+    return kek;
+  }
+
+  /// Parse vault header and decrypt using a pre-derived masterKey.
+  /// Same as [_loadAndDecrypt] but skips Argon2id.
+  Future<void> _loadAndDecryptWithKey(
+      Uint8List blob, Uint8List masterKey) async {
+    final minLen = 1 + 4 + 1 + 1 + _argon2SaltBytes +
+        _gcmNonceBytes + _dataKeyBytes + _gcmTagBytes +
+        _gcmNonceBytes + _gcmTagBytes;
+    if (blob.length < minLen) {
+      throw StateError('secrets_vault.bin too short — corrupt');
+    }
+    if (blob[0] == _legacyBuggyFormatVersion) {
+      throw const _LegacyBuggyVaultException();
+    }
+    if (blob[0] != _formatVersion) {
+      throw StateError('Unknown vault format: 0x${blob[0].toRadixString(16)}');
+    }
+    var off = 1 + 4 + 1 + 1; // skip version + memKiB + iters + paral
+    _argon2Salt = Uint8List.fromList(
+        blob.sublist(off, off + _argon2SaltBytes));
+    off += _argon2SaltBytes;
+    final kekNonce = blob.sublist(off, off + _gcmNonceBytes);
+    off += _gcmNonceBytes;
+    final wrappedDataKey = blob.sublist(
+        off, off + _dataKeyBytes + _gcmTagBytes);
+    off += _dataKeyBytes + _gcmTagBytes;
+    final vaultNonce = blob.sublist(off, off + _gcmNonceBytes);
+    off += _gcmNonceBytes;
+    final vaultCt = blob.sublist(off);
+
+    _kek = await _deriveKEKFromMasterKey(masterKey);
+
+    final wrappedCt = wrappedDataKey.sublist(0, _dataKeyBytes);
+    final wrappedTag = wrappedDataKey.sublist(_dataKeyBytes);
+    final dataKeyBox = SecretBox(
+      wrappedCt,
+      nonce: kekNonce,
+      mac: Mac(wrappedTag),
+    );
+    final dataKeyBytes =
+        await _aes!.decrypt(dataKeyBox, secretKey: _kek!);
+    _dataKey = Uint8List.fromList(dataKeyBytes);
+
+    final vaultTag = vaultCt.sublist(vaultCt.length - _gcmTagBytes);
+    final vaultBody = vaultCt.sublist(0, vaultCt.length - _gcmTagBytes);
+    final vaultBox = SecretBox(
+      vaultBody,
+      nonce: vaultNonce,
+      mac: Mac(vaultTag),
+    );
+    final dataKey = SecretKey(_dataKey!);
+    final plaintext = await _aes!.decrypt(vaultBox, secretKey: dataKey);
+    final jsonStr = utf8.decode(plaintext);
+    _cache = Map<String, String>.from(
+        jsonDecode(jsonStr) as Map<String, dynamic>);
   }
 
   Future<void> _createFreshVault(String pwd) async {
@@ -624,6 +742,12 @@ class MasterVault {
   }
 
   void _wipeKeys() {
+    if (_cachedMasterKey != null) {
+      for (var i = 0; i < _cachedMasterKey!.length; i++) {
+        _cachedMasterKey![i] = 0;
+      }
+      _cachedMasterKey = null;
+    }
     if (_dataKey != null) {
       for (var i = 0; i < _dataKey!.length; i++) {
         _dataKey![i] = 0;
@@ -631,8 +755,7 @@ class MasterVault {
       _dataKey = null;
     }
     // SecretKey from cryptography package doesn't expose its bytes
-    // for in-place zero, so we just drop the reference. The package
-    // documents that the underlying bytes are eligible for GC.
+    // for in-place zero, so we just drop the reference.
     _kek = null;
   }
 
