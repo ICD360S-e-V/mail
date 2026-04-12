@@ -275,6 +275,13 @@ ICD360S e.V. is a German nonprofit (*eingetragener Verein*) based in Berlin.
 
 This email client is built exclusively for our members as a **free service**. Every member receives a unique `@icd360s.de` email address and a personal encryption key upon joining. Access is managed through an administrator-approved device registration flow — each new device must be individually authorized before it can access the mail system.
 
+**What you get:**
+- Unlimited incoming emails
+- 500 MB mailbox storage
+- 10 emails per day sending limit (max 3 per hour)
+- End-to-end encrypted communication with all other members
+- Cross-platform access (Windows, macOS, Linux, Android, iOS)
+
 **How it works:**
 1. You become a member of ICD360S e.V.
 2. The administrator creates your email account and approves your device.
