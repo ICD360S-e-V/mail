@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v2.37.0 - 2026-04-12
+#### Features
+- E2EE Phase 1 — OpenPGP key management + decrypt on fetch - (da3aec9) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.36.1 - 2026-04-12
 #### Bug Fixes
 - build errors + settings UI for notification privacy and PIN management - (2ef2ba7) - Claude Code, *Claude Opus 4.6 (1M context)*
