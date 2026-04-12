@@ -77,6 +77,23 @@ class VersionBaseline {
         await _storage.write(key: _kInitFlag, value: 'true');
       }
 
+      // Startup self-check: if the baseline is somehow ABOVE the
+      // running version, reset it. This can happen if:
+      //   - The installer was launched (baseline bumped) but failed
+      //     and the process crashed before the installer ran
+      //   - Storage was imported/restored from a different device
+      //   - A bug bumped the baseline erroneously
+      // Without this check, the app would perpetually reject the
+      // server's update as "below baseline" and be stuck forever.
+      if (existing != null &&
+          compareSemver(currentVersion, existing) < 0) {
+        await _storage.write(key: _kBaseline, value: currentVersion);
+        LoggerService.logWarning('VERSION_BASELINE',
+            'Startup reset: baseline $existing > running $currentVersion '
+            '— reset to $currentVersion (failed install recovery)');
+        return;
+      }
+
       // Already initialized — no-op.
     } catch (ex, st) {
       LoggerService.logError('VERSION_BASELINE', ex, st);

@@ -103,7 +103,6 @@ class MasterVault {
   static const int _dataKeyBytes = 32;
 
   // ── HKDF info string (binds the derived KEK to a context) ───────
-  static const _hkdfInfo = 'icd360s.macos.v2.master-vault.kek';
   static const _hkdfSalt = 'icd360s.macos.v2.master-vault.salt';
 
   // ── In-memory state (zeroized on lock) ───────────────────────────
@@ -322,9 +321,16 @@ class MasterVault {
       );
       if (result.exitCode == 0) {
         final out = result.stdout as String;
-        final match =
+        final uuidMatch =
             RegExp(r'"IOPlatformUUID"\s*=\s*"([0-9A-Fa-f-]+)"').firstMatch(out);
-        if (match != null) return match.group(1)!;
+        if (uuidMatch != null) {
+          final uuid = uuidMatch.group(1)!;
+          final serialMatch =
+              RegExp(r'"IOPlatformSerialNumber"\s*=\s*"([^"]+)"').firstMatch(out);
+          final serial = serialMatch?.group(1) ?? '';
+          // Combine both identifiers — attacker must reproduce both.
+          return '$uuid:$serial';
+        }
       }
     } catch (_) {}
     // Fallback (weaker but still per-machine)
@@ -338,25 +344,57 @@ class MasterVault {
     }
   }
 
-  /// Derive vault_KEK = HKDF-SHA256(Argon2id(pwd, salt) || IOPlatformUUID).
+  // ── HKDF info labels for single-derivation fan-out ──────────────
+  static const _hkdfInfoKek = 'icd360s.macos.v2.master-vault.kek';
+  static const _hkdfInfoAuth = 'icd360s.v1.auth-hash';
+
+  /// Derive the Argon2id master key from password + salt.
+  ///
+  /// This is the SINGLE expensive KDF call per unlock. All sub-keys
+  /// (vault KEK, auth hash, session key) are derived from this via
+  /// cheap HKDF-Expand with distinct info labels (Bitwarden pattern).
+  ///
+  /// Returns a mutable copy of the raw 32-byte master key.
+  Future<Uint8List> deriveMasterKey(
+    String masterPassword,
+    Uint8List argonSalt,
+  ) async {
+    _initCryptoHandles();
+    final masterKey = await _argon2!.deriveKey(
+      secretKey: SecretKey(utf8.encode(masterPassword)),
+      nonce: argonSalt,
+    );
+    // v2.30.5: extractBytes() returns an unmodifiable SensitiveBytes
+    // view — copy into a mutable Uint8List we control.
+    final masterKeyBytesView = await masterKey.extractBytes();
+    return Uint8List.fromList(masterKeyBytesView);
+  }
+
+  /// Derive auth hash from master key via HKDF-Expand.
+  ///
+  /// This is a cheap operation (one HMAC round). The auth hash is
+  /// stored on disk for local password verification. Because it uses
+  /// a distinct HKDF info label, it cannot be reversed to obtain the
+  /// vault KEK or the master key.
+  Future<Uint8List> deriveAuthHash(Uint8List masterKeyBytes) async {
+    _initCryptoHandles();
+    final authKey = await _hkdf!.deriveKey(
+      secretKey: SecretKey(masterKeyBytes),
+      nonce: utf8.encode(_hkdfSalt),
+      info: utf8.encode(_hkdfInfoAuth),
+    );
+    final authBytes = await authKey.extractBytes();
+    return Uint8List.fromList(authBytes);
+  }
+
+  /// Derive vault_KEK = HKDF-SHA256(masterKey || IOPlatformUUID).
   /// Both inputs must be present — pwd alone won't work cross-machine,
   /// machine alone won't work without the user's password.
   Future<SecretKey> _deriveKEK(
     String masterPassword,
     Uint8List argonSalt,
   ) async {
-    final masterKey = await _argon2!.deriveKey(
-      secretKey: SecretKey(utf8.encode(masterPassword)),
-      nonce: argonSalt,
-    );
-    // v2.30.5: extractBytes() in cryptography ^2.7.0 returns a
-    // SensitiveBytes view that is UNMODIFIABLE — assigning to
-    // [i] throws "Unsupported operation: The bytes are unmodifiable"
-    // and crashes vault creation on first run. Copy into a mutable
-    // Uint8List so the post-derive zero-out loop works AND the bytes
-    // we feed into HKDF live in our own memory (lifetimes we control).
-    final masterKeyBytesView = await masterKey.extractBytes();
-    final masterKeyBytes = Uint8List.fromList(masterKeyBytesView);
+    final masterKeyBytes = await deriveMasterKey(masterPassword, argonSalt);
     final machine = await _machineSecret();
     final ikmBytes =
         Uint8List.fromList(masterKeyBytes + utf8.encode(machine));
@@ -364,14 +402,10 @@ class MasterVault {
     final kek = await _hkdf!.deriveKey(
       secretKey: hkdfKey,
       nonce: utf8.encode(_hkdfSalt),
-      info: utf8.encode(_hkdfInfo),
+      info: utf8.encode(_hkdfInfoKek),
     );
     // Best-effort zero of intermediate bytes (Dart doesn't expose
     // mlock; this just removes the values from our heap reference).
-    // Wrapped in try/catch so a future cryptography upgrade that
-    // also makes Uint8List views unmodifiable cannot crash the
-    // vault — zero-ing is best-effort defense-in-depth, not
-    // load-bearing.
     try {
       for (var i = 0; i < masterKeyBytes.length; i++) {
         masterKeyBytes[i] = 0;

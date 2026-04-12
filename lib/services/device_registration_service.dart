@@ -96,8 +96,8 @@ class DeviceRegistrationService {
         'device_name': await _deviceName(),
         'device_type': _deviceType(),
         'os_version': await _osVersion(),
-        'client_version': UpdateService.currentVersion,
         'hostname': platform.computerName,
+        'client_version': UpdateService.currentVersion,
       };
 
       ioClient = PinnedSecurityContext.createHttpClient()
@@ -365,19 +365,56 @@ class DeviceRegistrationService {
         '${h[10]}${h[11]}${h[12]}${h[13]}${h[14]}${h[15]}';
   }
 
-  /// Human-readable device name. On desktop uses hostname; on mobile
-  /// uses a generic platform string. Mobile platforms could later
-  /// expose a user-settable name in settings.
+  /// Human-readable device name from hardware model (no PII).
+  ///
+  /// GDPR Article 25 — data minimization: hostname often contains the
+  /// user's real name (e.g. "MacBook-de-Marcel.local"). Industry
+  /// standard (Proton, Tuta, 1Password, Bitwarden) is to show hardware
+  /// model instead. The admin sees "MacBook Pro" not "Marcel's MacBook".
   static Future<String> _deviceName() async {
     try {
-      final platform = PlatformService.instance;
-      final host = platform.computerName;
-      if (host.isNotEmpty && host != 'unknown') {
-        // Strip .local suffix on macOS for cleaner display
-        return host.replaceAll(RegExp(r'\.local$'), '');
+      if (Platform.isMacOS) {
+        final r = await Process.run('sysctl', ['-n', 'hw.model'])
+            .timeout(const Duration(seconds: 2));
+        if (r.exitCode == 0) {
+          final model = (r.stdout as String).trim();
+          if (model.isNotEmpty) return _friendlyMacModel(model);
+        }
+      } else if (Platform.isLinux) {
+        final f = File('/sys/class/dmi/id/product_name');
+        if (await f.exists()) {
+          final v = (await f.readAsString()).trim();
+          if (v.isNotEmpty && !v.startsWith('To Be Filled')) return v;
+        }
+      } else if (Platform.isWindows) {
+        final r = await Process.run('wmic', ['csproduct', 'get', 'name'])
+            .timeout(const Duration(seconds: 2));
+        if (r.exitCode == 0) {
+          final lines = (r.stdout as String).split('\n')
+              .map((l) => l.trim())
+              .where((l) => l.isNotEmpty && l != 'Name')
+              .toList();
+          if (lines.isNotEmpty) return lines.first;
+        }
       }
     } catch (_) {/* fall through */}
     return _deviceType();
+  }
+
+  /// Convert macOS sysctl model ID to friendly name.
+  static String _friendlyMacModel(String sysctl) {
+    // e.g. "MacBookPro18,3" → "MacBook Pro"
+    //      "Macmini9,1"     → "Mac mini"
+    //      "MacBookAir10,1" → "MacBook Air"
+    //      "Mac14,2"        → "Mac"
+    if (sysctl.startsWith('MacBookPro')) return 'MacBook Pro';
+    if (sysctl.startsWith('MacBookAir')) return 'MacBook Air';
+    if (sysctl.startsWith('MacBook')) return 'MacBook';
+    if (sysctl.startsWith('Macmini')) return 'Mac mini';
+    if (sysctl.startsWith('MacPro')) return 'Mac Pro';
+    if (sysctl.startsWith('iMac')) return 'iMac';
+    if (sysctl.startsWith('Mac')) return 'Mac';
+    return sysctl; // fallback: raw model ID
   }
 
   /// Device type identifier matching what the backend expects.
@@ -397,10 +434,10 @@ class DeviceRegistrationService {
   ///
   /// Fields:
   ///  - `device_id`     — UUID v4, persisted in PortableSecureStorage
-  ///  - `device_name`   — hostname (desktop) or platform string (mobile)
+  ///  - `device_name`   — hardware model (no PII) or platform string
   ///  - `device_type`   — macos / windows / linux / android / ios
   ///  - `os_version`    — best-effort OS version string
-  ///  - `hostname`      — raw hostname from PlatformService
+  ///  - `hostname`      — raw hostname (admin security audit — detect device changes)
   ///  - `client_version`— current app version from UpdateService
   static Future<Map<String, String>> gatherDeviceInfo() async {
     final platform = PlatformService.instance;

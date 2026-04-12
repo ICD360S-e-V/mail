@@ -2,13 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
-import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart' show PlatformException;
 import 'package:path/path.dart' as p;
-import 'package:pointycastle/digests/sha256.dart';
-import 'package:pointycastle/key_derivators/api.dart';
-import 'package:pointycastle/key_derivators/pbkdf2.dart';
-import 'package:pointycastle/macs/hmac.dart';
 import 'account_service.dart';
 import 'aes_gcm_helpers.dart';
 import 'certificate_service.dart';
@@ -75,69 +70,7 @@ class MasterPasswordService {
     // Load persisted rate limit state (defends against app-restart bypass)
     await _loadRateLimitState();
 
-    // SECURITY: Wrap any legacy hashes immediately at startup, BEFORE
-    // any user interaction. This eliminates weak hashes from disk
-    // without waiting for the user to log in. See the "wrap and
-    // re-hash" pattern (used by Dropbox, recommended by OWASP).
-    await _wrapLegacyHashAtStartup();
-  }
-
-  /// Wraps legacy (unsalted SHA-256 or iterated SHA-256) hashes in
-  /// PBKDF2-HMAC-SHA-256 without requiring the user's plaintext password.
-  ///
-  /// The existing hash becomes the "password" input to PBKDF2. On the
-  /// next successful login, [verifyMasterPassword] will upgrade to a
-  /// clean PBKDF2 derivation from the actual plaintext password.
-  ///
-  /// Format for wrapped hashes:
-  ///   `$pbkdf2-sha256-wrap1$<iter>$<salt_b64>$<hash_b64>` — from unsalted SHA-256
-  ///   `$pbkdf2-sha256-wrap2$<iter>$<legacySalt>$<salt_b64>$<hash_b64>` — from iterated SHA-256
-  static Future<void> _wrapLegacyHashAtStartup() async {
-    if (_passwordHashFilePath == null) return;
-    final file = File(_passwordHashFilePath!);
-    if (!await file.exists()) return;
-
-    try {
-      final savedHash = (await file.readAsString()).trim();
-      if (savedHash.isEmpty) return;
-
-      // Already modern format — nothing to do.
-      if (savedHash.startsWith(r'$pbkdf2-sha256')) return;
-
-      final salt = _extractSalt(savedHash);
-      if (salt != null) {
-        // Legacy v2: iterated SHA-256 with salt ("salt:hash")
-        // Extract the hash portion (after the colon).
-        final hashPortion = savedHash.split(':').last;
-        final wrapSalt = _randomBytes(_pbkdf2SaltBytes);
-        final derivator = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
-          ..init(Pbkdf2Parameters(wrapSalt, _pbkdf2Iterations, _pbkdf2KeyLength));
-        final wrapped = derivator.process(Uint8List.fromList(utf8.encode(hashPortion)));
-        final wrapSaltB64 = _b64UrlEncodeNoPad(wrapSalt);
-        final wrappedB64 = _b64UrlEncodeNoPad(wrapped);
-        // Store legacy salt so we can reproduce the legacy hash at verify time.
-        final newHash =
-            '\$pbkdf2-sha256-wrap2\$$_pbkdf2Iterations\$$salt\$$wrapSaltB64\$$wrappedB64';
-        await file.writeAsString(newHash);
-        LoggerService.log('AUTH',
-            '✓ Wrapped legacy iterated SHA-256 hash in PBKDF2 at startup');
-      } else {
-        // Legacy v1: unsalted single SHA-256 (the raw hex hash)
-        final wrapSalt = _randomBytes(_pbkdf2SaltBytes);
-        final derivator = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
-          ..init(Pbkdf2Parameters(wrapSalt, _pbkdf2Iterations, _pbkdf2KeyLength));
-        final wrapped = derivator.process(Uint8List.fromList(utf8.encode(savedHash)));
-        final wrapSaltB64 = _b64UrlEncodeNoPad(wrapSalt);
-        final wrappedB64 = _b64UrlEncodeNoPad(wrapped);
-        final newHash =
-            '\$pbkdf2-sha256-wrap1\$$_pbkdf2Iterations\$$wrapSaltB64\$$wrappedB64';
-        await file.writeAsString(newHash);
-        LoggerService.log('AUTH',
-            '✓ Wrapped legacy unsalted SHA-256 hash in PBKDF2 at startup');
-      }
-    } catch (ex, st) {
-      LoggerService.logError('AUTH', 'Legacy hash wrapping failed', st);
-    }
+    // Legacy hash wrapping removed — app reset clears all old formats.
   }
 
   /// Load rate limit state from disk (called on initialize)
@@ -330,36 +263,51 @@ class MasterPasswordService {
     return remaining > 0 ? remaining : 0;
   }
 
-  /// Set master password (first-time setup)
+  /// Argon2id salt length — matches MasterVault parameters.
+  static const int _argon2SaltBytes = 16;
+
+  /// Set master password (first-time setup).
+  ///
+  /// Single-derivation pattern (Bitwarden architecture):
+  ///   Argon2id(password, salt) → masterKey
+  ///     ├── HKDF(info="auth-hash")  → authHash  (stored on disk)
+  ///     └── HKDF(info="vault-kek")  → KEK       (MasterVault)
   static Future<void> setMasterPassword(String password) async {
     await initialize();
-    final hash = _hashPasswordPhc(password);
+
+    // Generate fresh Argon2id salt for this account.
+    final salt = _randomBytes(_argon2SaltBytes);
+
+    // ONE Argon2id call — all sub-keys derived from masterKey.
+    final vault = MasterVault.instance;
+    final masterKey = await vault.deriveMasterKey(password, salt);
+
+    // Derive auth hash via HKDF (cheap — one HMAC round).
+    final authHash = await vault.deriveAuthHash(masterKey);
+
+    // Store salt + authHash in Argon2id PHC format.
+    final phc = _encodeArgon2idPhc(salt: salt, hash: authHash);
     final file = File(_passwordHashFilePath!);
-    await file.writeAsString(hash);
-    // Reset rate limit when password is (re)set
+    await file.writeAsString(phc);
+
+    // Best-effort zero masterKey from our heap.
+    for (var i = 0; i < masterKey.length; i++) {
+      masterKey[i] = 0;
+    }
+
+    // Reset rate limit when password is (re)set.
     _failedAttempts = 0;
     _lockoutUntil = null;
     await _saveRateLimitState();
-    // Unlock the credential session: derives the AES key used to decrypt
-    // fallback storage. Without this, fallback passwords are inaccessible.
+
+    // Unlock credential session + MasterVault.
     await AccountService.unlockSession(password);
-    // v2.30.4: also unlock the MasterVault on FIRST set. Previously
-    // only verifyMasterPassword() did this, which meant a brand-new
-    // user (no existing master pwd file) ended up with an unlocked
-    // AccountService session but a LOCKED MasterVault. Any subsequent
-    // CertificateService.storeBundle (Faza 3 add-account, etc.) on
-    // macOS hit `Bad state: MasterVault.write before unlock` and
-    // crashed the cert install dialog. unlock() is idempotent and
-    // creates the vault file fresh if it doesn't exist yet.
     try {
-      await MasterVault.instance.unlock(password);
+      await vault.unlock(password);
     } catch (ex, st) {
       LoggerService.logError('AUTH', ex, st);
-      // Don't fail setMasterPassword if vault init has a transient
-      // issue — the user can still verify and unlock on next launch.
-      // But log loudly so we notice.
     }
-    LoggerService.log('AUTH', 'Master password set');
+    LoggerService.log('AUTH', 'Master password set (Argon2id)');
   }
 
   /// Verify master password with persistent rate limiting
@@ -381,103 +329,25 @@ class MasterPasswordService {
       final file = File(_passwordHashFilePath!);
       final savedHash = (await file.readAsString()).trim();
 
-      // Check if it's a salted hash (contains ':') or legacy unsalted
       bool isValid = false;
-      bool needsRehash = false;
 
-      if (savedHash.startsWith(r'$pbkdf2-sha256-wrap1$')) {
-        // Wrapped v1: PBKDF2(unsalted_sha256(password))
-        // Format: $pbkdf2-sha256-wrap1$<iter>$<wrapSalt_b64>$<hash_b64>
-        final parts = savedHash.split(r'$');
-        if (parts.length == 5) {
-          final iter = int.tryParse(parts[2]) ?? 0;
-          if (iter > 0) {
-            try {
-              final wrapSalt = _b64UrlDecodeNoPad(parts[3]);
-              final expected = parts[4];
-              // Reproduce the legacy unsalted SHA-256 from the plaintext
-              final legacyHash = sha256.convert(utf8.encode(password)).toString();
-              // Then verify against the PBKDF2 wrapper
-              final derivator = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
-                ..init(Pbkdf2Parameters(wrapSalt, iter, _pbkdf2KeyLength));
-              final derived = derivator.process(
-                  Uint8List.fromList(utf8.encode(legacyHash)));
-              final computed = _b64UrlEncodeNoPad(derived);
-              isValid = _constantTimeEquals(expected, computed);
-              if (isValid) needsRehash = true; // upgrade to clean PBKDF2
-            } catch (_) {
-              isValid = false;
-            }
+      if (savedHash.startsWith(r'$argon2id$')) {
+        // Argon2id PHC format: $argon2id$v=19$m=65536,t=3,p=4$<salt>$<hash>
+        final parsed = _parseArgon2idPhc(savedHash);
+        if (parsed != null) {
+          final vault = MasterVault.instance;
+          final masterKey =
+              await vault.deriveMasterKey(password, parsed.salt);
+          final authHash = await vault.deriveAuthHash(masterKey);
+          // Best-effort zero masterKey.
+          for (var i = 0; i < masterKey.length; i++) {
+            masterKey[i] = 0;
           }
-        }
-      } else if (savedHash.startsWith(r'$pbkdf2-sha256-wrap2$')) {
-        // Wrapped v2: PBKDF2(legacy_iterated_sha256(password))
-        // Format: $pbkdf2-sha256-wrap2$<iter>$<legacySalt>$<wrapSalt_b64>$<hash_b64>
-        final parts = savedHash.split(r'$');
-        if (parts.length == 6) {
-          final iter = int.tryParse(parts[2]) ?? 0;
-          final legacySalt = parts[3];
-          if (iter > 0) {
-            try {
-              final wrapSalt = _b64UrlDecodeNoPad(parts[4]);
-              final expected = parts[5];
-              // Reproduce the legacy iterated SHA-256 hash
-              final legacyFull = _hashPasswordLegacySha256(password, salt: legacySalt);
-              final legacyHashPortion = legacyFull.split(':').last;
-              // Verify against the PBKDF2 wrapper
-              final derivator = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
-                ..init(Pbkdf2Parameters(wrapSalt, iter, _pbkdf2KeyLength));
-              final derived = derivator.process(
-                  Uint8List.fromList(utf8.encode(legacyHashPortion)));
-              final computed = _b64UrlEncodeNoPad(derived);
-              isValid = _constantTimeEquals(expected, computed);
-              if (isValid) needsRehash = true; // upgrade to clean PBKDF2
-            } catch (_) {
-              isValid = false;
-            }
-          }
-        }
-      } else if (savedHash.startsWith(r'$pbkdf2-sha256$')) {
-        // Clean PHC format: $pbkdf2-sha256$<iter>$<salt_b64>$<hash_b64>
-        final parts = savedHash.split(r'$');
-        if (parts.length == 5) {
-          final iter = int.tryParse(parts[2]) ?? 0;
-          if (iter > 0) {
-            try {
-              final salt = _b64UrlDecodeNoPad(parts[3]);
-              final expected = parts[4];
-              final computed = _pbkdf2HashB64(password, salt, iter);
-              isValid = _constantTimeEquals(expected, computed);
-              if (isValid && iter < _pbkdf2Iterations) {
-                needsRehash = true;
-              }
-            } catch (_) {
-              isValid = false;
-            }
-          }
-        }
-      } else {
-        // Pre-wrap legacy formats — should not exist after startup
-        // wrapping, but handle as fallback for edge cases.
-        final salt = _extractSalt(savedHash);
-        if (salt != null) {
-          final inputHash = _hashPasswordLegacySha256(password, salt: salt);
-          isValid = _constantTimeEquals(savedHash, inputHash);
-          if (isValid) needsRehash = true;
-        } else {
-          final legacyBytes = utf8.encode(password);
-          final legacyHash = sha256.convert(legacyBytes).toString();
-          isValid = _constantTimeEquals(savedHash, legacyHash);
-          if (isValid) needsRehash = true;
+          isValid = _constantTimeEqualsBytes(authHash, parsed.hash);
         }
       }
-
-      if (isValid && needsRehash) {
-        final newHash = _hashPasswordPhc(password);
-        await file.writeAsString(newHash);
-        LoggerService.log('AUTH',
-            '✓ Migrated password hash to PHC pbkdf2-sha256 ($_pbkdf2Iterations iterations)');
-      }
+      // All legacy formats (PBKDF2, SHA-256, wrapped) are no longer
+      // supported — app reset required for the Argon2id upgrade.
 
       if (isValid) {
         _failedAttempts = 0;
@@ -529,55 +399,58 @@ class MasterPasswordService {
     }
   }
 
-  /// Hash password using PBKDF2-like iterated SHA-256 with salt
-  /// Uses 100,000 iterations for brute-force resistance
-  /// Constant-time string comparison.
+
+  // ==========================================================================
+  // ARGON2ID PASSWORD HASHING (Bitwarden single-derivation pattern)
+  // ==========================================================================
+  //
+  // Architecture: ONE Argon2id call per unlock → masterKey [32 bytes]
+  //   ├── HKDF(info="auth-hash")  → authHash  (stored on disk for verification)
+  //   └── HKDF(info="vault-kek")  → KEK       (MasterVault, via _deriveKEK)
+  //
+  // The expensive Argon2id runs once (~600ms desktop, ~1-2s mobile).
+  // HKDF-Expand is one HMAC round — microseconds.
+  //
+  // Matches Bitwarden's dual-use pattern: a single KDF call fans out
+  // into auth hash + encryption key via cheap secondary derivations.
+  // See: https://bitwarden.com/help/bitwarden-security-white-paper/
+
+  /// Encode salt + hash into standard Argon2id PHC string format.
   ///
-  /// Defends against timing side-channel attacks when comparing secret
-  /// values such as password hashes. Always inspects every byte of both
-  /// inputs (when lengths match) to avoid early-exit timing leaks.
-  static bool _constantTimeEquals(String a, String b) {
+  /// Output: `$argon2id$v=19$m=65536,t=3,p=4$<salt_b64>$<hash_b64>`
+  /// Uses standard base64 (not url-safe) without padding, per PHC spec.
+  static String _encodeArgon2idPhc({
+    required Uint8List salt,
+    required Uint8List hash,
+  }) {
+    final saltB64 = base64.encode(salt).replaceAll('=', '');
+    final hashB64 = base64.encode(hash).replaceAll('=', '');
+    // Parameters match MasterVault._argon2* constants.
+    return '\$argon2id\$v=19\$m=65536,t=3,p=4\$$saltB64\$$hashB64';
+  }
+
+  /// Parse an Argon2id PHC string. Returns null if format is invalid.
+  static ({Uint8List salt, Uint8List hash})? _parseArgon2idPhc(String phc) {
+    // Expected: ['', 'argon2id', 'v=19', 'm=65536,t=3,p=4', salt, hash]
+    final parts = phc.split(r'$');
+    if (parts.length != 6 || parts[1] != 'argon2id') return null;
+    try {
+      final salt = _b64DecodeNoPad(parts[4]);
+      final hash = _b64DecodeNoPad(parts[5]);
+      return (salt: salt, hash: hash);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Constant-time comparison for byte arrays.
+  static bool _constantTimeEqualsBytes(Uint8List a, Uint8List b) {
     if (a.length != b.length) return false;
     var diff = 0;
     for (var i = 0; i < a.length; i++) {
-      diff |= a.codeUnitAt(i) ^ b.codeUnitAt(i);
+      diff |= a[i] ^ b[i];
     }
     return diff == 0;
-  }
-
-  // ==========================================================================
-  // PASSWORD HASHING (PHC pbkdf2-sha256, OWASP 2025 recommended)
-  // ==========================================================================
-
-  /// Iteration count for PBKDF2-HMAC-SHA256.
-  ///
-  /// Per OWASP Password Storage Cheat Sheet (2025), the minimum
-  /// recommended iteration count for PBKDF2-SHA256 is 600,000. This
-  /// targets ~600ms on modern desktop hardware and ~1-2s on entry-level
-  /// mobile — slow enough to thwart offline brute-force, fast enough
-  /// to be tolerable on unlock.
-  static const int _pbkdf2Iterations = 600000;
-  static const int _pbkdf2KeyLength = 32; // 256 bits
-  static const int _pbkdf2SaltBytes = 16; // 128 bits
-
-  /// Hash a password using PBKDF2-HMAC-SHA-256 and return a PHC string.
-  ///
-  /// Output format: `\$pbkdf2-sha256\$<iterations>\$<salt_b64>\$<hash_b64>`
-  /// where both `salt_b64` and `hash_b64` are unpadded base64url.
-  static String _hashPasswordPhc(String password) {
-    final salt = _randomBytes(_pbkdf2SaltBytes);
-    final hashB64 = _pbkdf2HashB64(password, salt, _pbkdf2Iterations);
-    final saltB64 = _b64UrlEncodeNoPad(salt);
-    return '\$pbkdf2-sha256\$$_pbkdf2Iterations\$$saltB64\$$hashB64';
-  }
-
-  /// Computes PBKDF2-HMAC-SHA-256 of `password` with `salt` and `iterations`,
-  /// returning the unpadded base64url-encoded derived key.
-  static String _pbkdf2HashB64(String password, Uint8List salt, int iterations) {
-    final derivator = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
-      ..init(Pbkdf2Parameters(salt, iterations, _pbkdf2KeyLength));
-    final key = derivator.process(Uint8List.fromList(utf8.encode(password)));
-    return _b64UrlEncodeNoPad(key);
   }
 
   static Uint8List _randomBytes(int n) {
@@ -585,41 +458,11 @@ class MasterPasswordService {
     return Uint8List.fromList(List<int>.generate(n, (_) => r.nextInt(256)));
   }
 
-  static String _b64UrlEncodeNoPad(Uint8List bytes) {
-    return base64Url.encode(bytes).replaceAll('=', '');
-  }
-
-  static Uint8List _b64UrlDecodeNoPad(String s) {
+  /// Standard base64 decode without padding (PHC spec uses standard, not url-safe).
+  static Uint8List _b64DecodeNoPad(String s) {
     final mod = s.length % 4;
     final padded = mod == 0 ? s : s + ('=' * (4 - mod));
-    return Uint8List.fromList(base64Url.decode(padded));
-  }
-
-  /// Legacy: SHA-256 iterated 100k with salt prefix `salt:hash`.
-  /// Kept ONLY for verifying credentials stored before the PHC migration.
-  /// New writes always use [_hashPasswordPhc].
-  static String _hashPasswordLegacySha256(String password, {required String salt}) {
-    final saltedPassword = '$salt:$password';
-    List<int> bytes = utf8.encode(saltedPassword);
-    for (int i = 0; i < 100000; i++) {
-      bytes = sha256.convert(bytes).bytes;
-    }
-    final hash = sha256.convert(bytes).toString();
-    return '$salt:$hash';
-  }
-
-  /// Generate a cryptographically secure random salt
-  static String _generateSalt() {
-    final random = Random.secure();
-    final saltBytes = List<int>.generate(16, (_) => random.nextInt(256));
-    return sha256.convert(saltBytes).toString().substring(0, 16);
-  }
-
-  /// Extract salt from stored hash
-  static String? _extractSalt(String storedHash) {
-    final parts = storedHash.split(':');
-    if (parts.length == 2) return parts[0];
-    return null; // Legacy unsalted hash
+    return Uint8List.fromList(base64.decode(padded));
   }
 }
 

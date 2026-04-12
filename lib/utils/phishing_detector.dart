@@ -379,15 +379,18 @@ class PhishingDetector {
       return;
     }
 
-    // Try loading from cache first (cached data was already verified
-    // when we wrote it, so we trust it)
+    // Try loading from cache — re-verify signature every time.
+    // An attacker with filesystem access could tamper with the cache
+    // to whitelist phishing domains or blacklist legitimate ones.
     if (_prefixDatabase == null && _dbCachePath != null) {
       final cached = File(_dbCachePath!);
-      if (cached.existsSync()) {
+      final cachedSig = File('${_dbCachePath!}.sig');
+      if (cached.existsSync() && cachedSig.existsSync()) {
         try {
-          await _verifyAndLoad(cached.readAsBytesSync(), null);
+          await _verifyAndLoad(
+              cached.readAsBytesSync(), cachedSig.readAsBytesSync());
         } catch (_) {
-          // Cache is corrupt — proceed to download
+          // Cache is corrupt or sig invalid — proceed to download
         }
       }
     }
@@ -406,12 +409,27 @@ class PhishingDetector {
         final dataBytes = await _downloadBytes(client, _safeBrowsingUrl);
         if (dataBytes == null) return;
 
-        await _verifyAndLoad(dataBytes, sigBytes);
+        await _verifyAndLoad(dataBytes, sigBytes, isFreshDownload: true);
 
-        // Cache verified data + sig to disk
+        // Cache verified data + sig to disk atomically.
+        // Write to .tmp files first, then rename — a crash between
+        // the two renames leaves at most one file present, which the
+        // load path handles gracefully (both must exist).
         if (_dbCachePath != null) {
-          await File(_dbCachePath!).writeAsBytes(dataBytes);
-          await File('$_dbCachePath!.sig').writeAsBytes(sigBytes);
+          final binPath = _dbCachePath!;
+          final sigPath = '${_dbCachePath!}.sig';
+          final tmpBin = File('$binPath.tmp');
+          final tmpSig = File('$sigPath.tmp');
+          await tmpBin.writeAsBytes(dataBytes, flush: true);
+          await tmpSig.writeAsBytes(sigBytes, flush: true);
+          await tmpSig.rename(sigPath);
+          await tmpBin.rename(binPath);
+          // Restrict to owner-only (same pattern as PortableSecureStorage)
+          try {
+            if (!Platform.isWindows) {
+              await Process.run('chmod', ['600', binPath, sigPath]);
+            }
+          } catch (_) {/* best-effort */}
         }
         _lastDbRefresh = DateTime.now();
       } finally {
@@ -439,13 +457,17 @@ class PhishingDetector {
 
   /// Verify signature, parse SBv2 header, run all sanity checks,
   /// then load the prefix database into memory.
+  ///
+  /// [isFreshDownload] controls whether anti-replay checks (Step 5)
+  /// run. Cache loads skip anti-replay because the timestamp was
+  /// already validated at download time — re-checking would false-
+  /// positive when cache timestamp == last-saved timestamp.
   static Future<void> _verifyAndLoad(
-      Uint8List data, Uint8List? signature) async {
-    // Step 1: Verify signature (if provided — cached data has no .sig)
-    if (signature != null) {
-      if (!_verifySignature(data, signature)) {
-        throw StateError('Safe Browsing DB signature verification failed');
-      }
+      Uint8List data, Uint8List signature, {bool isFreshDownload = false}) async {
+    // Step 1: ALWAYS verify ECDSA signature — both fresh downloads and
+    // cache loads. A tampered cache file must never be loaded.
+    if (!_verifySignature(data, signature)) {
+      throw StateError('Safe Browsing DB signature verification failed');
     }
 
     // Step 2: Validate SBv2 header
@@ -489,9 +511,9 @@ class PhishingDetector {
           'SBv2 is ${age.inHours}h old — server cron may be lagging');
     }
 
-    // Step 5: Anti-replay + anti-emptying ratio (only if signature provided,
-    // i.e. fresh download — cached data we trust unconditionally)
-    if (signature != null) {
+    // Step 5: Anti-replay + anti-emptying ratio (only on fresh downloads —
+    // cache loads skip this because the timestamp was already validated).
+    if (isFreshDownload) {
       final lastTsStr = await _storage.read(key: _kLastTimestamp);
       final lastCountStr = await _storage.read(key: _kLastCount);
       final lastTs = int.tryParse(lastTsStr ?? '') ?? 0;

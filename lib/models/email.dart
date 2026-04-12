@@ -120,6 +120,22 @@ class Email {
   }
 }
 
+/// Antivirus scan status for an attachment.
+enum AttachmentScanStatus {
+  /// Not yet scanned.
+  pending,
+  /// Scan in progress — UI shows spinner.
+  scanning,
+  /// Scanned, no threats found.
+  clean,
+  /// Threat detected — view and download blocked.
+  infected,
+  /// Cannot scan (encrypted, too large, or format not supported).
+  unscannable,
+  /// Scanner unavailable or network error.
+  error,
+}
+
 /// Email attachment model
 class EmailAttachment {
   String fileName;
@@ -127,12 +143,32 @@ class EmailAttachment {
   String contentType;
   Uint8List? data;
 
+  // Antivirus scan state
+  AttachmentScanStatus scanStatus;
+  String? threatName;
+  String? scanError;
+  String? sha256;
+  int? scanTimeMs;
+
   EmailAttachment({
     this.fileName = '',
     this.size = 0,
     this.contentType = '',
     this.data,
+    this.scanStatus = AttachmentScanStatus.pending,
+    this.threatName,
+    this.scanError,
+    this.sha256,
+    this.scanTimeMs,
   });
+
+  /// Whether the user can view/download this attachment.
+  bool get isAccessible =>
+      scanStatus == AttachmentScanStatus.clean ||
+      scanStatus == AttachmentScanStatus.unscannable;
+
+  /// Whether this attachment is blocked (confirmed threat).
+  bool get isBlocked => scanStatus == AttachmentScanStatus.infected;
 
   /// Convert EmailAttachment to JSON for serialization
   Map<String, dynamic> toJson() {

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:http/io_client.dart';
 
 import 'certificate_service.dart';
+import '../services/le_issuer_check.dart';
 import 'logger_service.dart';
 import 'pinned_security_context.dart';
 
@@ -127,7 +128,8 @@ class DeviceApprovalService {
     final http = PinnedSecurityContext.createHttpClient()
       ..connectionTimeout = const Duration(seconds: 10)
       ..idleTimeout = const Duration(seconds: 5);
-    http.badCertificateCallback = (cert, host, port) => host == 'mail.icd360s.de';
+    http.badCertificateCallback = (cert, host, port) =>
+        host == 'mail.icd360s.de' && isTrustedLetsEncryptIssuer(cert.issuer);
     return IOClient(http);
   }
 

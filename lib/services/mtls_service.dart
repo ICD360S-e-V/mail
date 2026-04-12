@@ -137,11 +137,21 @@ class MtlsService {
       }
 
       // Case 2: INTERMEDIATE cert (LE CA like E7, R10, YE1 etc.).
-      // An intermediate's ISSUER must be a trusted ISRG root.
-      // We check the ISSUER, not the subject — the previous code
-      // checked subject which is semantically wrong (a cert claiming
-      // O=Let's Encrypt in its subject doesn't prove it's genuine).
-      if (isTrustedLetsEncryptIssuer(issuer)) {
+      //
+      // An intermediate has BOTH:
+      //   - Subject O = "Let's Encrypt" (or ISRG)
+      //   - Issuer O  = "Internet Security Research Group" (or ISRG)
+      //
+      // Checking ONLY the issuer (as previous code did) is dangerous:
+      // a leaf cert issued by LE for any domain (e.g. evil.com) also
+      // has a trusted LE issuer, so it would pass Case 2 and be
+      // accepted without hostname verification.
+      //
+      // By requiring the SUBJECT to also be a trusted LE/ISRG org,
+      // we ensure only actual CA intermediates pass — leaf certs for
+      // arbitrary domains have subject CN=<domain>, not O=Let's Encrypt.
+      if (isTrustedLetsEncryptIssuer(subject) &&
+          isTrustedLetsEncryptIssuer(issuer)) {
         LoggerService.log('MTLS',
             '✓ Accepted intermediate: CN=$subjectCN (issuer CN=$issuerCN)');
         return true;

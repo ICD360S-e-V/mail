@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:enough_mail/enough_mail.dart';
 import '../models/models.dart';
 import 'certificate_service.dart';
+import 'dns_checker.dart';
 import 'logger_service.dart';
 import 'mtls_service.dart';
 import 'threat_intelligence_service.dart';
@@ -36,15 +37,33 @@ class MailService {
   static List<InternetAddress>? _dnsCache;
   static DateTime? _dnsCacheExpiry;
 
-  /// Resolve server with DNS caching (5 min TTL). Falls back to stale cache on failure.
+  /// Resolve server via DNS-over-HTTPS (5 min cache TTL).
+  ///
+  /// Uses [DnsChecker.lookupA] (encrypted DoH to mail.icd360s.de or
+  /// Cloudflare fallback) instead of the system resolver (plaintext
+  /// UDP/53). This prevents local DNS poisoning attacks on untrusted
+  /// networks from redirecting IMAP/SMTP connections to a rogue server.
   static Future<String> resolveServer() async {
     if (_dnsCache != null && _dnsCacheExpiry != null && DateTime.now().isBefore(_dnsCacheExpiry!)) {
       return _dnsCache!.first.address;
     }
     try {
+      // Primary: DNS-over-HTTPS via external resolvers (Quad9 / Cloudflare).
+      // Uses lookupServerA (not lookupA) to avoid the circular dependency:
+      // lookupA tries mail.icd360s.de/dns-query first, which requires
+      // resolving mail.icd360s.de — the very thing we're trying to resolve.
+      final results = await DnsChecker.lookupServerA(allowedServer);
+      if (results.isNotEmpty) {
+        _dnsCache = results.map((ip) => InternetAddress(ip)).toList();
+        _dnsCacheExpiry = DateTime.now().add(const Duration(minutes: 5));
+        LoggerService.log('DNS', '✓ Resolved $allowedServer → ${results.first} (DoH)');
+        return results.first;
+      }
+      // Fallback: system resolver (cleartext, but better than no connection).
       _dnsCache = await InternetAddress.lookup(allowedServer);
       _dnsCacheExpiry = DateTime.now().add(const Duration(minutes: 5));
-      LoggerService.log('DNS', '✓ Resolved $allowedServer → ${_dnsCache!.first.address}');
+      LoggerService.logWarning('DNS',
+          '⚠️ DoH returned empty, fell back to system resolver → ${_dnsCache!.first.address}');
       return _dnsCache!.first.address;
     } catch (e) {
       if (_dnsCache != null) {

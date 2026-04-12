@@ -398,10 +398,16 @@ class UpdateService {
       ));
       await Future.delayed(const Duration(seconds: 2));
 
-      // Platform-specific install
-      // Bump baseline BEFORE launching the installer: on Windows/macOS/
-      // Linux the installer subprocess takes over and the current
-      // process is killed before we could record success.
+      // Platform-specific install.
+      //
+      // Bump baseline before launching the installer. On desktop the
+      // installer kills the current process, so we cannot record
+      // success after the fact. This is safe because:
+      //   1. isAcceptable uses >= (not >), so the same version can
+      //      always be re-attempted if the installer fails.
+      //   2. VersionBaseline.initialize() has a startup self-check:
+      //      if running_version < baseline (failed install), the
+      //      baseline is reset to running_version automatically.
       await VersionBaseline.bumpTo(updateInfo.version);
       if (Platform.isWindows) {
         return _installWindows(downloadedFile);

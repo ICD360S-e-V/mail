@@ -89,10 +89,135 @@ class SafeHtmlRenderer extends StatelessWidget {
   /// Attributes that contain URLs — subject to scheme validation.
   static const _urlAttributes = <String>{'href', 'src', 'cite'};
 
-  /// Allowed URL schemes.
-  static const _allowedSchemes = <String>{
+  /// Allowed URL schemes for `src` attributes (images, embedded content).
+  static const _allowedSrcSchemes = <String>{
     'http', 'https', 'mailto', 'cid', 'data',
   };
+
+  /// Allowed URL schemes for `href`/`cite` attributes — `data:` is
+  /// excluded to prevent data-URI phishing (see issue #3).
+  static const _allowedHrefSchemes = <String>{
+    'http', 'https', 'mailto', 'cid',
+  };
+
+  // ──────────────────────────────────────────────────────────────
+  //  CSS inline style sanitizer (Proton Mail + Tuta Mail approach)
+  // ──────────────────────────────────────────────────────────────
+
+  /// Regex matching dangerous CSS value patterns (case-insensitive).
+  /// Applied AFTER recursive unescaping and comment stripping.
+  static final _dangerousCssValue = RegExp(
+    r'expression\s*\('    // IE JS execution
+    r'|image-set\s*\('    // alternate url() syntax
+    r'|image\s*\('        // CSS image() type with plain URL
+    r'|element\s*\('      // references arbitrary DOM element
+    r'|var\s*\('          // custom properties can defer url() resolution
+    r'|src\s*\('          // obscure resource reference
+    r'|-moz-binding'      // old Firefox XBL execution
+    r'|behavior\s*:'      // IE HTC execution
+    r'|-o-link'           // old Opera link behavior
+    r'|javascript\s*:'    // script execution
+    r'|vbscript\s*:',     // IE script execution
+    caseSensitive: false,
+  );
+
+  /// Matches `url(...)` calls, capturing the URL inside.
+  static final _cssUrlCall = RegExp(
+    r'''url\s*\(\s*(['"]?)(.*?)\1\s*\)''',
+    caseSensitive: false,
+  );
+
+  /// CSS hex escape: `\41` or `\000041`.
+  static final _cssHexEscape = RegExp(r'\\([0-9a-fA-F]{1,6})\s?');
+
+  /// HTML numeric entities: `&#65;` or `&#x41;`.
+  static final _htmlNumericEntity = RegExp(r'&#x?([0-9a-fA-F]+);');
+
+  /// Sanitize an inline `style` attribute value.
+  ///
+  /// Strips dangerous CSS functions (`url()` to external hosts,
+  /// `expression()`, `var()`, `image-set()`, etc.) while preserving
+  /// safe visual properties (colors, fonts, margins, borders).
+  ///
+  /// Follows the combined Proton Mail + Tuta Mail approach:
+  /// 1. Recursive CSS/HTML unescape (anti-bypass, up to 5 rounds)
+  /// 2. Strip CSS comments
+  /// 3. Block dangerous value patterns in any property
+  /// 4. Allow `url(data:…)` and `url(cid:…)` for inline images
+  /// 5. Block `position: absolute/fixed/sticky`
+  static String _sanitizeStyleValue(String style) {
+    // Step 1: Recursive unescape (CSS hex + HTML entities) — up to 5
+    // rounds to defeat multi-layer encoding like `\26#117;rl(…)`.
+    var decoded = style;
+    for (var i = 0; i < 5; i++) {
+      final prev = decoded;
+      decoded = _cssUnescape(decoded);
+      if (decoded == prev) break; // stable
+    }
+
+    // Step 2: Strip CSS comments.
+    decoded = decoded.replaceAll(RegExp(r'/\*.*?\*/', dotAll: true), '');
+
+    // Step 3: Parse into declarations and filter each one.
+    final declarations = decoded.split(';');
+    final safe = <String>[];
+
+    for (final decl in declarations) {
+      final colonIdx = decl.indexOf(':');
+      if (colonIdx < 0) continue;
+
+      final property = decl.substring(0, colonIdx).trim().toLowerCase();
+      var value = decl.substring(colonIdx + 1).trim();
+
+      // Reject declarations that don't look like valid CSS.
+      if (!RegExp(r'^-?-?[a-z][\w-]*$').hasMatch(property)) continue;
+
+      // Block explicitly dangerous properties.
+      if (property == '-moz-binding' ||
+          property == 'behavior' ||
+          property == '-o-link' ||
+          property == '-o-link-source' ||
+          property == 'color-scheme') continue;
+
+      // Block position: absolute/fixed/sticky (UI overlay attacks).
+      if (property == 'position' &&
+          RegExp(r'\b(absolute|fixed|sticky)\b', caseSensitive: false)
+              .hasMatch(value)) continue;
+
+      // Block any value containing dangerous patterns.
+      if (_dangerousCssValue.hasMatch(value)) continue;
+
+      // Handle url() calls: allow only data: and cid: schemes.
+      if (_cssUrlCall.hasMatch(value)) {
+        value = value.replaceAllMapped(_cssUrlCall, (m) {
+          final url = (m.group(2) ?? '').trim().toLowerCase();
+          if (url.startsWith('data:') || url.startsWith('cid:')) {
+            return m.group(0)!; // safe — inline image
+          }
+          return 'none'; // external URL → neutralize
+        });
+      }
+
+      safe.add('$property: $value');
+    }
+
+    return safe.join('; ');
+  }
+
+  /// Unescape one level of CSS hex escapes and HTML numeric entities.
+  static String _cssUnescape(String input) {
+    var result = input.replaceAllMapped(_cssHexEscape, (m) {
+      final code = int.tryParse(m.group(1)!, radix: 16);
+      return (code != null && code > 0) ? String.fromCharCode(code) : '';
+    });
+    result = result.replaceAllMapped(_htmlNumericEntity, (m) {
+      final raw = m.group(1)!;
+      final radix = m.group(0)!.startsWith('&#x') ? 16 : 10;
+      final code = int.tryParse(raw, radix: radix);
+      return (code != null && code > 0) ? String.fromCharCode(code) : '';
+    });
+    return result;
+  }
 
   /// Tags removed WITH all their children (content is dangerous).
   static const _stripWithChildren = <String>{
@@ -162,10 +287,25 @@ class SafeHtmlRenderer extends StatelessWidget {
         return;
       }
 
+      // Sanitize inline style attributes — strip dangerous CSS.
+      if (attrName == 'style') {
+        final sanitized = _sanitizeStyleValue(value);
+        if (sanitized.isEmpty) {
+          keysToRemove.add(key);
+        } else {
+          element.attributes[key] = sanitized;
+        }
+        return;
+      }
+
       // Validate URL attributes — block javascript: and other
-      // dangerous schemes.
+      // dangerous schemes.  Use stricter scheme set for href/cite
+      // (no data: — prevents data-URI phishing).
       if (_urlAttributes.contains(attrName)) {
-        if (_hasDisallowedScheme(value)) {
+        final schemes = (attrName == 'src')
+            ? _allowedSrcSchemes
+            : _allowedHrefSchemes;
+        if (_hasDisallowedScheme(value, schemes)) {
           keysToRemove.add(key);
         }
         return;
@@ -183,7 +323,7 @@ class SafeHtmlRenderer extends StatelessWidget {
   }
 
   /// Check if a URL attribute value uses a disallowed scheme.
-  static bool _hasDisallowedScheme(String value) {
+  static bool _hasDisallowedScheme(String value, [Set<String>? allowed]) {
     final trimmed = value.trim();
 
     // Relative URLs, fragments, query-only are safe.
@@ -203,7 +343,7 @@ class SafeHtmlRenderer extends StatelessWidget {
     if (slashIndex >= 0 && slashIndex < colonIndex) return false;
 
     final scheme = trimmed.substring(0, colonIndex).trim().toLowerCase();
-    return !_allowedSchemes.contains(scheme);
+    return !(allowed ?? _allowedSrcSchemes).contains(scheme);
   }
 
   // ──────────────────────────────────────────────────────────────

@@ -13,6 +13,7 @@ import '../utils/l10n_helper.dart';
 import '../utils/safe_filename.dart';
 import '../models/models.dart';
 import '../providers/email_provider.dart';
+import '../services/attachment_scan_service.dart';
 import '../services/notification_service.dart';
 import '../services/logger_service.dart';
 import '../services/platform_service.dart';
@@ -38,6 +39,20 @@ class _EmailViewerState extends State<EmailViewer> {
 
   /// Whether the user has opted to load remote images for this email.
   bool _allowRemoteContent = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Trigger AV scan on all attachments when email is opened.
+    if (widget.email.attachments.isNotEmpty) {
+      AttachmentScanService.scanAll(
+        widget.email,
+        onProgress: () {
+          if (mounted) setState(() {});
+        },
+      );
+    }
+  }
 
   @override
   void dispose() {
@@ -784,13 +799,56 @@ ${email.attachments.isNotEmpty ? '\nAttachments (${email.attachments.length}): $
   Widget _buildAttachment(EmailAttachment attachment, FluentThemeData theme, BuildContext ctx) {
     final sizeKB = (attachment.size / 1024).toStringAsFixed(1);
 
+    // Scan status badge + label
+    Widget statusBadge;
+    String statusLabel;
+    bool canView = false;
+    bool canDownload = false;
+    Color? rowBorderColor;
+
+    switch (attachment.scanStatus) {
+      case AttachmentScanStatus.pending:
+        statusBadge = Icon(FluentIcons.clock, size: 12, color: theme.inactiveColor);
+        statusLabel = 'Waiting...';
+      case AttachmentScanStatus.scanning:
+        statusBadge = const SizedBox(
+          width: 12, height: 12,
+          child: ProgressRing(strokeWidth: 2),
+        );
+        statusLabel = 'Scanning...';
+      case AttachmentScanStatus.clean:
+        statusBadge = const Icon(FluentIcons.completed_solid, size: 12, color: Color(0xFF107C10));
+        statusLabel = attachment.scanTimeMs != null
+            ? 'Clean (${attachment.scanTimeMs}ms)'
+            : 'Clean';
+        canView = true;
+        canDownload = true;
+      case AttachmentScanStatus.infected:
+        statusBadge = const Icon(FluentIcons.warning, size: 12, color: Color(0xFFD13438));
+        statusLabel = 'THREAT: ${attachment.threatName ?? "Unknown"}';
+        rowBorderColor = const Color(0xFFD13438);
+      case AttachmentScanStatus.unscannable:
+        statusBadge = const Icon(FluentIcons.info, size: 12, color: Color(0xFFCA5010));
+        statusLabel = attachment.scanError ?? 'Cannot scan';
+        canView = true;
+        canDownload = true;
+      case AttachmentScanStatus.error:
+        statusBadge = Icon(FluentIcons.warning, size: 12, color: theme.inactiveColor);
+        statusLabel = 'Scanner unavailable';
+        canDownload = true; // allow download with warning
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: theme.micaBackgroundColor,
+        color: attachment.isBlocked
+            ? const Color(0x14D13438)
+            : theme.micaBackgroundColor,
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: theme.inactiveBackgroundColor),
+        border: Border.all(
+          color: rowBorderColor ?? theme.inactiveBackgroundColor,
+        ),
       ),
       child: Row(
         children: [
@@ -806,23 +864,34 @@ ${email.attachments.isNotEmpty ? '\nAttachments (${email.attachments.length}): $
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                Text(
-                  '$sizeKB KB - ${attachment.contentType}',
-                  style: theme.typography.caption?.copyWith(
-                    color: theme.inactiveColor,
-                  ),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    statusBadge,
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        '$sizeKB KB  ·  $statusLabel',
+                        style: theme.typography.caption?.copyWith(
+                          color: attachment.isBlocked
+                              ? const Color(0xFFD13438)
+                              : theme.inactiveColor,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-          // View button (icon only) - INTEGRATED VIEWER (PDF and images IN APP - SECURE!)
-          if (_canViewAttachment(attachment.fileName))
+          // View button — only when scan passed and viewable type
+          if (canView && _canViewAttachment(attachment.fileName))
             IconButton(
               icon: const Icon(FluentIcons.view, size: 16),
               onPressed: () async {
                 try {
                   if (attachment.data != null) {
-                    // ALWAYS open in integrated viewer (SECURE - NO external apps)
                     await showDialog(
                       context: ctx,
                       builder: (dialogContext) => AttachmentViewerWindow(
@@ -830,47 +899,72 @@ ${email.attachments.isNotEmpty ? '\nAttachments (${email.attachments.length}): $
                         fileData: attachment.data!,
                       ),
                     );
-                    LoggerService.log('EMAIL_VIEWER', '✓ Viewed ${attachment.fileName} IN APP (SECURE)');
+                    LoggerService.log('EMAIL_VIEWER',
+                        '✓ Viewed ${attachment.fileName} IN APP (SECURE)');
                   }
                 } catch (ex, stackTrace) {
                   LoggerService.logError('VIEW', ex, stackTrace);
                   if (!ctx.mounted) return;
                   final l10nView = l10nOf(ctx);
-                  NotificationService.showErrorToast(l10nView.errorView, ex.toString());
+                  NotificationService.showErrorToast(
+                      l10nView.errorView, ex.toString());
                 }
               },
             ),
-          // Download button (icon only)
-          IconButton(
-            icon: const Icon(FluentIcons.download, size: 16),
-            onPressed: () async {
-              try {
-                // Save to Downloads folder (cross-platform)
-                final platform = PlatformService.instance;
-                final downloadsPath = platform.downloadsPath;
+          // Download button — blocked for infected, warning for error
+          if (canDownload)
+            IconButton(
+              icon: const Icon(FluentIcons.download, size: 16),
+              onPressed: () async {
+                try {
+                  // Warn if scanner was unavailable
+                  if (attachment.scanStatus == AttachmentScanStatus.error) {
+                    if (!ctx.mounted) return;
+                    final proceed = await _confirmScannerUnavailable(ctx);
+                    if (!proceed) return;
+                  }
+                  // Warn for dangerous extensions
+                  if (_isDangerousAttachment(attachment.fileName)) {
+                    if (!ctx.mounted) return;
+                    final confirmed = await _confirmDangerousDownload(
+                        ctx, attachment.fileName);
+                    if (!confirmed) return;
+                  }
 
-                // SECURITY: Sanitize the filename — it comes from attacker-controlled
-                // MIME headers. Without this, an absolute path or `..` traversal
-                // could overwrite arbitrary files.
-                final safeName = safeAttachmentFileName(attachment.fileName);
-                final file = File(p.join(downloadsPath, safeName));
-                if (attachment.data != null) {
-                  await file.writeAsBytes(attachment.data!);
+                  final platform = PlatformService.instance;
+                  final downloadsPath = platform.downloadsPath;
+                  final safeName =
+                      safeAttachmentFileName(attachment.fileName);
+                  final file = File(p.join(downloadsPath, safeName));
+                  if (attachment.data != null) {
+                    await file.writeAsBytes(attachment.data!);
+                    if (!ctx.mounted) return;
+                    final l10nDl = l10nOf(ctx);
+                    NotificationService.showSuccessToast(
+                      l10nDl.successDownloaded,
+                      l10nDl.successSavedTo(file.path),
+                    );
+                    LoggerService.log('EMAIL_VIEWER',
+                        'Downloaded: $safeName (original: ${attachment.fileName})');
+                  }
+                } catch (ex) {
                   if (!ctx.mounted) return;
-                  final l10nDownload = l10nOf(ctx);
-                  NotificationService.showSuccessToast(
-                    l10nDownload.successDownloaded,
-                    l10nDownload.successSavedTo(file.path),
-                  );
-                  LoggerService.log('EMAIL_VIEWER', 'Downloaded attachment: $safeName (original: ${attachment.fileName})');
+                  final l10nDl = l10nOf(ctx);
+                  NotificationService.showErrorToast(
+                      l10nDl.errorDownload, ex.toString());
                 }
-              } catch (ex) {
-                if (!ctx.mounted) return;
-                final l10nDownload = l10nOf(ctx);
-                NotificationService.showErrorToast(l10nDownload.errorDownload, ex.toString());
-              }
-            },
-          ),
+              },
+            ),
+          // Blocked indicator for infected files
+          if (attachment.isBlocked)
+            Tooltip(
+              message: 'Blocked: ${attachment.threatName ?? "malware detected"}',
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8),
+                child: Icon(FluentIcons.blocked2, size: 16,
+                    color: Color(0xFFD13438)),
+              ),
+            ),
         ],
       ),
     );
@@ -880,6 +974,102 @@ ${email.attachments.isNotEmpty ? '\nAttachments (${email.attachments.length}): $
   bool _canViewAttachment(String fileName) {
     final ext = fileName.toLowerCase().split('.').last;
     return ['pdf', 'jpg', 'jpeg', 'png'].contains(ext);
+  }
+
+  /// Confirm download when scanner was unavailable.
+  static Future<bool> _confirmScannerUnavailable(BuildContext context) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => ContentDialog(
+        title: Row(
+          children: [
+            Icon(FluentIcons.warning, color: Colors.orange, size: 24),
+            const SizedBox(width: 8),
+            const Text('Scanner unavailable'),
+          ],
+        ),
+        content: const Text(
+          'The antivirus scanner could not be reached. This file has '
+          'NOT been scanned for malware.\n\n'
+          'Do you want to download it anyway?',
+        ),
+        actions: [
+          Button(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.pop(ctx, false),
+          ),
+          FilledButton(
+            style: ButtonStyle(
+              backgroundColor: WidgetStatePropertyAll(Colors.orange),
+            ),
+            child: const Text('Download anyway'),
+            onPressed: () => Navigator.pop(ctx, true),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  /// Extensions that can execute code when opened by the OS.
+  static const _dangerousExtensions = <String>{
+    // Windows executables / scripts
+    'exe', 'msi', 'bat', 'cmd', 'com', 'scr', 'pif', 'ps1', 'vbs',
+    'vbe', 'wsf', 'wsh', 'reg', 'inf', 'hta', 'cpl', 'msp', 'mst',
+    // Cross-platform scripts
+    'js', 'jse', 'sh', 'bash', 'command', 'py', 'pl', 'rb',
+    // Web content (can execute JS in browser)
+    'html', 'htm', 'xhtml', 'svg', 'xml', 'xht', 'mht', 'mhtml',
+    // macOS-specific
+    'app', 'action', 'workflow', 'dmg', 'pkg',
+    // Linux-specific
+    'desktop', 'run', 'appimage',
+    // Office macros
+    'docm', 'xlsm', 'pptm', 'dotm', 'xltm', 'potm',
+    // Archives (can contain executables)
+    'jar', 'iso', 'img',
+  };
+
+  /// Check if a filename has a potentially dangerous extension.
+  static bool _isDangerousAttachment(String fileName) {
+    final ext = fileName.toLowerCase().split('.').last;
+    return _dangerousExtensions.contains(ext);
+  }
+
+  /// Show a confirmation dialog before downloading a dangerous attachment.
+  static Future<bool> _confirmDangerousDownload(
+      BuildContext context, String fileName) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => ContentDialog(
+        title: Row(
+          children: [
+            Icon(FluentIcons.warning, color: Colors.orange, size: 24),
+            const SizedBox(width: 8),
+            const Text('Potentially dangerous file'),
+          ],
+        ),
+        content: Text(
+          'The file "$fileName" has an extension that could execute '
+          'code when opened. Only download files from senders you trust.\n\n'
+          'Do you want to download this file?',
+        ),
+        actions: [
+          Button(
+            child: const Text('Cancel'),
+            onPressed: () => Navigator.pop(ctx, false),
+          ),
+          FilledButton(
+            style: ButtonStyle(
+              backgroundColor: WidgetStatePropertyAll(Colors.orange),
+            ),
+            child: const Text('Download anyway'),
+            onPressed: () => Navigator.pop(ctx, true),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
   }
 }
 

@@ -119,6 +119,20 @@ class PortableSecureStorage {
     await _native.deleteAll();
   }
 
+  /// Best-effort zero the cached AES key from memory.
+  /// Call on app lock / master password lock to narrow the window
+  /// during which the key is resident in the heap.
+  void wipeKeyFromMemory() {
+    final k = _key;
+    if (k != null) {
+      for (var i = 0; i < k.length; i++) {
+        k[i] = 0;
+      }
+    }
+    _key = null;
+    _cache = null;
+  }
+
   // ── macOS file backend ─────────────────────────────────────
 
   Future<String> _path() async {
@@ -131,9 +145,9 @@ class PortableSecureStorage {
     return _filePath!;
   }
 
-  /// Read the macOS Hardware UUID via `ioreg`. Stable across reboots,
-  /// unique per machine, requires no entitlements. Falls back to a
-  /// machine-derived but weaker secret if ioreg is unavailable.
+  /// Read the macOS Hardware UUID + Serial Number via `ioreg`. Combines
+  /// both identifiers so an attacker must reproduce both (harder in VMs).
+  /// Stable across reboots, unique per machine, requires no entitlements.
   Future<String> _machineSecret() async {
     try {
       final result = await Process.run(
@@ -142,11 +156,14 @@ class PortableSecureStorage {
       );
       if (result.exitCode == 0) {
         final out = result.stdout as String;
-        final match = RegExp(
+        final uuidMatch = RegExp(
           r'"IOPlatformUUID"\s*=\s*"([0-9A-Fa-f-]+)"',
         ).firstMatch(out);
-        if (match != null) {
-          return match.group(1)!;
+        if (uuidMatch != null) {
+          final uuid = uuidMatch.group(1)!;
+          final serial = _extractSerial(out);
+          // Combine both identifiers — an attacker must know both.
+          return '$uuid:$serial';
         }
       }
     } catch (_) {/* fall through */}
@@ -160,6 +177,13 @@ class PortableSecureStorage {
     } catch (_) {
       return 'fallback:unknown';
     }
+  }
+
+  /// Extract IOPlatformSerialNumber from ioreg output, empty if absent.
+  static String _extractSerial(String ioregOutput) {
+    final match = RegExp(r'"IOPlatformSerialNumber"\s*=\s*"([^"]+)"')
+        .firstMatch(ioregOutput);
+    return match?.group(1) ?? '';
   }
 
   Future<Uint8List> _deriveKey() async {
