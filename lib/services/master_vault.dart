@@ -262,6 +262,27 @@ class MasterVault {
     }
   }
 
+  /// Delete the vault file and create a fresh one. Used when the vault
+  /// was encrypted under a different password (e.g. after factory reset
+  /// where the vault file persisted but the password hash was regenerated).
+  Future<void> deleteAndRecreate(String masterPassword) async {
+    if (!Platform.isMacOS) return;
+    final path = await _path();
+    final file = File(path);
+    if (await file.exists()) {
+      await file.delete();
+      LoggerService.log('MASTER_VAULT', 'Deleted stale vault file');
+    }
+    _wipeKeys();
+    _cache = null;
+    _argon2Salt = null;
+    _initCryptoHandles();
+    await _createFreshVault(masterPassword);
+    await _persist();
+    LoggerService.log('MASTER_VAULT',
+        '✓ Fresh vault created after deleteAndRecreate');
+  }
+
   /// Lock the vault: zero all in-memory keys, drop the cache. After
   /// this, [read] returns null and [write] throws until [unlock] is
   /// called again. Implements B5 Part 1.

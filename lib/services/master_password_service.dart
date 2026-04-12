@@ -305,6 +305,16 @@ class MasterPasswordService {
       await vault.unlock(password);
     } catch (ex, st) {
       LoggerService.logError('AUTH', ex, st);
+      // Vault file may exist from a previous password — delete and retry.
+      // This happens after factory reset when vault file persists but
+      // the password hash was regenerated.
+      try {
+        await vault.deleteAndRecreate(password);
+        LoggerService.log('AUTH',
+            '✓ Vault recreated after MAC error (previous password mismatch)');
+      } catch (ex2, st2) {
+        LoggerService.logError('AUTH', ex2, st2);
+      }
     }
     LoggerService.log('AUTH', 'Master password set (Argon2id)');
   }
