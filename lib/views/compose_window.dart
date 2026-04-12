@@ -387,9 +387,9 @@ class _ComposeWindowState extends State<ComposeWindow> {
 
   Future<void> _lookupKeys() async {
     final allEmails = [
-      ..._parseRecipients(_toController.text),
-      ..._parseRecipients(_ccController.text),
-      ..._parseRecipients(_bccController.text),
+      ..._getRecipientsList(),
+      ..._getCcList(),
+      ..._getBccList(),
     ];
     if (allEmails.isEmpty) {
       setState(() => _encryptionPossible = false);

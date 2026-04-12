@@ -334,8 +334,8 @@ class MailService {
           }
 
           // E2EE: Detect PGP/MIME at the MimeMessage level (RFC 3156).
-          // Must run BEFORE _extractEmailBody because PGP/MIME messages
-          // have no text/plain part — the body is in an encrypted MIME part.
+          // Runs AFTER Email construction — overwrites the empty/fallback
+          // body from _extractEmailBody with the decrypted content.
           final pgpCiphertext = PgpKeyService.extractPgpCiphertext(message);
           if (pgpCiphertext != null) {
             try {

@@ -61,14 +61,8 @@ class PgpKeyService {
 
     LoggerService.log('PGP', 'Generating Ed25519/X25519 keypair...');
     // dart_pg 2.x: generateKey is synchronous — offload to isolate
-    final privateKey = await compute(
-      (args) => OpenPGP.generateKey(
-        [args[0] as String],
-        args[1] as String,
-        type: KeyType.curve25519,
-      ),
-      [email, passphrase],
-    );
+    // compute() requires a top-level or static function (not a lambda)
+    final privateKey = await compute(_generateKeyIsolate, [email, passphrase]);
 
     await vault.write(key: _vaultKeyPrivate, value: privateKey.armor());
     _cachedPrivateKey = privateKey;
@@ -115,11 +109,13 @@ class PgpKeyService {
     final ct = message.getHeaderContentType();
     if (ct == null) return null;
 
+    // RFC 3156: multipart/encrypted has exactly 2 parts:
+    //   Part 1: application/pgp-encrypted (just "Version: 1")
+    //   Part 2: application/octet-stream (the actual PGP ciphertext)
+    // We only want Part 2.
     if (ct.mediaType.sub == MediaSubtype.multipartEncrypted) {
       for (final part in message.allPartsFlat) {
-        final partCt = part.mediaType;
-        if (partCt.sub == MediaSubtype.applicationOctetStream ||
-            partCt.toString().contains('application/pgp-encrypted')) {
+        if (part.mediaType.sub == MediaSubtype.applicationOctetStream) {
           final text = part.decodeContentText();
           if (text != null && text.contains('-----BEGIN PGP MESSAGE-----')) {
             return text;
@@ -276,6 +272,7 @@ class PgpKeyService {
       ..write('\r\n')
       ..write('--$boundary\r\n')
       ..write('Content-Type: application/octet-stream\r\n')
+      ..write('Content-Transfer-Encoding: 7bit\r\n')
       ..write('Content-Description: OpenPGP encrypted message\r\n')
       ..write('Content-Disposition: inline; filename="encrypted.asc"\r\n')
       ..write('\r\n')
@@ -284,6 +281,17 @@ class PgpKeyService {
       ..write('--$boundary--\r\n');
 
     return buf.toString();
+  }
+
+  // ── Isolate-safe functions (must be top-level or static) ────────
+
+  /// Key generation for compute() — must be static, not a lambda.
+  static dynamic _generateKeyIsolate(List<String> args) {
+    return OpenPGP.generateKey(
+      [args[0]],
+      args[1],
+      type: KeyType.curve25519,
+    );
   }
 
   // ── Helpers ──────────────────────────────────────────────────────
