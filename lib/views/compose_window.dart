@@ -13,6 +13,7 @@ import '../services/notification_service.dart';
 import '../services/logger_service.dart';
 import '../services/email_history_service.dart';
 import '../services/pgp_key_service.dart';
+import '../services/secure_mail_service.dart';
 import '../utils/pii_redactor.dart';
 
 /// Compose email window
@@ -58,9 +59,14 @@ class _ComposeWindowState extends State<ComposeWindow> {
   bool _showToSuggestions = false;
 
   // E2EE: per-recipient PGP key status
-  final Map<String, bool> _recipientHasKey = {}; // email → has PGP key
+  final Map<String, bool> _recipientHasKey = {};
   bool _encryptionPossible = false;
   Timer? _keyLookupTimer;
+
+  // Password-protected email for external recipients
+  bool _secureMailEnabled = false;
+  final TextEditingController _securePasswordController = TextEditingController();
+  int _secureExpiryDays = 7;
 
   @override
   void initState() {
@@ -520,6 +526,44 @@ class _ComposeWindowState extends State<ComposeWindow> {
     try {
       LoggerService.log('COMPOSE', 'Sending email from ${piiEmail(_selectedAccount!.username)} to:${recipients.length} cc:${ccRecipients.length} bcc:${bccRecipients.length} attachments:${_attachments.length} (${totalSizeMB}MB)');
 
+      // Password-protected secure mail for external recipients
+      if (_secureMailEnabled && _securePasswordController.text.isNotEmpty) {
+        try {
+          final result = await SecureMailService.encryptAndUpload(
+            body: _bodyController.text,
+            password: _securePasswordController.text,
+            senderEmail: _selectedAccount!.username,
+            subjectHint: _subjectController.text,
+            expiryDays: _secureExpiryDays,
+          );
+
+          // Replace body with notification text containing the link
+          final senderName = _selectedAccount!.username.split('@').first;
+          final notificationBody = SecureMailService.buildNotificationEmail(
+            senderName: senderName,
+            senderEmail: _selectedAccount!.username,
+            secureUrl: result.url,
+            expiresAt: result.expiresAt,
+          );
+
+          // Override body and subject for the notification email
+          _bodyController.text = notificationBody;
+          _subjectController.text =
+              'Verschlüsselte Nachricht / Encrypted message';
+
+          // Clear password from memory
+          _securePasswordController.clear();
+
+          LoggerService.log('SECURE_MAIL',
+              '✓ Encrypted and uploaded, sending notification link');
+        } catch (ex) {
+          NotificationService.showErrorToast(
+              'Secure mail failed', ex.toString());
+          setState(() { _isSending = false; _sendingStatus = ''; });
+          return;
+        }
+      }
+
       // Send using selected account with attachments.
       // Pass _lastDraftUid so the just-sent draft can be deleted by UID
       // (avoids the previous SUBJECT search, which was vulnerable to IMAP injection).
@@ -850,6 +894,52 @@ class _ComposeWindowState extends State<ComposeWindow> {
               ),
             ),
             const SizedBox(height: 12),
+
+            // Password-protected email toggle (for external recipients)
+            if (!_encryptionPossible && _getRecipientsList().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ToggleSwitch(
+                      checked: _secureMailEnabled,
+                      onChanged: (v) => setState(() => _secureMailEnabled = v),
+                      content: const Text('Password-protected email'),
+                    ),
+                    if (_secureMailEnabled) ...[
+                      const SizedBox(height: 8),
+                      TextBox(
+                        controller: _securePasswordController,
+                        placeholder: 'Password for recipient',
+                        obscureText: true,
+                        enabled: !_isSending,
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Text('Expires in: ', style: TextStyle(fontSize: 12)),
+                          ComboBox<int>(
+                            value: _secureExpiryDays,
+                            items: const [
+                              ComboBoxItem(value: 1, child: Text('1 day')),
+                              ComboBoxItem(value: 3, child: Text('3 days')),
+                              ComboBoxItem(value: 7, child: Text('7 days')),
+                              ComboBoxItem(value: 14, child: Text('14 days')),
+                            ],
+                            onChanged: (v) => setState(() => _secureExpiryDays = v ?? 7),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'The recipient will receive a link. Share the password separately (phone, Signal).',
+                        style: TextStyle(fontSize: 11, color: FluentTheme.of(context).inactiveColor),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
 
             // Subject field
             InfoLabel(

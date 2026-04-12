@@ -61,6 +61,15 @@ class AesGcmHelpers {
     }
   }
 
+  /// Raw AES-256-GCM encrypt with explicit key + IV (no version prefix).
+  /// Returns ciphertext + 16-byte GCM tag. Compatible with WebCrypto API
+  /// SubtleCrypto.decrypt({name:'AES-GCM', iv}, key, ct).
+  static Uint8List encryptRaw(Uint8List key, Uint8List iv, Uint8List plaintext) {
+    final cipher = GCMBlockCipher(AESEngine())
+      ..init(true, AEADParameters(KeyParameter(key), 128, iv, Uint8List(0)));
+    return cipher.process(plaintext);
+  }
+
   static Uint8List _randomBytes(int n) {
     final r = Random.secure();
     return Uint8List.fromList(List<int>.generate(n, (_) => r.nextInt(256)));
