@@ -1,4 +1,5 @@
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/master_password_service.dart';
 import '../services/logger_service.dart';
@@ -294,6 +295,14 @@ class _MasterPasswordDialogState extends State<MasterPasswordDialog> {
             },
             child: const Text('Reset App'),
           ),
+        // Copy logs button (pre-login debug access)
+        Button(
+          onPressed: () {
+            final logs = LoggerService.getLogs().join('\n');
+            Clipboard.setData(ClipboardData(text: logs));
+          },
+          child: const Text('Copy Logs'),
+        ),
         Button(
           onPressed: _isLoading ? null : () => Navigator.of(context).pop(false),
           child: Text(l10n.masterPasswordButtonExitApp),

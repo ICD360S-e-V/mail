@@ -253,7 +253,20 @@ class _PinUnlockScreenState extends State<PinUnlockScreen>
                   onPressed: widget.onFallbackToPassword,
                   child: const Text('Use master password instead'),
                 ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
+              // Copy logs button (accessible pre-login for debugging)
+              HyperlinkButton(
+                onPressed: () {
+                  final logs = LoggerService.getLogs().join('\n');
+                  Clipboard.setData(ClipboardData(text: logs));
+                  setState(() {
+                    _message = 'Logs copied to clipboard';
+                    _isError = false;
+                  });
+                },
+                child: const Text('Copy debug logs'),
+              ),
+              const SizedBox(height: 8),
             ],
           ),
         ),
