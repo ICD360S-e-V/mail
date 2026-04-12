@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v2.35.0 - 2026-04-12
+#### Features
+- remote device revocation — admin revokes, app auto-wipes + locks - (f8b3fa8) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.34.0 - 2026-04-12
 #### Features
 - RAM-only session cache — zero disk artifacts, instant navigation - (6a3304c) - Claude Code, *Claude Opus 4.6 (1M context)*
