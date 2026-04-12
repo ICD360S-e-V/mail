@@ -20,6 +20,9 @@ dependencies:
   enough_mail:
     path: ./enough_mail_fork
 
+  # OpenPGP E2EE (RFC 9580) — Ed25519 signing + X25519 encryption
+  dart_pg: ^2.1.0
+
   # State management
   provider: ^6.1.0
 

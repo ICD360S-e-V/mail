@@ -516,7 +516,20 @@ class _EmailViewerState extends State<EmailViewer> {
             : MediaQuery.of(context).size.width * 0.95,
         maxHeight: MediaQuery.of(context).size.height * 0.9,
       ),
-      title: Text(sanitizeBidi(email.subject)),
+      title: Row(
+        children: [
+          if (email.isEncrypted)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Tooltip(
+                message: 'End-to-end encrypted',
+                child: Icon(FluentIcons.lock_solid, size: 16,
+                    color: const Color(0xFF107C10)),
+              ),
+            ),
+          Expanded(child: Text(sanitizeBidi(email.subject))),
+        ],
+      ),
       content: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

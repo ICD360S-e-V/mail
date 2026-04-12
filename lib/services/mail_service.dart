@@ -5,6 +5,7 @@ import 'certificate_service.dart';
 import 'dns_checker.dart';
 import 'logger_service.dart';
 import 'mtls_service.dart';
+import 'pgp_key_service.dart';
 import 'threat_intelligence_service.dart';
 import 'trash_tracker_service.dart';
 import 'email_history_service.dart';
@@ -330,6 +331,22 @@ class MailService {
           // Extract headers for threat analysis
           for (final header in message.headers ?? []) {
             email.headers[header.name] = header.value;
+          }
+
+          // E2EE: Decrypt PGP-encrypted body if detected
+          if (PgpKeyService.isPgpEncrypted(email.body) ||
+              PgpKeyService.isPgpMimeEncrypted(email.headers)) {
+            try {
+              email.body = await PgpKeyService.decrypt(email.body);
+              email.isEncrypted = true;
+              LoggerService.log('PGP',
+                  '✓ Decrypted E2EE email from ${email.from}');
+            } catch (ex) {
+              LoggerService.logWarning('PGP',
+                  'Decryption failed for ${email.messageId}: $ex');
+              email.body = '[Encrypted email — decryption failed]';
+              email.isEncrypted = true;
+            }
           }
 
           // Analyze threat level

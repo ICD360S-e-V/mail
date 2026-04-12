@@ -14,6 +14,7 @@ class Email {
   int threatScore;
   String threatDetails;
   int? uid; // IMAP UID for reliable operations
+  bool isEncrypted; // E2EE: decrypted from PGP
 
   // Attachments
   List<EmailAttachment> attachments;
@@ -34,6 +35,7 @@ class Email {
     this.threatScore = 0,
     this.threatDetails = '',
     this.uid,
+    this.isEncrypted = false,
     List<EmailAttachment>? attachments,
     Map<String, String>? headers,
   })  : date = date ?? DateTime.now(),
