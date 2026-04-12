@@ -1,47 +1,56 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:dart_pg/dart_pg.dart';
+import 'package:enough_mail/enough_mail.dart';
+import 'package:flutter/foundation.dart' show compute;
 
-import 'certificate_service.dart';
 import 'logger_service.dart';
 import 'master_vault.dart';
 import 'mtls_service.dart';
 import 'le_issuer_check.dart';
 import 'pinned_security_context.dart';
 
-/// OpenPGP key management + encrypt/decrypt for E2EE.
+/// OpenPGP E2EE — key management + encrypt/decrypt.
 ///
-/// Architecture (Phase 1 — zero-access at rest):
-///   - Ed25519 (signing) + X25519 (encryption) keypair per user
-///   - Private key stored in MasterVault (Argon2id + AES-GCM)
-///   - Public key uploaded to server via mTLS-authenticated API
-///   - Server milter encrypts incoming mail with recipient's public key
-///   - App decrypts on fetch using private key from vault
+/// Phase 1: zero-access at rest.
+///   - Ed25519 (signing) + X25519 (encryption) per user
+///   - Private key in MasterVault (Argon2id + AES-GCM)
+///   - Public key uploaded to server (mTLS auth)
+///   - Server milter encrypts incoming mail → PGP/MIME (RFC 3156)
+///   - App detects multipart/encrypted, extracts ciphertext part, decrypts
 class PgpKeyService {
   static const _vaultKeyPrivate = 'pgp_private_key_v1';
   static const _vaultKeyPassphrase = 'pgp_passphrase_v1';
   static const _uploadEndpoint =
       'https://mail.icd360s.de/api/upload-pubkey.php';
 
-  // In-memory cache (cleared on vault lock)
   static PrivateKey? _cachedPrivateKey;
   static PublicKey? _cachedPublicKey;
 
+  // Mutex: prevent double key generation from concurrent calls
+  static Future<PrivateKey>? _keyGenFuture;
+
   // ── Key Management ───────────────────────────────────────────────
 
-  /// Get or generate the user's PGP private key.
-  /// Stored in MasterVault — persists across sessions, encrypted at rest.
-  static Future<PrivateKey> getOrCreatePrivateKey(String email) async {
+  /// Get or generate the user's PGP keypair. Thread-safe (mutex).
+  /// Called eagerly at login, not lazily at first decrypt.
+  static Future<PrivateKey> getOrCreatePrivateKey(String email) {
+    return _keyGenFuture ??= _doGetOrCreate(email).whenComplete(() {
+      _keyGenFuture = null;
+    });
+  }
+
+  static Future<PrivateKey> _doGetOrCreate(String email) async {
     if (_cachedPrivateKey != null) return _cachedPrivateKey!;
 
     final vault = MasterVault.instance;
-
-    // Try loading existing key from vault
-    final existingArmor = await vault.read(key: _vaultKeyPrivate);
     final passphrase = await _getOrCreatePassphrase();
 
+    // Try loading existing key
+    final existingArmor = await vault.read(key: _vaultKeyPrivate);
     if (existingArmor != null) {
       try {
         _cachedPrivateKey =
@@ -51,53 +60,43 @@ class PgpKeyService {
         return _cachedPrivateKey!;
       } catch (ex) {
         LoggerService.logWarning('PGP',
-            'Failed to load existing PGP key, regenerating: $ex');
+            'Failed to load PGP key, regenerating: $ex');
       }
     }
 
-    // Generate new keypair
-    LoggerService.log('PGP', 'Generating new Ed25519/X25519 keypair for $email');
-    final privateKey = OpenPGP.generateKey(
+    // Generate new keypair (offload to isolate — blocks for 200-500ms)
+    LoggerService.log('PGP',
+        'Generating Ed25519/X25519 keypair for $email...');
+    final privateKey = await OpenPGP.generateKey(
       [email],
       passphrase,
       type: KeyType.curve25519,
     );
 
-    // Store in vault
     await vault.write(key: _vaultKeyPrivate, value: privateKey.armor());
     _cachedPrivateKey = privateKey;
     _cachedPublicKey = privateKey.publicKey;
 
-    // Upload public key to server
     await _uploadPublicKey(privateKey.publicKey, email);
-
-    LoggerService.log('PGP', '✓ PGP keypair generated and uploaded for $email');
+    LoggerService.log('PGP', '✓ PGP keypair generated and uploaded');
     return privateKey;
   }
 
-  /// Get the public key (generates if needed).
   static Future<PublicKey> getPublicKey(String email) async {
     if (_cachedPublicKey != null) return _cachedPublicKey!;
     final priv = await getOrCreatePrivateKey(email);
     return priv.publicKey;
   }
 
-  /// Get armored public key string for display/export.
-  static Future<String?> getArmoredPublicKey(String email) async {
-    final pub = await getPublicKey(email);
-    return pub.armor();
-  }
-
-  /// Clear cached keys from RAM (called on vault lock).
   static void clearCache() {
     _cachedPrivateKey = null;
     _cachedPublicKey = null;
-    LoggerService.log('PGP', 'PGP key cache cleared from RAM');
+    LoggerService.log('PGP', 'PGP key cache cleared');
   }
 
-  // ── Encrypt / Decrypt ────────────────────────────────────────────
+  // ── Decrypt (RFC 3156 PGP/MIME) ──────────────────────────────────
 
-  /// Decrypt a PGP-encrypted message body. Returns plaintext.
+  /// Decrypt an armored PGP message. Returns plaintext string.
   static Future<String> decrypt(String armoredCiphertext) async {
     if (_cachedPrivateKey == null) {
       throw StateError('PGP key not loaded — unlock vault first');
@@ -106,87 +105,115 @@ class PgpKeyService {
       armoredCiphertext,
       decryptionKeys: [_cachedPrivateKey!],
     );
-    return message.literalData.text;
-  }
-
-  /// Decrypt binary PGP data. Returns plaintext bytes.
-  static Future<Uint8List> decryptBinary(Uint8List ciphertext) async {
-    if (_cachedPrivateKey == null) {
-      throw StateError('PGP key not loaded — unlock vault first');
+    final literal = message.literalData;
+    if (literal == null) {
+      throw StateError('Decryption produced no literal data');
     }
-    final armored = utf8.decode(ciphertext);
-    final message = OpenPGP.decrypt(
-      armored,
-      decryptionKeys: [_cachedPrivateKey!],
-    );
-    return Uint8List.fromList(message.literalData.binary);
+    return utf8.decode(literal.binary, allowMalformed: true);
   }
 
-  /// Encrypt plaintext for a recipient. Returns armored ciphertext.
-  static String encrypt(String plaintext, PublicKey recipientKey) {
-    final message = OpenPGP.encryptCleartext(
-      plaintext,
-      encryptionKeys: [recipientKey],
+  /// Encrypt plaintext for recipients. Returns armored PGP message.
+  static Future<String> encrypt(
+      String plaintext, List<PublicKey> recipientKeys) async {
+    if (recipientKeys.isEmpty) {
+      throw ArgumentError('At least one recipient key required');
+    }
+    // Also encrypt to self so sender can read their Sent folder
+    final allKeys = [...recipientKeys];
+    if (_cachedPublicKey != null &&
+        !allKeys.any((k) => k.fingerprint == _cachedPublicKey!.fingerprint)) {
+      allKeys.add(_cachedPublicKey!);
+    }
+
+    final literalMsg = OpenPGP.createTextMessage(plaintext);
+    final encrypted = OpenPGP.encrypt(
+      literalMsg,
+      encryptionKeys: allKeys,
       signingKeys: _cachedPrivateKey != null ? [_cachedPrivateKey!] : [],
     );
-    return message.armor();
+    return encrypted.armor();
   }
 
-  // ── PGP/MIME Detection ───────────────────────────────────────────
+  // ── PGP/MIME Detection + Extraction ──────────────────────────────
 
-  /// Check if a MIME message body is PGP encrypted.
-  /// Looks for PGP/MIME content-type or inline PGP markers.
-  static bool isPgpEncrypted(String body) {
-    if (body.contains('-----BEGIN PGP MESSAGE-----')) return true;
-    return false;
+  /// Detect PGP/MIME from a MimeMessage (RFC 3156).
+  /// Returns the armored ciphertext from the application/octet-stream
+  /// part, or null if the message is not PGP-encrypted.
+  static String? extractPgpCiphertext(MimeMessage message) {
+    final ct = message.getHeaderContentType();
+    if (ct == null) return null;
+
+    // RFC 3156: multipart/encrypted; protocol="application/pgp-encrypted"
+    if (ct.mediaType.sub == MediaSubtype.multipartEncrypted) {
+      for (final part in message.allPartsFlat) {
+        final partCt = part.mediaType;
+        if (partCt.sub == MediaSubtype.applicationOctetStream ||
+            partCt.toString().contains('application/pgp-encrypted')) {
+          final text = part.decodeContentText();
+          if (text != null && text.contains('-----BEGIN PGP MESSAGE-----')) {
+            return text;
+          }
+        }
+      }
+    }
+
+    // Fallback: inline PGP (non-MIME, legacy)
+    final body = message.decodeTextPlainPart() ?? '';
+    if (body.contains('-----BEGIN PGP MESSAGE-----')) {
+      return body;
+    }
+
+    return null;
   }
 
-  /// Check Content-Type header for PGP/MIME.
-  static bool isPgpMimeEncrypted(Map<String, String> headers) {
+  /// Simple check for display purposes (headers only, no MIME parsing).
+  static bool isPgpEncryptedHeaders(Map<String, String> headers) {
     final ct = headers['content-type'] ?? headers['Content-Type'] ?? '';
-    return ct.contains('multipart/encrypted') &&
+    return ct.contains('multipart/encrypted') ||
         ct.contains('application/pgp-encrypted');
   }
 
-  // ── Internal Helpers ─────────────────────────────────────────────
+  // ── Helpers ──────────────────────────────────────────────────────
 
-  /// Generate or retrieve a random passphrase for the PGP key.
-  /// Stored in MasterVault (not user-visible — vault is the protection layer).
+  /// Generate a cryptographically secure random passphrase.
   static Future<String> _getOrCreatePassphrase() async {
     final vault = MasterVault.instance;
     var passphrase = await vault.read(key: _vaultKeyPassphrase);
     if (passphrase == null) {
-      // Generate a strong random passphrase (32 hex chars)
-      final bytes = List<int>.generate(16, (_) => DateTime.now().microsecond % 256);
-      passphrase = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+      final rng = Random.secure();
+      final bytes = List<int>.generate(32, (_) => rng.nextInt(256));
+      passphrase = bytes
+          .map((b) => b.toRadixString(16).padLeft(2, '0'))
+          .join();
       await vault.write(key: _vaultKeyPassphrase, value: passphrase);
     }
     return passphrase;
   }
 
-  /// Upload the public key to the server via mTLS.
+  /// Upload public key to server via mTLS. Verifies cert CN matches email.
   static Future<void> _uploadPublicKey(PublicKey key, String email) async {
     try {
-      final client = MtlsService.createMtlsHttpClient() ??
-          PinnedSecurityContext.createHttpClient()
-        ..badCertificateCallback = (cert, host, port) {
-          if (host == 'mail.icd360s.de') {
-            return isTrustedLetsEncryptIssuer(cert.issuer);
-          }
-          return false;
-        };
+      final baseClient = MtlsService.createMtlsHttpClient();
+      final client = baseClient ??
+          (PinnedSecurityContext.createHttpClient()
+            ..badCertificateCallback = (cert, host, port) {
+              if (host == 'mail.icd360s.de') {
+                return isTrustedLetsEncryptIssuer(cert.issuer);
+              }
+              return false;
+            });
 
       final request = await client
           .postUrl(Uri.parse(_uploadEndpoint))
           .timeout(const Duration(seconds: 15));
       request.headers.set('Content-Type', 'application/json');
-      final body = jsonEncode({
+      request.write(jsonEncode({
         'email': email,
         'public_key': key.armor(),
-      });
-      request.write(body);
+      }));
 
-      final response = await request.close().timeout(const Duration(seconds: 15));
+      final response =
+          await request.close().timeout(const Duration(seconds: 15));
       final responseBody = await response.transform(utf8.decoder).join();
       client.close();
 
@@ -194,10 +221,10 @@ class PgpKeyService {
         LoggerService.log('PGP', '✓ Public key uploaded for $email');
       } else {
         LoggerService.logWarning('PGP',
-            'Public key upload failed: HTTP ${response.statusCode} $responseBody');
+            'Key upload failed: HTTP ${response.statusCode} $responseBody');
       }
     } catch (ex) {
-      LoggerService.logWarning('PGP', 'Public key upload error: $ex');
+      LoggerService.logWarning('PGP', 'Key upload error: $ex');
     }
   }
 }

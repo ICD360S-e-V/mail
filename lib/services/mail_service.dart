@@ -333,11 +333,13 @@ class MailService {
             email.headers[header.name] = header.value;
           }
 
-          // E2EE: Decrypt PGP-encrypted body if detected
-          if (PgpKeyService.isPgpEncrypted(email.body) ||
-              PgpKeyService.isPgpMimeEncrypted(email.headers)) {
+          // E2EE: Detect PGP/MIME at the MimeMessage level (RFC 3156).
+          // Must run BEFORE _extractEmailBody because PGP/MIME messages
+          // have no text/plain part — the body is in an encrypted MIME part.
+          final pgpCiphertext = PgpKeyService.extractPgpCiphertext(message);
+          if (pgpCiphertext != null) {
             try {
-              email.body = await PgpKeyService.decrypt(email.body);
+              email.body = await PgpKeyService.decrypt(pgpCiphertext);
               email.isEncrypted = true;
               LoggerService.log('PGP',
                   '✓ Decrypted E2EE email from ${email.from}');
