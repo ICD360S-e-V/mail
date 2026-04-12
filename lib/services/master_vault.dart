@@ -235,7 +235,9 @@ class MasterVault {
   Future<void> unlockWithKey(Uint8List masterKey) async {
     if (!Platform.isMacOS) return;
     if (isUnlocked) return;
-    LoggerService.log('MASTER_VAULT', 'Unlocking vault with cached key…');
+    LoggerService.log('MASTER_VAULT',
+        'Unlocking vault with cached key (${masterKey.length} bytes, '
+        'first4=${masterKey.sublist(0, 4).map((b) => b.toRadixString(16)).join()})…');
     try {
       _initCryptoHandles();
       final path = await _path();
@@ -244,8 +246,8 @@ class MasterVault {
         throw StateError('unlockWithKey: vault file not found');
       }
       final blob = await file.readAsBytes();
-      // Parse header to get argon2Salt, then derive KEK from masterKey
-      // (same as _loadAndDecrypt but skipping Argon2id)
+      LoggerService.log('MASTER_VAULT',
+          'Vault file: ${blob.length} bytes, version=0x${blob[0].toRadixString(16)}');
       await _loadAndDecryptWithKey(blob, masterKey);
       if (!_migrationDone) {
         await _runMigrationFromLegacyStorage();
@@ -576,7 +578,13 @@ class MasterVault {
     _cache = {};
     _dataKey = _randomBytes(_dataKeyBytes);
     _argon2Salt = _randomBytes(_argon2SaltBytes);
-    _kek = await _deriveKEK(pwd, _argon2Salt!);
+    // Derive masterKey from the vault's own salt and cache it so that
+    // PinUnlockService.setupPin() wraps the same key that unlockWithKey()
+    // will later use.  _deriveKEK() intentionally avoids touching
+    // _cachedMasterKey (to protect the auth-hash path), so we must update
+    // the cache here explicitly after the vault salt is fixed.
+    final vaultMasterKey = await deriveMasterKey(pwd, _argon2Salt!);
+    _kek = await _deriveKEKFromMasterKey(vaultMasterKey);
   }
 
   Future<void> _loadAndDecrypt(Uint8List blob, String masterPassword) async {
