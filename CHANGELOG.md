@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v2.31.2 - 2026-04-12
+#### Bug Fixes
+- convert cog lightweight tags to annotated tags for Release job - (9e95c6f) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.31.1 - 2026-04-12
 #### Bug Fixes
 - add factory reset button on lock screen with typed RESET confirmation - (a5a1510) - Claude Code, *Claude Opus 4.6 (1M context)*
