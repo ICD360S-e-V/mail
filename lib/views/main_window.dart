@@ -194,17 +194,26 @@ class _MainWindowState extends State<MainWindow> {
     setState(() => _isLocked = true);
     LoggerService.log('SECURITY', 'Application locked');
 
-    // Show master password dialog
-    final result = await _showMasterPasswordDialog();
+    // Try PIN unlock first (quick), fallback to master password
+    bool unlocked = false;
+    final hasPin = await PinUnlockService.hasPinConfigured();
 
-    if (result) {
+    if (hasPin) {
+      unlocked = await _showPinUnlockForLock();
+    }
+
+    if (!unlocked) {
+      unlocked = await _showMasterPasswordDialog();
+    }
+
+    if (unlocked) {
       setState(() => _isLocked = false);
       LoggerService.log('SECURITY', 'Application unlocked');
 
       // Re-download certificates and reconnect after unlock
       _reconnectAfterUnlock();
 
-      _startAutoLockTimer(); // Restart timer after unlock
+      _startAutoLockTimer();
     }
   }
 
@@ -877,6 +886,34 @@ class _MainWindowState extends State<MainWindow> {
       context: context,
       builder: (context) => const ChangelogWindow(),
     );
+  }
+
+  /// Show PIN unlock screen for lock/auto-lock. Returns true if unlocked.
+  Future<bool> _showPinUnlockForLock() async {
+    final result = await Navigator.of(context).push<bool>(
+      FluentPageRoute(
+        builder: (_) => PinUnlockScreen(
+          onPinSubmitted: (pin) async {
+            final masterKey = await PinUnlockService.verifyPin(pin);
+            if (masterKey == null) return false;
+            try {
+              await PinUnlockService.unlockWithMasterKey(masterKey);
+              for (var i = 0; i < masterKey.length; i++) masterKey[i] = 0;
+              if (mounted) Navigator.of(context).pop(true);
+              return true;
+            } catch (ex, st) {
+              LoggerService.logError('PIN_UNLOCK', ex, st);
+              for (var i = 0; i < masterKey.length; i++) masterKey[i] = 0;
+              return false;
+            }
+          },
+          onFallbackToPassword: () {
+            if (mounted) Navigator.of(context).pop(false);
+          },
+        ),
+      ),
+    );
+    return result ?? false;
   }
 
   /// Settings dialog — notification privacy + PIN management.
