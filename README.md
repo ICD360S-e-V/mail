@@ -8,7 +8,7 @@
 
   [![Release](https://img.shields.io/github/v/release/ICD360S-e-V/mail?style=for-the-badge&logo=github&color=0078D4)](https://github.com/ICD360S-e-V/mail/releases/latest)
   [![Build](https://img.shields.io/github/actions/workflow/status/ICD360S-e-V/mail/build-all-platforms.yml?style=for-the-badge&label=build&color=107C10)](https://github.com/ICD360S-e-V/mail/actions)
-  [![License](https://img.shields.io/github/license/ICD360S-e-V/mail?style=for-the-badge&color=3F51B5)](LICENSE)
+  [![License](https://img.shields.io/badge/License-AGPL_v3-blue?style=for-the-badge&color=3F51B5)](LICENSE)
   <br/>
   [![Flutter](https://img.shields.io/badge/Flutter-3.41+-02569B?style=for-the-badge&logo=flutter&logoColor=white)](https://flutter.dev)
   [![Dart](https://img.shields.io/badge/Dart-3.6+-0175C2?style=for-the-badge&logo=dart&logoColor=white)](https://dart.dev)
@@ -303,9 +303,9 @@ The service is **free for all active members**. When a membership ends, the admi
 
 ## License
 
-This project is licensed under the **MIT License** — see [LICENSE](LICENSE).
+This project is licensed under the **GNU Affero General Public License v3.0** (AGPL-3.0) — see [LICENSE](LICENSE).
 
-If you use this code, please credit **ICD360S e.V.** as the original author.
+If you modify and deploy this software (including as a network service), you **must** make your modified source code available under the same license and credit **ICD360S e.V.** as the original author.
 
 <div align="center">
   <br/>
