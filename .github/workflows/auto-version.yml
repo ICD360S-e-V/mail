@@ -18,8 +18,8 @@ jobs:
   bump:
     name: Determine & Apply Version Bump
     runs-on: ubuntu-latest
-    # Skip if the push commit message contains [skip ci] (the bump commit itself)
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    # Skip bump commits from release-bot (prevents infinite loop)
+    if: "!startsWith(github.event.head_commit.message, 'chore(version):')"
 
     steps:
       - name: Checkout (full history required for cocogitto)
@@ -56,7 +56,7 @@ jobs:
           fi
 
           # Attempt bump
-          OUTPUT=$(cog bump --auto --skip-ci 2>&1) || true
+          OUTPUT=$(cog bump --auto 2>&1) || true
           echo "$OUTPUT"
 
           # Extract version from cog output or from new tag
