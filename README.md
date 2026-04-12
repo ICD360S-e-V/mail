@@ -95,15 +95,103 @@ ICD360S Mail is a security-first email client built for [ICD360S e.V.](https://i
 
 ---
 
-## Platforms
+## Download
 
-| Platform | Formats | Signing |
+> All downloads are served over HTTPS from `mail.icd360s.de` with ECDSA-signed version verification.
+
+### Desktop
+
+<table>
+<tr>
+<td align="center" width="200">
+<br/>
+<a href="https://mail.icd360s.de/downloads/mail/windows/icd360s-mail-setup.exe"><strong>Windows</strong></a><br/>
+<sub>Inno Setup Installer (.exe)</sub><br/><br/>
+<a href="https://mail.icd360s.de/downloads/mail/windows/icd360s-mail-setup.exe">
+<img src="https://img.shields.io/badge/Download-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Windows"/>
+</a><br/><br/>
+<img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=https://mail.icd360s.de/downloads/mail/windows/icd360s-mail-setup.exe" width="120" alt="QR Windows"/>
+</td>
+<td align="center" width="200">
+<br/>
+<a href="https://mail.icd360s.de/downloads/mail/macos/icd360s-mail.dmg"><strong>macOS</strong></a><br/>
+<sub>DMG (Ad-hoc + Hardened Runtime)</sub><br/><br/>
+<a href="https://mail.icd360s.de/downloads/mail/macos/icd360s-mail.dmg">
+<img src="https://img.shields.io/badge/Download-macOS-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS"/>
+</a><br/><br/>
+<img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=https://mail.icd360s.de/downloads/mail/macos/icd360s-mail.dmg" width="120" alt="QR macOS"/>
+</td>
+<td align="center" width="200">
+<br/>
+<strong>Linux</strong><br/>
+<sub>DEB, RPM, AppImage, tar.gz</sub><br/><br/>
+<a href="https://mail.icd360s.de/downloads/mail/linux/icd360s-mail.deb">
+<img src="https://img.shields.io/badge/DEB-Download-E95420?style=flat-square&logo=ubuntu&logoColor=white" alt="DEB"/>
+</a>
+<a href="https://mail.icd360s.de/downloads/mail/linux/icd360s-mail.rpm">
+<img src="https://img.shields.io/badge/RPM-Download-0B57A4?style=flat-square&logo=redhat&logoColor=white" alt="RPM"/>
+</a><br/>
+<a href="https://mail.icd360s.de/downloads/mail/linux/icd360s-mail.AppImage">
+<img src="https://img.shields.io/badge/AppImage-Download-333333?style=flat-square&logo=linux&logoColor=white" alt="AppImage"/>
+</a>
+<a href="https://mail.icd360s.de/downloads/mail/linux/icd360s-mail-linux.tar.gz">
+<img src="https://img.shields.io/badge/tar.gz-Download-555555?style=flat-square" alt="tar.gz"/>
+</a><br/><br/>
+<img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=https://mail.icd360s.de/downloads/mail/linux/icd360s-mail.AppImage" width="120" alt="QR Linux"/>
+</td>
+</tr>
+</table>
+
+### Mobile
+
+<table>
+<tr>
+<td align="center" width="250">
+<br/>
+<strong>Android</strong><br/>
+<sub>APK — multiple flavors</sub><br/><br/>
+<a href="https://mail.icd360s.de/downloads/mail/android/universal/app-arm64-v8a-universal-release.apk">
+<img src="https://img.shields.io/badge/Universal_(ARM64)-Download-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android Universal"/>
+</a><br/>
+<a href="https://mail.icd360s.de/downloads/mail/android/fdroid/app-arm64-v8a-fdroid-release.apk">
+<img src="https://img.shields.io/badge/F--Droid_(ARM64)-Download-1976D2?style=flat-square&logo=fdroid&logoColor=white" alt="F-Droid"/>
+</a>
+<a href="https://mail.icd360s.de/downloads/mail/android/samsung/app-arm64-v8a-samsung-release.apk">
+<img src="https://img.shields.io/badge/Samsung_(ARM64)-Download-1428A0?style=flat-square&logo=samsung&logoColor=white" alt="Samsung"/>
+</a><br/>
+<a href="https://mail.icd360s.de/downloads/mail/android/huawei/app-arm64-v8a-huawei-release.apk">
+<img src="https://img.shields.io/badge/Huawei_(ARM64)-Download-C71A36?style=flat-square&logo=huawei&logoColor=white" alt="Huawei"/>
+</a>
+<a href="https://mail.icd360s.de/downloads/mail/android/googleplay/app-arm64-v8a-googleplay-release.apk">
+<img src="https://img.shields.io/badge/Google_Play_(ARM64)-Download-414141?style=flat-square&logo=googleplay&logoColor=white" alt="Google Play"/>
+</a><br/><br/>
+<img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=https://mail.icd360s.de/downloads/mail/android/universal/app-arm64-v8a-universal-release.apk" width="120" alt="QR Android"/>
+</td>
+<td align="center" width="250">
+<br/>
+<strong>iOS</strong><br/>
+<sub>IPA (Ad-hoc sideload)</sub><br/><br/>
+<a href="https://mail.icd360s.de/downloads/mail/ios/icd360s-mail.ipa">
+<img src="https://img.shields.io/badge/Download-iOS-000000?style=for-the-badge&logo=apple&logoColor=white" alt="iOS"/>
+</a><br/><br/>
+<img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=https://mail.icd360s.de/downloads/mail/ios/icd360s-mail.ipa" width="120" alt="QR iOS"/>
+</td>
+</tr>
+</table>
+
+<details>
+<summary><strong>Other Android architectures (ARMv7, x86_64)</strong></summary>
+
+| Flavor | ARMv7 | x86_64 |
 |:---|:---|:---|
-| **Windows** | Inno Setup `.exe` | ECDSA signature verification |
-| **macOS** | `.dmg` | Ad-hoc + Hardened Runtime |
-| **Linux** | `.deb` `.rpm` `.AppImage` `.tar.gz` | AppImage GPG-signed |
-| **Android** | APK (universal, Samsung, Google Play, Huawei, F-Droid) + AAB | Keystore signed |
-| **iOS** | `.ipa` | Ad-hoc |
+| Universal | [Download](https://mail.icd360s.de/downloads/mail/android/universal/app-armeabi-v7a-universal-release.apk) | [Download](https://mail.icd360s.de/downloads/mail/android/universal/app-x86_64-universal-release.apk) |
+| F-Droid | [Download](https://mail.icd360s.de/downloads/mail/android/fdroid/app-armeabi-v7a-fdroid-release.apk) | [Download](https://mail.icd360s.de/downloads/mail/android/fdroid/app-x86_64-fdroid-release.apk) |
+| Samsung | [Download](https://mail.icd360s.de/downloads/mail/android/samsung/app-armeabi-v7a-samsung-release.apk) | [Download](https://mail.icd360s.de/downloads/mail/android/samsung/app-x86_64-samsung-release.apk) |
+| Google Play | [Download](https://mail.icd360s.de/downloads/mail/android/googleplay/app-armeabi-v7a-googleplay-release.apk) | [Download](https://mail.icd360s.de/downloads/mail/android/googleplay/app-x86_64-googleplay-release.apk) |
+| Huawei | [Download](https://mail.icd360s.de/downloads/mail/android/huawei/app-armeabi-v7a-huawei-release.apk) | [Download](https://mail.icd360s.de/downloads/mail/android/huawei/app-x86_64-huawei-release.apk) |
+| Google Play AAB | — | [Download AAB](https://mail.icd360s.de/downloads/mail/android/googleplay/icd360s-mail.aab) |
+
+</details>
 
 ---
 
@@ -183,7 +271,17 @@ Every push to `main` with a releasable commit automatically bumps the version, c
 
 ## About ICD360S e.V.
 
-ICD360S e.V. is a German nonprofit (*eingetragener Verein*) based in Berlin. This mail client was built to provide secure, privacy-respecting email communication for its members.
+ICD360S e.V. is a German nonprofit (*eingetragener Verein*) based in Berlin.
+
+This email client is built exclusively for our members as a **free service**. Every member receives a unique `@icd360s.de` email address and a personal encryption key upon joining. Access is managed through an administrator-approved device registration flow — each new device must be individually authorized before it can access the mail system.
+
+**How it works:**
+1. You become a member of ICD360S e.V.
+2. The administrator creates your email account and approves your device.
+3. The app automatically generates your encryption keys on first login.
+4. All your communication with other members is end-to-end encrypted — no one, not even us, can read your emails.
+
+The service is free for all active members. When a membership ends, the administrator revokes the device and the app automatically wipes all credentials.
 
 <div align="center">
   <a href="https://icd360s.de"><strong>icd360s.de</strong></a>
