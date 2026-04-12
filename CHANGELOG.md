@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v2.39.3 - 2026-04-12
+#### Bug Fixes
+- build errors — missing import, icon name, RadioButton API, type cast - (f0506e7) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.39.2 - 2026-04-12
 #### Performance Improvements
 - A3 — PGP decrypt offloaded to persistent background isolate - (ee386b7) - Claude Code, *Claude Opus 4.6 (1M context)*
