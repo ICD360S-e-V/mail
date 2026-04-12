@@ -900,37 +900,28 @@ class _MainWindowState extends State<MainWindow> {
                 Text('Notification Content',
                     style: FluentTheme.of(dialogCtx).typography.bodyStrong),
                 const SizedBox(height: 8),
-                RadioButton(
-                  selected: privacyLevel == NotificationPrivacyLevel.none,
+                ComboBox<NotificationPrivacyLevel>(
+                  value: privacyLevel,
+                  items: const [
+                    ComboBoxItem(
+                      value: NotificationPrivacyLevel.none,
+                      child: Text('Minimal — "New email" only'),
+                    ),
+                    ComboBoxItem(
+                      value: NotificationPrivacyLevel.senderOnly,
+                      child: Text('Sender only — "New email from Marcel"'),
+                    ),
+                    ComboBoxItem(
+                      value: NotificationPrivacyLevel.full,
+                      child: Text('Full — sender + subject'),
+                    ),
+                  ],
                   onChanged: (v) {
-                    if (v) {
-                      setDialogState(() => privacyLevel = NotificationPrivacyLevel.none);
-                      SettingsService.setNotificationPrivacyLevel(NotificationPrivacyLevel.none);
+                    if (v != null) {
+                      setDialogState(() => privacyLevel = v);
+                      SettingsService.setNotificationPrivacyLevel(v);
                     }
                   },
-                  content: const Text('Minimal — "New email" only'),
-                ),
-                const SizedBox(height: 4),
-                RadioButton(
-                  selected: privacyLevel == NotificationPrivacyLevel.senderOnly,
-                  onChanged: (v) {
-                    if (v) {
-                      setDialogState(() => privacyLevel = NotificationPrivacyLevel.senderOnly);
-                      SettingsService.setNotificationPrivacyLevel(NotificationPrivacyLevel.senderOnly);
-                    }
-                  },
-                  content: const Text('Sender only — "New email from Marcel"'),
-                ),
-                const SizedBox(height: 4),
-                RadioButton(
-                  selected: privacyLevel == NotificationPrivacyLevel.full,
-                  onChanged: (v) {
-                    if (v) {
-                      setDialogState(() => privacyLevel = NotificationPrivacyLevel.full);
-                      SettingsService.setNotificationPrivacyLevel(NotificationPrivacyLevel.full);
-                    }
-                  },
-                  content: const Text('Full — sender + subject'),
                 ),
 
                 const SizedBox(height: 20),
