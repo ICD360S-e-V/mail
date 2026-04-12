@@ -69,8 +69,18 @@ jobs:
             echo "No bump needed."
           fi
 
-      - name: Push version bump + tag
+      - name: Convert to annotated tag and push
         if: steps.cog_bump.outputs.version != ''
         run: |
+          VERSION="${{ steps.cog_bump.outputs.version }}"
+          TAG="v${VERSION}"
+
+          # cog creates lightweight tags; build workflow requires annotated.
+          # Delete the lightweight tag, recreate as annotated with the
+          # changelog entry as the tag message.
+          SUBJECT=$(git log -1 --format='%s' "$TAG")
+          git tag -d "$TAG"
+          git tag -a "$TAG" -m "${SUBJECT}"
+
           git push origin main
-          git push origin "v${{ steps.cog_bump.outputs.version }}"
+          git push origin "$TAG"
