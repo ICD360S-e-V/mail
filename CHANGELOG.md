@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v2.38.2 - 2026-04-12
+#### Bug Fixes
+- E2EE third review — 7 remaining issues fixed - (8fc4b0f) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.38.1 - 2026-04-12
 #### Bug Fixes
 - E2EE Phase 2 — fix 15 issues from security review - (f904d57) - Claude Code, *Claude Opus 4.6 (1M context)*
