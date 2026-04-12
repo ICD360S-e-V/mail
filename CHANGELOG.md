@@ -2,6 +2,12 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v2.39.9 - 2026-04-12
+#### Bug Fixes
+- add Copy Logs button on PIN screen and master password dialog - (179211b) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.39.8 - 2026-04-12
 #### Bug Fixes
 - add debug logging to unlockWithKey for PIN vault MAC investigation - (1c93fc8) - Claude Code, *Claude Opus 4.6 (1M context)*
