@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.40.18 - 2026-04-13
+#### Bug Fixes
+- log PGP key fetch errors and add negative cache with 30s expiry - (4309e8f) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.40.16 - 2026-04-13
 #### Bug Fixes
 - drafts saved to wrong account (compose From vs navigation selection) - (c86286f) - Claude Code, *Claude Opus 4.6 (1M context)*
