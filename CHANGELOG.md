@@ -3,7 +3,7 @@
 All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
----
+- - -
 
 ## v2.39.9 — 2026-04-12
 
@@ -11,7 +11,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - add Copy Logs button on PIN screen and master password dialog (`179211b`)
 
----
+- - -
 
 ## v2.39.8 — 2026-04-12
 
@@ -19,7 +19,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - add debug logging to unlockWithKey for PIN vault MAC investigation (`1c93fc8`)
 
----
+- - -
 
 ## v2.39.7 — 2026-04-12
 
@@ -27,7 +27,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - vault MAC error after reset — delete stale vault and recreate (`9d8121f`)
 
----
+- - -
 
 ## v2.39.6 — 2026-04-12
 
@@ -35,7 +35,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - PIN setup — _wipeKeys() no longer destroys masterKey cache (`66f8e7e`)
 
----
+- - -
 
 ## v2.39.5 — 2026-04-12
 
@@ -57,7 +57,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - switch from MIT to AGPL-3.0 (`abcea15`)
 
----
+- - -
 
 ## v2.39.4 — 2026-04-12
 
@@ -65,7 +65,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - replace RadioButton with ComboBox — RadioButton API incompatible with fluent_ui 4.x (`d6b8f83`)
 
----
+- - -
 
 ## v2.39.3 — 2026-04-12
 
@@ -73,7 +73,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - build errors — missing import, icon name, RadioButton API, type cast (`f0506e7`)
 
----
+- - -
 
 ## v2.39.2 — 2026-04-12
 
@@ -81,7 +81,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - A3 — PGP decrypt offloaded to persistent background isolate (`ee386b7`)
 
----
+- - -
 
 ## v2.39.1 — 2026-04-12
 
@@ -89,7 +89,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - A1 review — revoke token hashed client-side, remove subject_hint leak (`831626f`)
 
----
+- - -
 
 ## v2.39.0 — 2026-04-12
 
@@ -97,7 +97,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - A1 — password-protected email for external recipients (`1177593`)
 
----
+- - -
 
 ## v2.38.2 — 2026-04-12
 
@@ -105,7 +105,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - E2EE third review — 7 remaining issues fixed (`8fc4b0f`)
 
----
+- - -
 
 ## v2.38.1 — 2026-04-12
 
@@ -113,7 +113,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - E2EE Phase 2 — fix 15 issues from security review (`f904d57`)
 
----
+- - -
 
 ## v2.38.0 — 2026-04-12
 
@@ -121,7 +121,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - E2EE Phase 2 — auto-encrypt outbound internal mail (`dac017a`)
 
----
+- - -
 
 ## v2.37.1 — 2026-04-12
 
@@ -133,7 +133,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - auto-update pubspec.lock [skip ci] (`a12edbd`)
 
----
+- - -
 
 ## v2.37.0 — 2026-04-12
 
@@ -141,7 +141,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - E2EE Phase 1 — OpenPGP key management + decrypt on fetch (`da3aec9`)
 
----
+- - -
 
 ## v2.36.1 — 2026-04-12
 
@@ -149,7 +149,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - build errors + settings UI for notification privacy and PIN management (`2ef2ba7`)
 
----
+- - -
 
 ## v2.36.0 — 2026-04-12
 
@@ -157,7 +157,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - notification privacy levels — hide email content on lock screen (`9686679`)
 
----
+- - -
 
 ## v2.35.0 — 2026-04-12
 
@@ -165,7 +165,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - remote device revocation — admin revokes, app auto-wipes + locks (`f8b3fa8`)
 
----
+- - -
 
 ## v2.34.0 — 2026-04-12
 
@@ -173,7 +173,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - RAM-only session cache — zero disk artifacts, instant navigation (`6a3304c`)
 
----
+- - -
 
 ## v2.33.0 — 2026-04-12
 
@@ -181,7 +181,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - harden PIN unlock — Argon2id KDF, persistent attempts, lockout delays (`85beb05`)
 
----
+- - -
 
 ## v2.32.0 — 2026-04-12
 
@@ -189,7 +189,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - PIN unlock with randomized keypad (6-digit, anti-shoulder-surf) (`238e4e9`)
 
----
+- - -
 
 ## v2.31.3 — 2026-04-12
 
@@ -197,7 +197,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - update-pubspec-version.sh now also updates currentVersion in update_service.dart (`03d515a`)
 
----
+- - -
 
 ## v2.31.2 — 2026-04-12
 
@@ -205,7 +205,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - convert cog lightweight tags to annotated tags for Release job (`9e95c6f`)
 
----
+- - -
 
 ## v2.31.1 — 2026-04-12
 
@@ -213,7 +213,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - add factory reset button on lock screen with typed RESET confirmation (`a5a1510`)
 
----
+- - -
 
 ## v2.31.0 — 2026-04-12
 
@@ -221,7 +221,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - comprehensive audit — 12 fixes across 16 files (`51dc344`)
 
----
+- - -
 
 ## v2.30.8 — 2026-04-11
 
@@ -229,7 +229,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - v2.30.8 — filter \NoSelect mailboxes at IMAP LIST time (`ee5c3f7`)
 
----
+- - -
 
 ## v2.30.7 — 2026-04-11
 
@@ -237,7 +237,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - v2.30.7 — phantom folder fails entire account with networkError (`97f7b2f`)
 
----
+- - -
 
 ## v2.30.6 — 2026-04-11
 
@@ -245,7 +245,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - v2.30.6 — MasterVault uint16 memory_KiB overflow corrupted header (`0577ba6`)
 
----
+- - -
 
 ## v2.30.5 — 2026-04-11
 
@@ -253,7 +253,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - v2.30.5 — MasterVault unmodifiable SensitiveBytes on first unlock (`ce4f241`)
 
----
+- - -
 
 ## v2.30.4 — 2026-04-11
 
@@ -261,7 +261,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - v2.30.4 — MasterVault.write before unlock on first master pwd set (`f6ea6eb`)
 
----
+- - -
 
 ## v2.30.3 — 2026-04-11
 
@@ -269,7 +269,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - v2.30.3 — Faza 3 cert install hung on 'Approved! Downloading…' (`5b0b08a`)
 
----
+- - -
 
 ## v2.30.2 — 2026-04-11
 
@@ -277,7 +277,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - v2.30.2 — multi-account cert + HTML fragments + security health (`703bab7`)
 
----
+- - -
 
 ## v2.30.1 — 2026-04-11
 
@@ -285,7 +285,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - auto-update pubspec.lock [skip ci] (`633645c`)
 
----
+- - -
 
 ## v2.30.0 — 2026-04-11
 
@@ -293,7 +293,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - MasterVault — Argon2id+HKDF+AES-GCM cert storage — B5 (v2.30.0) (`eec38e0`)
 
----
+- - -
 
 ## v2.29.1 — 2026-04-11
 
@@ -301,7 +301,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - SmtpAuthExternalCommand nullable response.code (v2.29.1) (`80f395a`)
 
----
+- - -
 
 ## v2.29.0 — 2026-04-11
 
@@ -309,7 +309,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - SASL EXTERNAL via Dovecot submission — A3.2.5 (v2.29.0) (`fd4f254`)
 
----
+- - -
 
 ## v2.28.2 — 2026-04-11
 
@@ -317,7 +317,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - SASL EXTERNAL continuation + Faza 3 cert restore (v2.28.2) (`f10e826`)
 
----
+- - -
 
 ## v2.28.1 — 2026-04-11
 
@@ -325,7 +325,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - DMG /Applications symlink + migration timeout (v2.28.1) (`c3267ea`)
 
----
+- - -
 
 ## v2.28.0 — 2026-04-11
 
@@ -333,7 +333,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - mTLS auth + replay protection on heartbeat/can-send — B1 (v2.28.0) (`8e0528f`)
 
----
+- - -
 
 ## v2.27.1 — 2026-04-11
 
@@ -341,7 +341,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - rolling auto-lock inactivity timer — C2 (v2.27.1) (`8dbe0e2`)
 
----
+- - -
 
 ## v2.27.0 — 2026-04-11
 
@@ -349,7 +349,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - passwordless flow with admin push approval — A3 phase 3 (v2.27.0) (`19f966d`)
 
----
+- - -
 
 ## v2.26.1 — 2026-04-11
 
@@ -357,7 +357,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - _authenticate parameter type EmailAccount not MailAccount (v2.26.1) (`45f89ed`)
 
----
+- - -
 
 ## v2.26.0 — 2026-04-11
 
@@ -365,13 +365,13 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - SASL EXTERNAL cert-based auth — A3 phase 2 (v2.26.0) (`ef3338e`)
 
----
+- - -
 
 ## v2.25.0 — 2026-04-11
 
 *Version bump.*
 
----
+- - -
 
 ## v2.24.4 — 2026-04-11
 
@@ -379,13 +379,13 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - macOS — open DMG in Finder, let user drag-and-drop install (`0cb6d34`)
 
----
+- - -
 
 ## v2.24.3 — 2026-04-11
 
 *Version bump.*
 
----
+- - -
 
 ## v2.24.2 — 2026-04-11
 
@@ -393,7 +393,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - cooldown register-device failures (no spam on every fetch) (`a59a5c6`)
 
----
+- - -
 
 ## v2.24.1 — 2026-04-11
 
@@ -401,7 +401,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - detect single-device lockout via repeated IMAP auth failures (`7311608`)
 
----
+- - -
 
 ## v2.24.0 — 2026-04-11
 
@@ -416,7 +416,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 - wire device registration + heartbeat into EmailProvider (`e9d071f`)
 - add DeviceRegistrationService for backend integration (`1f09824`)
 
----
+- - -
 
 ## v2.23.5 — 2026-04-10
 
@@ -424,7 +424,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - use actual macOS bundle ID (com.example.icd360sMailClient) (`00dabc1`)
 
----
+- - -
 
 ## v2.23.4 — 2026-04-10
 
@@ -446,7 +446,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - add PortableSecureStorage with macOS file backend (`9adb245`)
 
----
+- - -
 
 ## v2.23.3 — 2026-04-10
 
@@ -454,7 +454,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - split build steps into smaller named units for visual progress (`8bd61d1`)
 
----
+- - -
 
 ## v2.23.2 — 2026-04-10
 
@@ -462,7 +462,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - add rich GITHUB_STEP_SUMMARY for all platform build jobs (`cd1095b`)
 
----
+- - -
 
 ## v2.23.1 — 2026-04-10
 
@@ -482,7 +482,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - add manual update check button in footer (`384e385`)
 
----
+- - -
 
 ## v2.23.0 — 2026-04-10
 
@@ -538,7 +538,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 - pass display text to link tap handler for phishing detection (`fc23933`)
 - phishing link detection — confirm dialog before opening URLs (1.3) (`1c248a2`)
 
----
+- - -
 
 ## v2.22.2 — 2026-04-10
 
@@ -558,7 +558,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 - bump currentVersion to 2.22.2 (`96aff60`)
 - 2.22.2 (`fde9fc6`)
 
----
+- - -
 
 ## v2.22.1 — 2026-04-10
 
@@ -567,7 +567,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 - bump currentVersion to 2.22.1 (`b968edc`)
 - 2.22.1 (`0f8d659`)
 
----
+- - -
 
 ## v2.22.0 — 2026-04-10
 
@@ -594,7 +594,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 - bump currentVersion to 2.22.0 (`fbc4846`)
 - bump to 2.22.0 (HTML email rendering) (`f04b3c7`)
 
----
+- - -
 
 ## v2.21.5 — 2026-04-10
 
@@ -608,7 +608,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 - bump currentVersion to 2.21.5 (`ca2f8a4`)
 - bump to 2.21.5 (`9655f80`)
 
----
+- - -
 
 ## v2.21.4 — 2026-04-10
 
@@ -620,7 +620,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - file_picker back to ^10.3.8 (11.x has breaking API + lockfile mismatch) (`a0cf33a`)
 
----
+- - -
 
 ## v2.21.3 — 2026-04-10
 
@@ -633,7 +633,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 - bump currentVersion to 2.21.3 (`a9448f4`)
 - bump file_picker 10.3.8 → 11.0.2 (macOS 26 picker fix) (`a2702e2`)
 
----
+- - -
 
 ## v2.21.2 — 2026-04-09
 
@@ -647,7 +647,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 - bump currentVersion to 2.21.2 (`2057b3b`)
 - bump to 2.21.2 (macOS keychain entitlement fix) (`591e68f`)
 
----
+- - -
 
 ## v2.21.1 — 2026-04-09
 
@@ -662,7 +662,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 - bump currentVersion to 2.21.1 (`bec1024`)
 - bump to 2.21.1 (macOS relaunch fix) (`7915e06`)
 
----
+- - -
 
 ## v2.21.0 — 2026-04-08
 
@@ -725,7 +725,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 - add pinned SecurityContext factory with ISRG root PEMs (`8ad951e`)
 - add bidi sanitizer to defeat Trojan Source spoofing (`f668d39`)
 
----
+- - -
 
 ## v2.20.4 — 2026-04-08
 
@@ -739,7 +739,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 - bump pubspec (`2a8cbb6`)
 - fix mtls chain validation — accept intermediate/root LE CAs (`07aed77`)
 
----
+- - -
 
 ## v2.20.3 — 2026-04-08
 
@@ -752,7 +752,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 - bump pubspec (`fd60090`)
 - fix update SHA-256 to read platform-specific hash field (`1b0717e`)
 
----
+- - -
 
 ## v2.20.2 — 2026-04-08
 
@@ -773,7 +773,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 - bump main_window (`66c3669`)
 - bump pubspec (`305a563`)
 
----
+- - -
 
 ## v2.20.1 — 2026-04-08
 
@@ -794,7 +794,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 - bump update_service.dart (`0a78cf7`)
 - bump pubspec.yaml (`f95ba24`)
 
----
+- - -
 
 ## v2.20.0 — 2026-04-08
 
@@ -859,7 +859,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 - add dependabot config — automated PRs for SHA-pinned action updates and pub deps (`ccc5b8e`)
 - pin all GitHub Actions to commit SHAs (fixes H3 — supply chain risk from floating tags) (`efcf070`)
 
----
+- - -
 
 ## v2.19.0 — 2026-04-07
 
@@ -874,7 +874,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 - bump update_service.dart (`8f75c4f`)
 - bump pubspec.yaml (`7d9ef26`)
 
----
+- - -
 
 ## v2.18.0 — 2026-04-07
 
@@ -922,7 +922,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 - non-root deploy user with rrsync, pinned host key, environment protection (fixes C1+C2+H3) — restored from corrupted commit (`60eb247`)
 - non-root deploy user with rrsync restriction, pinned host key, environment protection (fixes C1 + C2 + H3) (`5669d43`)
 
----
+- - -
 
 ## v2.17.11 — 2026-04-06
 
@@ -942,7 +942,7 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 - v2.17.11 - DNS cache, UI rebuild fix, auto-update all platforms (`1eb3dd7`)
 - v2.17.11 - DNS cache, UI rebuild fix, auto-update all platforms (`c012f99`)
 
----
+- - -
 
 ## v2.17.10 — 2026-04-06
 
