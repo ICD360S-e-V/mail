@@ -116,7 +116,9 @@ class DnsChecker {
   /// For the primary endpoint (mail.icd360s.de), authenticates via mTLS
   /// client certificate — no hardcoded API key needed. The per-user cert
   /// is available after login (when threat intelligence lookups happen).
-  /// For external endpoints (Cloudflare), uses standard TLS.
+  /// For external endpoints (Cloudflare, Quad9), uses the OS system trust
+  /// store — these providers use DigiCert/Cloudflare certs, NOT Let's
+  /// Encrypt, so the ISRG-pinned context must NOT be used for them.
   static Future<List<String>> _queryDoH(
     String endpoint,
     String domain,
@@ -127,18 +129,25 @@ class DnsChecker {
       'type': type,
     });
 
-    // Use mTLS client for our own server, plain pinned client for external.
+    // Use mTLS client for our own server; plain system-trust client for
+    // external DoH providers (Cloudflare, Quad9 use non-ISRG certs).
     final isOwnServer = endpoint.contains('mail.icd360s.de');
-    final client = (isOwnServer
-            ? MtlsService.createMtlsHttpClient()
-            : null) ??
-        PinnedSecurityContext.createHttpClient()
-      ..badCertificateCallback = (cert, host, port) {
-        if (host == 'mail.icd360s.de') {
-          return isTrustedLetsEncryptIssuer(cert.issuer);
-        }
-        return false;
-      };
+    HttpClient client;
+    if (isOwnServer) {
+      client = MtlsService.createMtlsHttpClient() ??
+          (PinnedSecurityContext.createHttpClient()
+            ..badCertificateCallback = (cert, host, port) {
+              return isTrustedLetsEncryptIssuer(cert.issuer);
+            });
+    } else {
+      // External DoH (Cloudflare, Quad9): use system trust store.
+      // PinnedSecurityContext (ISRG-only) would reject their DigiCert /
+      // Cloudflare certs, causing "Connection refused" on the ephemeral
+      // source port — the TLS failure surfaces as a SocketException.
+      client = HttpClient()
+        ..connectionTimeout = _timeout
+        ..idleTimeout = const Duration(seconds: 5);
+    }
 
     try {
       final request = await client.getUrl(uri).timeout(_timeout);
@@ -272,6 +281,11 @@ class DnsChecker {
   /// Quad9 (and many other DoH servers) require POST with
   /// `Content-Type: application/dns-message`. GET with `?dns=`
   /// base64url is optional per RFC 8484 and not universally supported.
+  ///
+  /// Uses the OS system trust store — Quad9 uses a DigiCert certificate,
+  /// not a Let's Encrypt cert.  PinnedSecurityContext (ISRG roots only)
+  /// must NOT be used here or TLS validation fails, manifesting as
+  /// SocketException("Connection refused") on the local ephemeral port.
   static Future<List<String>> _queryDoHWireformat(
     String endpoint,
     String domain,
@@ -280,8 +294,11 @@ class DnsChecker {
     final query = _buildDnsQuery(domain, qtype);
     final uri = Uri.parse(endpoint);
 
-    final client = PinnedSecurityContext.createHttpClient()
-      ..badCertificateCallback = (cert, host, port) => false;
+    // Plain HttpClient() uses the OS/Flutter trust store (system CAs),
+    // which correctly validates Quad9's DigiCert certificate.
+    final client = HttpClient()
+      ..connectionTimeout = _timeout
+      ..idleTimeout = const Duration(seconds: 5);
 
     try {
       final request = await client.postUrl(uri).timeout(_timeout);
