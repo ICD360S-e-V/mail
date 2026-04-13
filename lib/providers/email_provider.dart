@@ -906,13 +906,11 @@ class EmailProvider with ChangeNotifier {
     });
   }
 
-  /// Save draft (with optional attachments)
-  /// Returns the UID of the saved draft for deduplication on next save.
-  /// [account] — the sender account from compose window (not necessarily
-  /// the currently selected account in navigation). If null, falls back
-  /// to _currentAccount for backward compatibility.
-  Future<int?> saveDraft(String to, String cc, String bcc, String subject, String body, {EmailAccount? account, List<dynamic> attachments = const [], int? previousDraftUid}) async {
-    final targetAccount = account ?? _currentAccount;
+  /// Save draft to the sender account's Drafts folder.
+  /// [account] — REQUIRED: the From account from compose window.
+  /// Draft belongs to the sender identity, not the navigation selection.
+  Future<int?> saveDraft(String to, String cc, String bcc, String subject, String body, {required EmailAccount? account, List<dynamic> attachments = const [], int? previousDraftUid}) async {
+    final targetAccount = account;
     if (targetAccount == null) return null;
 
     try {
