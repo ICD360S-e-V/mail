@@ -129,7 +129,14 @@ class MasterVault {
   /// Argon2id salt for THIS vault file. Read from disk on unlock or
   /// generated fresh on first creation. Fixed for the file's lifetime
   /// unless changeMasterPassword rotates it.
+  /// Exposed read-only so setMasterPassword can sync PHC salt after
+  /// deleteAndRecreate (which generates a new vault salt).
   Uint8List? _argon2Salt;
+
+  /// The vault's Argon2id salt (read-only). Used by setMasterPassword
+  /// to sync the PHC auth-hash file after deleteAndRecreate.
+  Uint8List? get vaultArgon2Salt => _argon2Salt != null
+      ? Uint8List.fromList(_argon2Salt!) : null;
 
   String? _filePath;
   bool _migrationDone = false;

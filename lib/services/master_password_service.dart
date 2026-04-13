@@ -314,7 +314,24 @@ class MasterPasswordService {
       try {
         await vault.deleteAndRecreate(password);
         LoggerService.log('AUTH',
-            '✓ Vault recreated after MAC error (previous password mismatch)');
+            '✓ Vault recreated after MAC error');
+
+        // CRITICAL: deleteAndRecreate generated a NEW vault salt (salt_C).
+        // The PHC file still has salt_A from our deriveMasterKey above.
+        // We must rewrite the PHC with the vault's salt so that future
+        // verifyMasterPassword → deriveMasterKey uses the SAME salt as
+        // the vault. Without this, PIN wraps masterKey(salt_A) but the
+        // vault is keyed with masterKey(salt_C) → MAC error on PIN unlock.
+        final vaultSalt = vault.vaultArgon2Salt;
+        if (vaultSalt != null) {
+          final newMasterKey = await vault.deriveMasterKey(password, vaultSalt);
+          final newAuthHash = await vault.deriveAuthHash(newMasterKey);
+          final newPhc = _encodeArgon2idPhc(salt: vaultSalt, hash: newAuthHash);
+          final file = File(_passwordHashFilePath!);
+          await file.writeAsString(newPhc);
+          LoggerService.log('AUTH',
+              '✓ PHC rewritten with vault salt (salt sync)');
+        }
       } catch (ex2, st2) {
         LoggerService.logError('AUTH', ex2, st2);
       }
