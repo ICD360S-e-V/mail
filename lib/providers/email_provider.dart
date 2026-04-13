@@ -106,12 +106,10 @@ class EmailProvider with ChangeNotifier {
         LoggerService.log('PROVIDER', 'Downloading per-user certificate for ${account.username}...');
         final certSuccess = await _ensureCertForAccount(account);
 
-        // Initialize PGP key for E2EE (generates on first run, uploads to server)
-        try {
-          await PgpKeyService.getOrCreatePrivateKey(account.username);
-        } catch (ex) {
-          LoggerService.logWarning('PROVIDER', 'PGP key init failed: $ex');
-        }
+        // Initialize PGP key in background — don't block email loading
+        unawaited(PgpKeyService.getOrCreatePrivateKey(account.username).catchError(
+          (ex) => LoggerService.logWarning('PROVIDER', 'PGP key init failed: $ex'),
+        ));
 
         if (!certSuccess) {
           LoggerService.log('PROVIDER',
