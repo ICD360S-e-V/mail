@@ -52,46 +52,43 @@ class ImapPool {
   // ── Per-account cached connections ────────────────────────────────
   final Map<String, _PooledConnection> _connections = {};
 
+  // ── Per-account mutex (IMAP is single-stream) ────────────────────
+  // Prevents two concurrent operations on the same account from
+  // interleaving IMAP commands (e.g. draft-save EXPUNGE running
+  // while save-to-Sent APPEND is in progress → deletes from wrong
+  // mailbox). Operations on DIFFERENT accounts run concurrently.
+  final Map<String, _AsyncMutex> _accountLocks = {};
+
+  _AsyncMutex _lockFor(String key) =>
+      _accountLocks.putIfAbsent(key, () => _AsyncMutex());
+
   /// Execute [operation] with an authenticated IMAP client for [account].
   ///
   /// The connection is reused if already open and healthy; otherwise a
   /// new one is created (throttled by the semaphore). If the operation
   /// fails with a connection error, the cached connection is discarded.
+  ///
+  /// **Thread-safe**: operations on the same account are serialized by
+  /// a per-account mutex. This prevents IMAP command interleaving.
   Future<T> withClient<T>(
     EmailAccount account,
     Future<T> Function(ImapClient client) operation,
   ) async {
     final key = account.username;
+    final mutex = _lockFor(key);
 
-    // Try to reuse an existing connection first (no semaphore needed)
-    final existing = _connections[key];
-    if (existing != null && existing.isAlive) {
-      existing.touch();
-      try {
-        return await operation(existing.client);
-      } catch (ex) {
-        if (_isConnectionError(ex)) {
-          LoggerService.log('IMAP_POOL',
-              'Connection error for $key, discarding cached connection');
-          await _closeAndRemove(key);
-          // Fall through to create a new connection
-        } else {
-          rethrow;
-        }
-      }
-    }
-
-    // Need a new connection — acquire semaphore slot
-    await _acquire();
-    try {
-      // Double-check: another caller may have created one while we waited
-      final existing2 = _connections[key];
-      if (existing2 != null && existing2.isAlive) {
-        existing2.touch();
+    // Serialize all operations for this account
+    return mutex.run(() async {
+      // Try to reuse an existing connection
+      final existing = _connections[key];
+      if (existing != null && existing.isAlive) {
+        existing.touch();
         try {
-          return await operation(existing2.client);
+          return await operation(existing.client);
         } catch (ex) {
           if (_isConnectionError(ex)) {
+            LoggerService.log('IMAP_POOL',
+                'Connection error for $key, discarding cached connection');
             await _closeAndRemove(key);
           } else {
             rethrow;
@@ -99,23 +96,42 @@ class ImapPool {
         }
       }
 
-      // Create fresh connection
-      final client = await _connect(account);
-      _connections[key] = _PooledConnection(client);
-      LoggerService.log('IMAP_POOL',
-          '✓ New connection for $key (${_connections.length} total, $_activeCount active)');
-
+      // Need a new connection — acquire semaphore slot
+      await _acquire();
       try {
-        return await operation(client);
-      } catch (ex) {
-        if (_isConnectionError(ex)) {
-          await _closeAndRemove(key);
+        // Double-check: connection may have been created while waiting
+        final existing2 = _connections[key];
+        if (existing2 != null && existing2.isAlive) {
+          existing2.touch();
+          try {
+            return await operation(existing2.client);
+          } catch (ex) {
+            if (_isConnectionError(ex)) {
+              await _closeAndRemove(key);
+            } else {
+              rethrow;
+            }
+          }
         }
-        rethrow;
+
+        // Create fresh connection
+        final client = await _connect(account);
+        _connections[key] = _PooledConnection(client);
+        LoggerService.log('IMAP_POOL',
+            '✓ New connection for $key (${_connections.length} total, $_activeCount active)');
+
+        try {
+          return await operation(client);
+        } catch (ex) {
+          if (_isConnectionError(ex)) {
+            await _closeAndRemove(key);
+          }
+          rethrow;
+        }
+      } finally {
+        _release();
       }
-    } finally {
-      _release();
-    }
+    });
   }
 
   /// Create and authenticate a new IMAP connection.
@@ -172,6 +188,7 @@ class ImapPool {
     }
     await Future.wait(futures);
     _connections.clear();
+    _accountLocks.clear();
     _activeCount = 0;
     // Complete any pending waiters so they don't hang forever
     while (_waiters.isNotEmpty) {
@@ -233,5 +250,39 @@ class _PooledConnection {
     } catch (_) {
       return false;
     }
+  }
+}
+
+/// Simple async mutex — serializes async operations without external packages.
+///
+/// IMAP is a single-stream protocol: if two operations run on the same
+/// ImapClient concurrently, their commands interleave and corrupt state
+/// (e.g. EXPUNGE runs on the wrong selected mailbox). This mutex ensures
+/// only one operation at a time per account.
+class _AsyncMutex {
+  Future<void>? _last;
+
+  /// Run [fn] after all previous [run] calls complete.
+  Future<T> run<T>(Future<T> Function() fn) {
+    final prev = _last;
+    // Chain: wait for previous operation, then run this one.
+    // Use a Completer so we can set _last before awaiting.
+    final completer = Completer<void>();
+    _last = completer.future;
+
+    return () async {
+      if (prev != null) {
+        try {
+          await prev;
+        } catch (_) {
+          // Previous operation failed — still run ours
+        }
+      }
+      try {
+        return await fn();
+      } finally {
+        completer.complete();
+      }
+    }();
   }
 }
