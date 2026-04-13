@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.40.22 - 2026-04-13
+#### Bug Fixes
+- auto-generate changelog.json from CHANGELOG.md on every deploy - (d486034) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.40.21 - 2026-04-13
 #### Bug Fixes
 - descriptive tag messages with grouped changelog for releases - (1c6e002) - Claude Code, *Claude Opus 4.6 (1M context)*
