@@ -74,13 +74,48 @@ jobs:
         run: |
           VERSION="${{ steps.cog_bump.outputs.version }}"
           TAG="v${VERSION}"
+          PREV_TAG=$(git tag -l 'v*' --sort=-version:refname | grep -v "$TAG" | head -1)
+
+          # Build a descriptive tag message from all commits since last tag.
+          # Groups by type: Bug Fixes, Features, Refactoring, etc.
+          TAG_MSG="${TAG}"$'\n\n'
+
+          # Collect fix: commits
+          FIXES=$(git log "${PREV_TAG}..${TAG}~1" --oneline --grep="^fix" --format="  - %s" 2>/dev/null || true)
+          if [ -n "$FIXES" ]; then
+            TAG_MSG+="Bug Fixes:"$'\n'"${FIXES}"$'\n\n'
+          fi
+
+          # Collect feat: commits
+          FEATS=$(git log "${PREV_TAG}..${TAG}~1" --oneline --grep="^feat" --format="  - %s" 2>/dev/null || true)
+          if [ -n "$FEATS" ]; then
+            TAG_MSG+="New Features:"$'\n'"${FEATS}"$'\n\n'
+          fi
+
+          # Collect refactor: commits
+          REFACTORS=$(git log "${PREV_TAG}..${TAG}~1" --oneline --grep="^refactor" --format="  - %s" 2>/dev/null || true)
+          if [ -n "$REFACTORS" ]; then
+            TAG_MSG+="Refactoring:"$'\n'"${REFACTORS}"$'\n\n'
+          fi
+
+          # Collect perf: commits
+          PERFS=$(git log "${PREV_TAG}..${TAG}~1" --oneline --grep="^perf" --format="  - %s" 2>/dev/null || true)
+          if [ -n "$PERFS" ]; then
+            TAG_MSG+="Performance:"$'\n'"${PERFS}"$'\n\n'
+          fi
+
+          # Collect security: commits
+          SECS=$(git log "${PREV_TAG}..${TAG}~1" --oneline --grep="^security" --format="  - %s" 2>/dev/null || true)
+          if [ -n "$SECS" ]; then
+            TAG_MSG+="Security:"$'\n'"${SECS}"$'\n\n'
+          fi
+
+          echo "Tag message:"
+          echo "$TAG_MSG"
 
           # cog creates lightweight tags; build workflow requires annotated.
-          # Delete the lightweight tag, recreate as annotated with the
-          # changelog entry as the tag message.
-          SUBJECT=$(git log -1 --format='%s' "$TAG")
           git tag -d "$TAG"
-          git tag -a "$TAG" -m "${SUBJECT}"
+          git tag -a "$TAG" -m "$TAG_MSG"
 
           git push origin main
           git push origin "$TAG"
