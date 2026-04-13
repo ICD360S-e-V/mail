@@ -15,7 +15,7 @@ class ChangelogSection {
 /// Service for fetching changelog from server
 class ChangelogService {
   static const String changelogUrl =
-      'https://mail.icd360s.de/updates/changelog.json';
+      'https://mail.icd360s.de/downloads/mail/changelog.json';
 
   /// Strict TLS validation using shared LE issuer helper.
   /// Only accept certs for mail.icd360s.de signed by a known LE CA.

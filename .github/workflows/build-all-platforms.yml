@@ -911,6 +911,20 @@ jobs:
           cat "${DEPLOY_DIR}/version.json.draft" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Generate changelog.json from CHANGELOG.md
+        run: |
+          # Checkout repo to get CHANGELOG.md and conversion script
+          # (artifacts don't include repo files)
+          git clone --depth 1 https://github.com/${{ github.repository }}.git repo-for-changelog || true
+          if [ -f "repo-for-changelog/CHANGELOG.md" ] && [ -f "repo-for-changelog/scripts/changelog-to-json.sh" ]; then
+            bash repo-for-changelog/scripts/changelog-to-json.sh repo-for-changelog/CHANGELOG.md > deploy/downloads/mail/changelog.json
+            echo "✓ changelog.json generated ($(wc -l < deploy/downloads/mail/changelog.json) lines)"
+          else
+            echo '{"versions":[]}' > deploy/downloads/mail/changelog.json
+            echo "⚠ CHANGELOG.md or script not found, empty changelog.json"
+          fi
+          rm -rf repo-for-changelog
+
       - name: Setup SSH (pinned host key, non-root deploy user)
         env:
           DEPLOY_KEY: ${{ secrets.VPS_DEPLOY_KEY }}
