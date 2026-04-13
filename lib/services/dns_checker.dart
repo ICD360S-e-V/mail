@@ -69,15 +69,9 @@ class DnsChecker {
     try {
       return await _queryDoHWireformat(_quad9Endpoint, domain, _qTypeA);
     } catch (ex) {
-      LoggerService.log('DNS',
-          'Quad9 DoH failed for $domain, trying Cloudflare: $ex');
-      try {
-        return await _queryDoH(_fallbackEndpoint, domain, 'A');
-      } catch (ex2) {
-        LoggerService.logWarning('DNS',
-            'All external DoH failed for $domain: $ex2');
-        return [];
-      }
+      LoggerService.logWarning('DNS',
+          'Quad9 DoH failed for $domain: $ex');
+      return [];
     }
   }
 
