@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.40.14 - 2026-04-13
+#### Bug Fixes
+- per-account mutex in IMAP pool prevents command interleaving - (0690236) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.40.13 - 2026-04-13
 #### Bug Fixes
 - per-account PGP keys instead of singleton for all 36 accounts - (a96740d) - Claude Code, *Claude Opus 4.6 (1M context)*
