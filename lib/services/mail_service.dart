@@ -225,10 +225,14 @@ class MailService {
         }
 
         // Fetch last 50 emails
+        // IMPORTANT: Include UID in criteria so message.uid is populated.
+        // Without it, fetchRecentMessages uses FETCH (not UID FETCH),
+        // and message.uid stays null — causing delete/move to fall back
+        // to unreliable Message-ID header search.
         LoggerService.log('IMAP', 'Fetching recent messages (max 50)...');
         final fetchResult = await client.fetchRecentMessages(
           messageCount: 50,
-          criteria: 'BODY.PEEK[]',
+          criteria: '(UID FLAGS BODY.PEEK[])',
         );
         LoggerService.log('IMAP', '✓ Fetched ${fetchResult.messages.length} messages');
 
