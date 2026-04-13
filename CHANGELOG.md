@@ -16,6 +16,12 @@ Generated automatically from [Conventional Commits](https://www.conventionalcomm
 
 - - -
 
+## v2.40.17 - 2026-04-13
+#### Code Refactoring
+- make saveDraft account parameter required per best practice - (8f68f5c) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.40.16 - 2026-04-13
 #### Bug Fixes
 - drafts saved to wrong account (compose From vs navigation selection) - (c86286f) - Claude Code, *Claude Opus 4.6 (1M context)*
