@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.40.13 - 2026-04-13
+#### Bug Fixes
+- per-account PGP keys instead of singleton for all 36 accounts - (a96740d) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.40.12 - 2026-04-13
 #### Bug Fixes
 - undefined 'folders' variable in _loadFoldersForAccount log line - (286ce49) - Claude Code, *Claude Opus 4.6 (1M context)*
