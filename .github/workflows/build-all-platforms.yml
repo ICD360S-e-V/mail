@@ -294,7 +294,7 @@ jobs:
           fi
 
       - name: Upload Linux artifacts
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: linux-build
           path: |
@@ -438,7 +438,7 @@ jobs:
             --flavor ${{ matrix.flavor }} ${{ matrix.build_args }}
 
       - name: Upload Android ${{ matrix.flavor }} ${{ matrix.format }} artifact
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: android-${{ matrix.flavor }}-${{ matrix.format }}
           path: |
@@ -585,14 +585,14 @@ jobs:
           rm -rf "$DMG_STAGING"
 
       - name: Upload iOS artifact
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ios-build
           path: build/icd360s-mail.ipa
           retention-days: 30
 
       - name: Upload macOS artifact
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: macos-build
           path: build/icd360s-mail.dmg
@@ -704,7 +704,7 @@ jobs:
           iscc windows/installer.iss
 
       - name: Upload Windows artifact
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: windows-build
           path: build/installer/*.exe
