@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.40.3 - 2026-04-13
+#### Bug Fixes
+- PIN vault MAC — always sync PHC salt with vault salt after unlock - (c478403) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.40.2 - 2026-04-13
 #### Bug Fixes
 - add missing PgpKeyService import in main_window.dart - (1af1072) - Claude Code, *Claude Opus 4.6 (1M context)*
