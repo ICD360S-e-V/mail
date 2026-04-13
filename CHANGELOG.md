@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.40.1 - 2026-04-13
+#### Bug Fixes
+- CHANGELOG separator — cocogitto expects '- - -' not '---' - (281cede) - Claude Code, *Claude Opus 4.6 (1M context)*
+- PIN vault MAC error — sync PHC salt with vault salt after deleteAndRecreate - (c585602) - Claude Code, *Claude Opus 4.6 (1M context)*
+- lock order (clearCerts before vault.lock) + masterKey debug logging - (370d583) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 
 ## v2.39.9 — 2026-04-12
 
