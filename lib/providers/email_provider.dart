@@ -99,6 +99,13 @@ class EmailProvider with ChangeNotifier {
       _currentAccount = _accounts.first;
       LoggerService.log('PROVIDER', 'Current account set to: ${_currentAccount!.username}');
 
+      // IMPORTANT: Notify UI immediately so accounts appear in the
+      // navigation pane while folders are still loading. Without this,
+      // the sidebar stays empty for 30-60s until all 36 accounts finish
+      // cert download + folder load. Users had to toggle dark mode to
+      // force a rebuild and see the accounts.
+      notifyListeners();
+
       // Load folders for all accounts
       // Download per-user certificate before each account (SECURITY: no hardcoded certs)
       for (final account in _accounts) {
@@ -120,6 +127,9 @@ class EmailProvider with ChangeNotifier {
         LoggerService.log('PROVIDER', 'Loading folders for ${account.username}...');
         await _loadFoldersForAccount(account);
         LoggerService.log('PROVIDER', '✓ Account ${account.username} has ${account.folders.length} folders: ${account.folders.join(", ")}');
+
+        // Update UI progressively as each account loads
+        notifyListeners();
       }
 
       // Restore certificate for current account (last one loaded)
