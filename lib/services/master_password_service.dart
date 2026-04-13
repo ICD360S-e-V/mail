@@ -306,6 +306,21 @@ class MasterPasswordService {
     await AccountService.unlockSession(password);
     try {
       await vault.unlock(password);
+
+      // After vault unlock, sync PHC salt with vault's actual salt.
+      // setMasterPassword generates salt_A for the PHC, but the vault
+      // may use a different salt (from a previous session or from
+      // deleteAndRecreate). The PHC must match the vault salt so that
+      // verifyMasterPassword → deriveMasterKey produces a masterKey
+      // that can unlock the vault (and that PIN wraps correctly).
+      final vaultSalt = vault.vaultArgon2Salt;
+      if (vaultSalt != null) {
+        final syncedMasterKey = await vault.deriveMasterKey(password, vaultSalt);
+        final syncedAuthHash = await vault.deriveAuthHash(syncedMasterKey);
+        final syncedPhc = _encodeArgon2idPhc(salt: vaultSalt, hash: syncedAuthHash);
+        await File(_passwordHashFilePath!).writeAsString(syncedPhc);
+        LoggerService.log('AUTH', '✓ PHC synced with vault salt');
+      }
     } catch (ex, st) {
       LoggerService.logError('AUTH', ex, st);
       // Vault file may exist from a previous password — delete and retry.
