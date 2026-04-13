@@ -341,7 +341,7 @@ class EmailProvider with ChangeNotifier {
       account.connectionError = null;
       LoggerService.log('PROVIDER', '✅ Account ${account.username} - CONNECTION OK (status: connected)');
 
-      LoggerService.log('PROVIDER', '✓ Loaded ${folders.length} folders for ${account.username}');
+      LoggerService.log('PROVIDER', '✓ Loaded ${account.folders.length} folders for ${account.username}');
       LoggerService.log('PROVIDER', 'Final account.folders: ${account.folders}');
       LoggerService.log('PROVIDER', 'Final account.folderCounts: ${account.folderCounts}');
 
