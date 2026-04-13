@@ -33,6 +33,7 @@ import 'log_viewer_window.dart';
 import 'changelog_window.dart';
 import 'security_health_view.dart';
 import 'device_revoked_screen.dart';
+import 'server_info.dart';
 import '../utils/text_safety.dart';
 
 /// Main window with Fluent Design
@@ -702,6 +703,69 @@ class _MainWindowState extends State<MainWindow> {
             // Spacer to push buttons to far right
             const Spacer(),
 
+            // Log Viewer button
+            Tooltip(
+              message: 'Log Viewer',
+              child: Padding(
+                padding: const EdgeInsets.only(right: 4.0),
+                child: IconButton(
+                  icon: const Icon(FluentIcons.code, size: 16),
+                  onPressed: _showLogViewer,
+                ),
+              ),
+            ),
+
+            // Security Health button
+            Tooltip(
+              message: 'Security Health',
+              child: Padding(
+                padding: const EdgeInsets.only(right: 4.0),
+                child: IconButton(
+                  icon: const Icon(FluentIcons.shield, size: 16),
+                  onPressed: _showSecurityHealth,
+                ),
+              ),
+            ),
+
+            // Update check button
+            Tooltip(
+              message: _manualUpdateChecking
+                  ? 'Checking for updates...'
+                  : 'Check for updates',
+              child: Padding(
+                padding: const EdgeInsets.only(right: 4.0),
+                child: IconButton(
+                  icon: _manualUpdateChecking
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: ProgressRing(strokeWidth: 2),
+                        )
+                      : const Icon(FluentIcons.cloud_download, size: 16),
+                  onPressed:
+                      _manualUpdateChecking ? null : _checkForUpdatesManual,
+                ),
+              ),
+            ),
+
+            // Server Info button
+            Tooltip(
+              message: 'Informații Server',
+              child: Padding(
+                padding: const EdgeInsets.only(right: 8.0),
+                child: IconButton(
+                  icon: const Icon(FluentIcons.server, size: 16),
+                  onPressed: () {
+                    _resetAutoLockTimer();
+                    showDialog(
+                      context: context,
+                      builder: (_) => const ServerInfoDialog(),
+                    );
+                  },
+                ),
+              ),
+            ),
+
             // Settings button — notification privacy + PIN management
             Padding(
               padding: const EdgeInsets.only(right: 8.0),
@@ -725,6 +789,15 @@ class _MainWindowState extends State<MainWindow> {
                   _resetAutoLockTimer();
                   await FactoryResetDialog.show(context);
                 },
+              ),
+            ),
+
+            // Add Account Button
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: IconButton(
+                icon: const Icon(FluentIcons.add, size: 16),
+                onPressed: () => _showAddAccountDialog(context, emailProvider),
               ),
             ),
 
@@ -771,25 +844,7 @@ class _MainWindowState extends State<MainWindow> {
           ),
         ),
         items: _buildAccountTree(emailProvider),
-        footerItems: [
-          PaneItem(
-            icon: const Icon(FluentIcons.add),
-            title: Text(l10n.mainWindowAddAccount),
-            body: Stack(
-              children: [
-                _buildEmailList(theme, emailProvider),
-                if (_showNotification)
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: _buildNotificationBar(theme),
-                  ),
-              ],
-            ),
-            onTap: () => _showAddAccountDialog(context, emailProvider),
-          ),
-        ],
+        footerItems: [],
       ),
               ), // Close NavigationView
             ), // Close Expanded
@@ -1205,6 +1260,35 @@ class _MainWindowState extends State<MainWindow> {
                   right: 0,
                   child: _buildNotificationBar(theme),
                 ),
+                Positioned(
+                  bottom: 24,
+                  right: 24,
+                  child: Tooltip(
+                    message: 'Compose',
+                    child: FilledButton(
+                      style: ButtonStyle(
+                        shape: ButtonState.all(const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(28)),
+                        )),
+                        padding: ButtonState.all(
+                          const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                        ),
+                      ),
+                      onPressed: () {
+                        _resetAutoLockTimer();
+                        _showComposeWindow(context);
+                      },
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(FluentIcons.edit_mail, size: 18),
+                          SizedBox(width: 8),
+                          Text('Compose'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
           items: account.folders
@@ -1222,6 +1306,35 @@ class _MainWindowState extends State<MainWindow> {
                           right: 0,
                           child: _buildNotificationBar(theme),
                         ),
+                      Positioned(
+                        bottom: 24,
+                        right: 24,
+                        child: Tooltip(
+                          message: 'Compose',
+                          child: FilledButton(
+                            style: ButtonStyle(
+                              shape: ButtonState.all(const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.all(Radius.circular(28)),
+                              )),
+                              padding: ButtonState.all(
+                                const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                              ),
+                            ),
+                            onPressed: () {
+                              _resetAutoLockTimer();
+                              _showComposeWindow(context);
+                            },
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(FluentIcons.edit_mail, size: 18),
+                                SizedBox(width: 8),
+                                Text('Compose'),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                   onTap: () => emailProvider.selectFolder(account, folder),
@@ -1792,37 +1905,10 @@ class _MainWindowState extends State<MainWindow> {
 
           const SizedBox(height: 4),
 
-          // Row 1: Version & Log
+          // Row 1: Version
           Row(
             children: [
               const Spacer(),
-
-              // Port status indicators
-              _buildPortIndicators(theme, emailProvider),
-              const SizedBox(width: 12),
-
-              // Ping indicator
-              _buildPingIndicator(theme),
-              const SizedBox(width: 6),
-
-              // Manual update check button
-              Tooltip(
-                message: _manualUpdateChecking
-                    ? 'Checking for updates...'
-                    : 'Check for updates',
-                child: IconButton(
-                  icon: _manualUpdateChecking
-                      ? const SizedBox(
-                          width: 12,
-                          height: 12,
-                          child: ProgressRing(strokeWidth: 2),
-                        )
-                      : const Icon(FluentIcons.cloud_download, size: 14),
-                  onPressed:
-                      _manualUpdateChecking ? null : _checkForUpdatesManual,
-                ),
-              ),
-              const SizedBox(width: 12),
 
               // Version button (clickable)
               HoverButton(
@@ -1837,18 +1923,6 @@ class _MainWindowState extends State<MainWindow> {
                     ),
                   );
                 },
-              ),
-              const SizedBox(width: 16),
-              // Log Viewer button
-              IconButton(
-                icon: const Icon(FluentIcons.code, size: 14),
-                onPressed: _showLogViewer,
-              ),
-              // Security Health button (v2.30.2 — checks FileVault,
-              // BitLocker, LUKS, master pwd, vault state)
-              IconButton(
-                icon: const Icon(FluentIcons.shield, size: 14),
-                onPressed: _showSecurityHealth,
               ),
             ],
           ),
