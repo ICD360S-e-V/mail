@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.40.8 - 2026-04-13
+#### Bug Fixes
+- PGP key init runs in background — no longer blocks email loading - (a6f6a5e) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.40.7 - 2026-04-13
 #### Bug Fixes
 - draft delete button always visible (not just on hover) - (3b93a0d) - Claude Code, *Claude Opus 4.6 (1M context)*
