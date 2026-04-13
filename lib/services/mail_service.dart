@@ -433,6 +433,9 @@ class MailService {
       var mimeMessage = messageBuilder.buildMimeMessage();
 
       // ── E2EE: Encrypt for internal @icd360s.de recipients ──────────
+      // Set the sender's PGP key as active (for self-encryption)
+      await PgpKeyService.setActiveAccount(account.username);
+
       final allRecipientEmails = [
         ...recipients, ...ccRecipients, ...bccRecipients,
       ];

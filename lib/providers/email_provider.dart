@@ -604,6 +604,10 @@ class EmailProvider with ChangeNotifier {
     LoggerService.log('UI', 'User selected: ${account.username}/$folder');
     _currentAccount = account;
     _currentFolder = folder;
+    // Set active PGP key for decrypt (per-account keys)
+    unawaited(PgpKeyService.setActiveAccount(account.username).catchError(
+      (ex) => LoggerService.logWarning('PGP', 'setActiveAccount failed: $ex'),
+    ));
     notifyListeners();
 
     await fetchEmails();

@@ -15,17 +15,28 @@ import 'le_issuer_check.dart';
 import 'pinned_security_context.dart';
 
 /// OpenPGP E2EE — key management + encrypt/decrypt (dart_pg 2.x API).
+///
+/// v2.41.0: Per-account PGP keys. Each account gets its own Ed25519/X25519
+/// keypair stored in the vault under `pgp_private_key_v1_{email}`.
+/// Previously was a singleton — only one key for all 36 accounts,
+/// and only the first account's key was ever uploaded.
 class PgpKeyService {
-  static const _vaultKeyPrivate = 'pgp_private_key_v1';
+  static const _vaultKeyPrivatePrefix = 'pgp_private_key_v1';
   static const _vaultKeyPassphrase = 'pgp_passphrase_v1';
   static const _uploadEndpoint =
       'https://mail.icd360s.de/api/upload-pubkey.php';
   static const _pubkeyEndpoint = 'https://mail.icd360s.de/api/pubkeys';
 
-  // dart_pg 2.x returns interface types
-  static dynamic _cachedPrivateKey; // PrivateKeyInterface
-  static dynamic _cachedPublicKey;  // KeyInterface
-  static Future<dynamic>? _keyGenFuture;
+  // Per-account key caches (email → key)
+  static final Map<String, dynamic> _privateKeys = {};
+  static final Map<String, dynamic> _publicKeys = {};
+  static final Map<String, Future<dynamic>> _keyGenFutures = {};
+
+  // The "active" account for decrypt operations (set by the currently
+  // selected account in the UI — decrypt worker uses this key).
+  static String? _activeEmail;
+  static dynamic get _cachedPrivateKey => _activeEmail != null ? _privateKeys[_activeEmail] : null;
+  static dynamic get _cachedPublicKey => _activeEmail != null ? _publicKeys[_activeEmail] : null;
 
   // Background isolate worker for non-blocking decrypt
   static PgpIsolateWorker? _worker;
@@ -36,59 +47,101 @@ class PgpKeyService {
   // TOFU: first-seen fingerprint per email (key substitution protection)
   static final Map<String, List<int>> _tofuFingerprints = {};
 
+  /// Vault key for a specific account's private PGP key.
+  static String _vaultKey(String email) =>
+      '${_vaultKeyPrivatePrefix}_${email.toLowerCase()}';
+
   // ── Key Management ───────────────────────────────────────────────
 
   static Future<dynamic> getOrCreatePrivateKey(String email) {
-    return _keyGenFuture ??= _doGetOrCreate(email).whenComplete(() {
-      _keyGenFuture = null;
+    final key = email.toLowerCase();
+    return _keyGenFutures[key] ??= _doGetOrCreate(email).whenComplete(() {
+      _keyGenFutures.remove(key);
     });
   }
 
   static Future<dynamic> _doGetOrCreate(String email) async {
-    if (_cachedPrivateKey != null) return _cachedPrivateKey;
+    final key = email.toLowerCase();
+
+    // Return cached key if already loaded for this account
+    if (_privateKeys.containsKey(key)) return _privateKeys[key];
 
     final vault = MasterVault.instance;
     final passphrase = await _getOrCreatePassphrase();
 
-    final existingArmor = await vault.read(key: _vaultKeyPrivate);
-    if (existingArmor != null) {
-      try {
-        _cachedPrivateKey =
-            OpenPGP.decryptPrivateKey(existingArmor, passphrase);
-        _cachedPublicKey = _cachedPrivateKey.publicKey;
-        await _startWorker(existingArmor, passphrase);
-        LoggerService.log('PGP', 'Loaded existing PGP key for $email');
-        return _cachedPrivateKey;
-      } catch (ex) {
-        LoggerService.logWarning('PGP', 'Failed to load PGP key: $ex');
+    // Try account-specific vault key first, then legacy singleton key
+    var existingArmor = await vault.read(key: _vaultKey(email));
+    if (existingArmor == null) {
+      // Migration: check legacy singleton key (pre-v2.41.0)
+      existingArmor = await vault.read(key: 'pgp_private_key_v1');
+      if (existingArmor != null) {
+        // Migrate: save under account-specific key
+        await vault.write(key: _vaultKey(email), value: existingArmor);
+        LoggerService.log('PGP', 'Migrated legacy PGP key to per-account for $email');
       }
     }
 
-    LoggerService.log('PGP', 'Generating Ed25519/X25519 keypair...');
-    // dart_pg 2.x: generateKey is synchronous — offload to isolate
-    // compute() requires a top-level or static function (not a lambda)
+    if (existingArmor != null) {
+      try {
+        final privateKey = OpenPGP.decryptPrivateKey(existingArmor, passphrase);
+        _privateKeys[key] = privateKey;
+        _publicKeys[key] = privateKey.publicKey;
+        // Upload to server on every startup (fire-and-forget)
+        // This ensures the key is always available for other accounts to fetch
+        _uploadPublicKey(privateKey.publicKey, email);
+        if (_activeEmail == null) {
+          _activeEmail = key;
+          await _startWorker(existingArmor, passphrase);
+        }
+        LoggerService.log('PGP', 'Loaded existing PGP key for $email');
+        return privateKey;
+      } catch (ex) {
+        LoggerService.logWarning('PGP', 'Failed to load PGP key for $email: $ex');
+      }
+    }
+
+    LoggerService.log('PGP', 'Generating Ed25519/X25519 keypair for $email...');
     final privateKey = await compute(_generateKeyIsolate, [email, passphrase]);
 
     final armoredKey = privateKey.armor();
-    await vault.write(key: _vaultKeyPrivate, value: armoredKey);
-    _cachedPrivateKey = privateKey;
-    _cachedPublicKey = privateKey.publicKey;
-    await _startWorker(armoredKey, passphrase);
+    await vault.write(key: _vaultKey(email), value: armoredKey);
+    _privateKeys[key] = privateKey;
+    _publicKeys[key] = privateKey.publicKey;
+    if (_activeEmail == null) {
+      _activeEmail = key;
+      await _startWorker(armoredKey, passphrase);
+    }
 
     await _uploadPublicKey(privateKey.publicKey, email);
-    LoggerService.log('PGP', '✓ PGP keypair generated and uploaded');
+    LoggerService.log('PGP', '✓ PGP keypair generated and uploaded for $email');
     return privateKey;
   }
 
   static Future<dynamic> getPublicKey(String email) async {
-    if (_cachedPublicKey != null) return _cachedPublicKey;
+    final key = email.toLowerCase();
+    if (_publicKeys.containsKey(key)) return _publicKeys[key];
     final priv = await getOrCreatePrivateKey(email);
     return priv.publicKey;
   }
 
+  /// Set the active account for decrypt operations.
+  /// Call when user selects an account in the UI.
+  static Future<void> setActiveAccount(String email) async {
+    final key = email.toLowerCase();
+    if (_activeEmail == key) return;
+    _activeEmail = key;
+    final priv = _privateKeys[key];
+    if (priv != null) {
+      final passphrase = await _getOrCreatePassphrase();
+      await _startWorker(priv.armor(), passphrase);
+      LoggerService.log('PGP', 'Switched active decrypt key to $email');
+    }
+  }
+
   static void clearCache() {
-    _cachedPrivateKey = null;
-    _cachedPublicKey = null;
+    _privateKeys.clear();
+    _publicKeys.clear();
+    _activeEmail = null;
     _recipientKeyCache.clear();
     _worker?.close();
     _worker = null;
