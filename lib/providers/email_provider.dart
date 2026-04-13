@@ -907,12 +907,16 @@ class EmailProvider with ChangeNotifier {
   }
 
   /// Save draft (with optional attachments)
-  /// Returns the UID of the saved draft for deduplication on next save
-  Future<int?> saveDraft(String to, String cc, String bcc, String subject, String body, {List<dynamic> attachments = const [], int? previousDraftUid}) async {
-    if (_currentAccount == null) return null;
+  /// Returns the UID of the saved draft for deduplication on next save.
+  /// [account] — the sender account from compose window (not necessarily
+  /// the currently selected account in navigation). If null, falls back
+  /// to _currentAccount for backward compatibility.
+  Future<int?> saveDraft(String to, String cc, String bcc, String subject, String body, {EmailAccount? account, List<dynamic> attachments = const [], int? previousDraftUid}) async {
+    final targetAccount = account ?? _currentAccount;
+    if (targetAccount == null) return null;
 
     try {
-      final uid = await _mailService.saveDraftAsync(_currentAccount!, to, cc, bcc, subject, body, attachments: attachments, previousDraftUid: previousDraftUid);
+      final uid = await _mailService.saveDraftAsync(targetAccount, to, cc, bcc, subject, body, attachments: attachments, previousDraftUid: previousDraftUid);
       LoggerService.log('PROVIDER', '✓ Draft saved${uid != null ? ' (UID $uid)' : ''}${attachments.isNotEmpty ? ' with ${attachments.length} attachment(s)' : ''}');
       return uid;
     } catch (ex, stackTrace) {

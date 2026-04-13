@@ -373,6 +373,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
         _bccController.text,
         _subjectController.text,
         _bodyController.text,
+        account: _selectedAccount,
         previousDraftUid: _lastDraftUid,
       );
       _lastDraftUid = uid ?? _lastDraftUid;
@@ -609,6 +610,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
         _bccController.text,
         _subjectController.text,
         _bodyController.text,
+        account: _selectedAccount,
         attachments: _attachments,
         previousDraftUid: _lastDraftUid,
       );
