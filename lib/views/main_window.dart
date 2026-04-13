@@ -1458,8 +1458,8 @@ class _MainWindowState extends State<MainWindow> {
                             },
                           ),
                         ],
-                        // Delete button (visible on hover - mobile)
-                        if (states.isHovered) ...[
+                        // Delete button — always visible on Drafts, hover on other folders
+                        if (states.isHovered || isDraft) ...[
                           const Spacer(),
                           IconButton(
                             icon: Icon(FluentIcons.delete, size: 14, color: Colors.red),
@@ -1570,8 +1570,8 @@ class _MainWindowState extends State<MainWindow> {
                     ),
                   ),
 
-                  // Delete button (visible on hover)
-                  if (states.isHovered) ...[
+                  // Delete button — always visible on Drafts, hover on other folders
+                  if (states.isHovered || isDraft) ...[
                     const SizedBox(width: 8),
                     IconButton(
                       icon: Icon(FluentIcons.delete, size: 16, color: Colors.red),
