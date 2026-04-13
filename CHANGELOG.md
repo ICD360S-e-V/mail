@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.40.10 - 2026-04-13
+#### Performance Improvements
+- skip DoH after first failure — eliminates 2-3s delay per request - (197a77a) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.40.9 - 2026-04-13
 #### Bug Fixes
 - DoH uses only Quad9 (remove Cloudflare fallback for lookupServerA) - (62e1756) - Claude Code, *Claude Opus 4.6 (1M context)*
