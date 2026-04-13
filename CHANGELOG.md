@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.41.0 - 2026-04-13
+#### Features
+- UI redesign — floating compose FAB, header consolidation, server info dialog - (12d644e) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.40.22 - 2026-04-13
 #### Bug Fixes
 - auto-generate changelog.json from CHANGELOG.md on every deploy - (d486034) - Claude Code, *Claude Opus 4.6 (1M context)*
