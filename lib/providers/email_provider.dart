@@ -3,6 +3,7 @@ import 'dart:async';
 import '../models/models.dart';
 import '../services/services.dart';
 import '../services/device_registration_service.dart';
+import '../services/pgp_key_service.dart';
 import '../services/pin_unlock_service.dart';
 import '../services/master_vault.dart';
 import '../utils/pii_redactor.dart';
@@ -104,6 +105,13 @@ class EmailProvider with ChangeNotifier {
         // Download UNIQUE certificate for this user
         LoggerService.log('PROVIDER', 'Downloading per-user certificate for ${account.username}...');
         final certSuccess = await _ensureCertForAccount(account);
+
+        // Initialize PGP key for E2EE (generates on first run, uploads to server)
+        try {
+          await PgpKeyService.getOrCreatePrivateKey(account.username);
+        } catch (ex) {
+          LoggerService.logWarning('PROVIDER', 'PGP key init failed: $ex');
+        }
 
         if (!certSuccess) {
           LoggerService.log('PROVIDER',
