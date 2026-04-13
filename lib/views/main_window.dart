@@ -1267,10 +1267,10 @@ class _MainWindowState extends State<MainWindow> {
                     message: 'Compose',
                     child: FilledButton(
                       style: ButtonStyle(
-                        shape: ButtonState.all(const RoundedRectangleBorder(
+                        shape: WidgetStatePropertyAll(RoundedRectangleBorder(
                           borderRadius: BorderRadius.all(Radius.circular(28)),
                         )),
-                        padding: ButtonState.all(
+                        padding: WidgetStatePropertyAll(
                           const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                         ),
                       ),
@@ -1313,10 +1313,10 @@ class _MainWindowState extends State<MainWindow> {
                           message: 'Compose',
                           child: FilledButton(
                             style: ButtonStyle(
-                              shape: ButtonState.all(const RoundedRectangleBorder(
+                              shape: WidgetStatePropertyAll(RoundedRectangleBorder(
                                 borderRadius: BorderRadius.all(Radius.circular(28)),
                               )),
-                              padding: ButtonState.all(
+                              padding: WidgetStatePropertyAll(
                                 const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                               ),
                             ),
