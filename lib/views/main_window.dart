@@ -175,21 +175,20 @@ class _MainWindowState extends State<MainWindow> {
     // SECURITY (M4): Wipe the in-memory AES key used for fallback credential
     // storage. While locked, the .passwords file becomes unreadable.
     AccountService.lockSession();
-    // Also clear in-memory mTLS certificates so a memory dump while locked
-    // cannot recover them. They are re-downloaded on unlock.
-    CertificateService.clearCertificates();
-    // SECURITY: Wipe all cached emails from RAM — no forensic artifact
-    // survives the lock event. Emails will be re-fetched on unlock.
+    // SECURITY: Wipe all cached emails from RAM.
     try {
       final provider = context.read<EmailProvider>();
       provider.wipeSessionCache();
-    } catch (_) {/* provider may not be mounted */}
-    // SECURITY (B5, v2.30.0+): zero the MasterVault data_key + KEK +
-    // cleartext cache so the master-pwd-protected vault becomes
-    // indecipherable in memory dumps. Vault file on disk remains
-    // encrypted under the user's master password and only the next
-    // verifyMasterPassword() call can re-derive the keys.
+    } catch (_) {}
+    // Clear in-memory mTLS certificates. Must happen BEFORE vault.lock()
+    // because clearCertificates() may access vault for cleanup.
+    try {
+      CertificateService.clearCertificates();
+    } catch (_) {}
+    // SECURITY (B5): zero vault keys LAST — after all vault consumers
+    // have finished their cleanup.
     MasterVault.instance.lock();
+    PgpKeyService.clearCache();
 
     setState(() => _isLocked = true);
     LoggerService.log('SECURITY', 'Application locked');

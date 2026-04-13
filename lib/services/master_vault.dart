@@ -235,9 +235,9 @@ class MasterVault {
   Future<void> unlockWithKey(Uint8List masterKey) async {
     if (!Platform.isMacOS) return;
     if (isUnlocked) return;
+    final mkHash = masterKey.sublist(0, 4).map((b) => b.toRadixString(16).padLeft(2, '0')).join();
     LoggerService.log('MASTER_VAULT',
-        'Unlocking vault with cached key (${masterKey.length} bytes, '
-        'first4=${masterKey.sublist(0, 4).map((b) => b.toRadixString(16)).join()})…');
+        'unlockWithKey: masterKey first4=$mkHash, len=${masterKey.length}');
     try {
       _initCryptoHandles();
       final path = await _path();
@@ -430,6 +430,9 @@ class MasterVault {
     final bytes = Uint8List.fromList(masterKeyBytesView);
     // Cache for PIN setup (zeroed on lock)
     _cachedMasterKey = Uint8List.fromList(bytes);
+    final cacheHash = bytes.sublist(0, 4).map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    LoggerService.log('MASTER_VAULT',
+        'deriveMasterKey: cached first4=$cacheHash (salt first4=${argonSalt.sublist(0, 4).map((b) => b.toRadixString(16).padLeft(2, '0')).join()})');
     return bytes;
   }
 
@@ -584,6 +587,9 @@ class MasterVault {
     // _cachedMasterKey (to protect the auth-hash path), so we must update
     // the cache here explicitly after the vault salt is fixed.
     final vaultMasterKey = await deriveMasterKey(pwd, _argon2Salt!);
+    final mkHash = vaultMasterKey.sublist(0, 4).map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    LoggerService.log('MASTER_VAULT',
+        '_createFreshVault: cached masterKey first4=$mkHash');
     _kek = await _deriveKEKFromMasterKey(vaultMasterKey);
   }
 
