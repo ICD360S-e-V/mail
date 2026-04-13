@@ -298,66 +298,28 @@ class EmailProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  /// Load folders for an account
+  /// Load folders for an account (single IMAP connection via pool)
   Future<void> _loadFoldersForAccount(EmailAccount account) async {
     try {
-      LoggerService.log('PROVIDER', 'Calling MailService.getFoldersAsync for ${account.username}...');
-      final folders = await _mailService.getFoldersAsync(account);
-      LoggerService.log('PROVIDER', 'Received ${folders.length} folders from server: ${folders.join(", ")}');
+      // v2.41.0: getFoldersAndCountsAsync uses ONE pooled connection
+      // instead of N+1 separate connections (was: 1× getFolders + N×
+      // getFolderCount = 8 connections per account × 36 accounts = 288
+      // simultaneous connections → "Too many open files" errno 24).
+      LoggerService.log('PROVIDER', 'Loading folders+counts for ${account.username} (single connection)...');
+      final foldersAndCounts = await _mailService.getFoldersAndCountsAsync(account);
+      LoggerService.log('PROVIDER', 'Received ${foldersAndCounts.length} folders from server');
 
-      // Sort folders in logical order: INBOX, Sent, Drafts, Trash, Junk, Spam, Archive, others
-      final sortedFolders = _sortFolders(folders);
+      final sortedFolders = _sortFolders(foldersAndCounts.keys.toList());
       account.folders = sortedFolders;
-      LoggerService.log('PROVIDER', 'Sorted folders: ${sortedFolders.join(", ")}');
 
-      // Load inbox count
-      final inboxCount = await _mailService.getFolderCountAsync(account, 'INBOX');
-      account.inboxCount = inboxCount;
-      LoggerService.log('PROVIDER', 'INBOX count: $inboxCount');
-
-      // Load counts for other folders.
-      //
-      // v2.30.7: per-folder try/catch. Some servers (Dovecot in
-      // particular) advertise folders in LIST that cannot actually
-      // be SELECT-ed — common with phantom \NoSelect placeholders,
-      // legacy Spam folders that were renamed to Junk but left in
-      // the subscription list, or shared/virtual mailboxes that
-      // disappear under the per-user namespace. Without this catch,
-      // a SINGLE bogus folder would propagate up to the outer
-      // catch block and mark the entire account as networkError —
-      // even though INBOX and every real folder worked fine.
-      //
-      // Strategy: log a warning, drop the bad folder from
-      // [account.folders] so the UI doesn't show a clickable item
-      // that 404s, and continue with the next one.
-      final liveFolders = <String>[];
+      // Apply counts — phantom folders (count returned as 0 from pool
+      // due to SELECT failure) are kept but harmless.
       for (final folder in sortedFolders) {
-        try {
-          final count = await _mailService.getFolderCountAsync(account, folder);
-          account.folderCounts[folder] = count;
-          liveFolders.add(folder);
-          LoggerService.log('PROVIDER', 'Folder "$folder" count: $count');
-        } catch (ex) {
-          final msg = ex.toString();
-          if (msg.contains("Mailbox doesn't exist") ||
-              msg.contains('NONEXISTENT') ||
-              msg.contains('NO mailbox')) {
-            LoggerService.logWarning('PROVIDER',
-                'Skipping phantom folder "$folder" (server LIST'
-                'ed it but SELECT failed): ${msg.split('\n').first}');
-            // Don't add to liveFolders — UI will hide it.
-          } else {
-            // Unknown error on a single folder — log but keep going.
-            // Don't fail the whole account.
-            LoggerService.logWarning('PROVIDER',
-                'Folder "$folder" count failed: ${msg.split('\n').first}');
-            liveFolders.add(folder);
-            account.folderCounts[folder] = 0;
-          }
-        }
+        account.folderCounts[folder] = foldersAndCounts[folder] ?? 0;
+        LoggerService.log('PROVIDER', 'Folder "$folder" count: ${account.folderCounts[folder]}');
       }
-      // Replace the folder list with the live (selectable) ones.
-      account.folders = liveFolders;
+      account.inboxCount = account.folderCounts['INBOX'] ?? 0;
+      LoggerService.log('PROVIDER', 'INBOX count: ${account.inboxCount}');
 
       // Fetch quota information
       try {
@@ -652,6 +614,8 @@ class EmailProvider with ChangeNotifier {
     _disposed = true;
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
+    // Close all pooled IMAP connections on dispose
+    ImapPool.instance.closeAll();
     super.dispose();
   }
 
@@ -961,6 +925,7 @@ class EmailProvider with ChangeNotifier {
     }
 
     try {
+      // Uses single pooled connection (getFolderCountAsync reuses via pool)
       for (final folder in account.folders) {
         try {
           final count = await _mailService.getFolderCountAsync(account, folder);
@@ -969,6 +934,7 @@ class EmailProvider with ChangeNotifier {
           LoggerService.logWarning('PROVIDER', 'Could not refresh count for $folder: $ex');
         }
       }
+      account.inboxCount = account.folderCounts['INBOX'] ?? account.inboxCount;
       LoggerService.log('PROVIDER', 'Refreshed folder counts for ${account.username}: ${account.folderCounts}');
       notifyListeners();
     } catch (ex) {

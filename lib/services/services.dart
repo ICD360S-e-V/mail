@@ -1,6 +1,7 @@
 // Export all service classes
 export 'logger_service.dart';
 export 'mail_service.dart';
+export 'imap_pool.dart';
 export 'notification_service.dart';
 export 'threat_intelligence_service.dart';
 export 'server_health_service.dart';

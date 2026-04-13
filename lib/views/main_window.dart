@@ -18,6 +18,7 @@ import '../services/master_password_service.dart';
 import '../services/master_vault.dart';
 import '../services/security_health_service.dart';
 import '../services/certificate_service.dart';
+import '../services/imap_pool.dart';
 import '../services/pgp_key_service.dart';
 import '../services/pin_unlock_service.dart';
 import 'pin_unlock_screen.dart';
@@ -176,6 +177,10 @@ class _MainWindowState extends State<MainWindow> {
     // SECURITY (M4): Wipe the in-memory AES key used for fallback credential
     // storage. While locked, the .passwords file becomes unreadable.
     AccountService.lockSession();
+    // SECURITY: Close all pooled IMAP connections.
+    try {
+      await ImapPool.instance.closeAll();
+    } catch (_) {}
     // SECURITY: Wipe all cached emails from RAM.
     try {
       final provider = context.read<EmailProvider>();
