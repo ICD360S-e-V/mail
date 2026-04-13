@@ -18,6 +18,7 @@ import '../services/master_password_service.dart';
 import '../services/master_vault.dart';
 import '../services/security_health_service.dart';
 import '../services/certificate_service.dart';
+import '../services/pgp_key_service.dart';
 import '../services/pin_unlock_service.dart';
 import 'pin_unlock_screen.dart';
 import '../services/trash_tracker_service.dart';
