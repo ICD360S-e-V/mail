@@ -43,6 +43,9 @@ class PgpKeyService {
 
   // Recipient key cache (RAM only)
   static final Map<String, dynamic> _recipientKeyCache = {};
+  // Negative cache: tracks failed lookups to avoid hammering the server,
+  // but expires after 30s so keys uploaded during the session are found.
+  static final Map<String, DateTime> _negativeCache = {};
 
   // TOFU: first-seen fingerprint per email (key substitution protection)
   static final Map<String, List<int>> _tofuFingerprints = {};
@@ -143,6 +146,7 @@ class PgpKeyService {
     _publicKeys.clear();
     _activeEmail = null;
     _recipientKeyCache.clear();
+    _negativeCache.clear();
     _worker?.close();
     _worker = null;
     LoggerService.log('PGP', 'PGP key cache + worker cleared');
@@ -220,6 +224,12 @@ class PgpKeyService {
     final cached = _recipientKeyCache[key];
     if (cached != null) return cached;
 
+    // Negative cache: don't re-fetch within 30s of a miss
+    final lastMiss = _negativeCache[key];
+    if (lastMiss != null && DateTime.now().difference(lastMiss).inSeconds < 30) {
+      return null;
+    }
+
     final username = email.split('@').first;
     final url = Uri(
       scheme: 'https',
@@ -244,8 +254,11 @@ class PgpKeyService {
           await request.close().timeout(const Duration(seconds: 8));
 
       if (response.statusCode != 200) {
-        await response.drain<void>();
+        final errBody = await response.transform(utf8.decoder).join();
         client.close();
+        LoggerService.logWarning('PGP',
+            'Key fetch HTTP ${response.statusCode} for $email: $errBody');
+        _negativeCache[key] = DateTime.now();
         return null;
       }
 
@@ -270,6 +283,7 @@ class PgpKeyService {
       return pubKey;
     } catch (ex) {
       LoggerService.logWarning('PGP', 'Key fetch failed for $email: $ex');
+      _negativeCache[key] = DateTime.now();
       return null;
     }
   }
