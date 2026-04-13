@@ -37,6 +37,7 @@ class MailService {
   // DNS cache — avoids repeated lookups that exhaust file descriptors on macOS
   static List<InternetAddress>? _dnsCache;
   static DateTime? _dnsCacheExpiry;
+  static bool _dohFailed = false; // Skip DoH for rest of session if it failed once
 
   /// Resolve server via DNS-over-HTTPS (5 min cache TTL).
   ///
@@ -49,22 +50,20 @@ class MailService {
       return _dnsCache!.first.address;
     }
     try {
-      // Primary: DNS-over-HTTPS via external resolvers (Quad9 / Cloudflare).
-      // Uses lookupServerA (not lookupA) to avoid the circular dependency:
-      // lookupA tries mail.icd360s.de/dns-query first, which requires
-      // resolving mail.icd360s.de — the very thing we're trying to resolve.
-      final results = await DnsChecker.lookupServerA(allowedServer);
-      if (results.isNotEmpty) {
-        _dnsCache = results.map((ip) => InternetAddress(ip)).toList();
-        _dnsCacheExpiry = DateTime.now().add(const Duration(minutes: 5));
-        LoggerService.log('DNS', '✓ Resolved $allowedServer → ${results.first} (DoH)');
-        return results.first;
+      // Skip DoH if it already failed this session — go straight to system resolver
+      if (!_dohFailed) {
+        final results = await DnsChecker.lookupServerA(allowedServer);
+        if (results.isNotEmpty) {
+          _dnsCache = results.map((ip) => InternetAddress(ip)).toList();
+          _dnsCacheExpiry = DateTime.now().add(const Duration(minutes: 5));
+          LoggerService.log('DNS', '✓ Resolved $allowedServer → ${results.first} (DoH)');
+          return results.first;
+        }
+        _dohFailed = true; // Don't try DoH again this session
       }
-      // Fallback: system resolver (cleartext, but better than no connection).
+      // System resolver fallback
       _dnsCache = await InternetAddress.lookup(allowedServer);
       _dnsCacheExpiry = DateTime.now().add(const Duration(minutes: 5));
-      LoggerService.logWarning('DNS',
-          '⚠️ DoH returned empty, fell back to system resolver → ${_dnsCache!.first.address}');
       return _dnsCache!.first.address;
     } catch (e) {
       if (_dnsCache != null) {
