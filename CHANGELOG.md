@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.42.0 - 2026-04-14
+#### Features
+- UI polish - compose FAB icon-only, version in header, quota removed (security) - (928c65f) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.41.1 - 2026-04-13
 #### Bug Fixes
 - replace ButtonState.all with WidgetStatePropertyAll for FAB style - (ddd0bee) - Claude Code, *Claude Opus 4.6 (1M context)*
