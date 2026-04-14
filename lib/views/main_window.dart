@@ -19,6 +19,7 @@ import '../services/master_vault.dart';
 import '../services/security_health_service.dart';
 import '../services/certificate_service.dart';
 import '../services/imap_pool.dart';
+import '../services/mail_status_service.dart';
 import '../services/pgp_key_service.dart';
 import '../services/pin_unlock_service.dart';
 import 'pin_unlock_screen.dart';
@@ -196,6 +197,7 @@ class _MainWindowState extends State<MainWindow> {
     // have finished their cleanup.
     MasterVault.instance.lock();
     PgpKeyService.clearCache();
+    MailStatusService.clearCache();
 
     setState(() => _isLocked = true);
     LoggerService.log('SECURITY', 'Application locked');
@@ -1577,20 +1579,18 @@ class _MainWindowState extends State<MainWindow> {
                             },
                           ),
                         ],
-                        // Delete button — always visible on Drafts, hover on other folders
-                        if (states.isHovered || isDraft) ...[
-                          const Spacer(),
-                          IconButton(
-                            icon: Icon(FluentIcons.delete, size: 14, color: Colors.red),
-                            onPressed: () {
-                              final emailProvider = Provider.of<EmailProvider>(context, listen: false);
-                              emailProvider.deleteEmail(email);
-                              if (_selectedEmail?.messageId == email.messageId) {
-                                setState(() => _selectedEmail = null);
-                              }
-                            },
-                          ),
-                        ],
+                        const Spacer(),
+                        _buildDeliveryStatusIcon(email, theme),
+                        IconButton(
+                          icon: const Icon(FluentIcons.delete, size: 14, color: Colors.red),
+                          onPressed: () {
+                            final emailProvider = Provider.of<EmailProvider>(context, listen: false);
+                            emailProvider.deleteEmail(email);
+                            if (_selectedEmail?.messageId == email.messageId) {
+                              setState(() => _selectedEmail = null);
+                            }
+                          },
+                        ),
                       ],
                     ),
                   ],
@@ -1689,26 +1689,95 @@ class _MainWindowState extends State<MainWindow> {
                     ),
                   ),
 
-                  // Delete button — always visible on Drafts, hover on other folders
-                  if (states.isHovered || isDraft) ...[
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: Icon(FluentIcons.delete, size: 16, color: Colors.red),
-                      onPressed: () {
-                        final emailProvider = Provider.of<EmailProvider>(context, listen: false);
-                        emailProvider.deleteEmail(email);
-                        if (_selectedEmail?.messageId == email.messageId) {
-                          setState(() => _selectedEmail = null);
-                        }
-                      },
-                    ),
-                  ],
+                  // Delivery status icon — shows server-side delivery status
+                  const SizedBox(width: 8),
+                  _buildDeliveryStatusIcon(email, theme),
+
+                  // Delete button — always visible in all folders
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(FluentIcons.delete, size: 16, color: Colors.red),
+                    onPressed: () {
+                      final emailProvider = Provider.of<EmailProvider>(context, listen: false);
+                      emailProvider.deleteEmail(email);
+                      if (_selectedEmail?.messageId == email.messageId) {
+                        setState(() => _selectedEmail = null);
+                      }
+                    },
+                  ),
                 ],
               );
             },
           ),
         );
       },
+    );
+  }
+
+  /// Build delivery status icon for an email.
+  /// Fetches server-side status (Postfix log) for this message-id.
+  Widget _buildDeliveryStatusIcon(Email email, FluentThemeData theme) {
+    final cached = MailStatusService.getCached(email.messageId);
+
+    // Schedule a fetch if not cached yet
+    if (cached == null &&
+        !email.messageId.startsWith('CORRUPT-') &&
+        email.messageId.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        MailStatusService.fetchBatch([email.messageId]).then((_) {
+          if (mounted) setState(() {});
+        });
+      });
+    }
+
+    IconData icon;
+    Color color;
+    String tooltipMsg;
+    switch (cached?.status) {
+      case MailDeliveryStatus.sent:
+        icon = FluentIcons.completed;
+        color = Colors.green;
+        tooltipMsg = 'Delivered';
+        if (cached?.relay != null) tooltipMsg += ' via ${cached!.relay}';
+        if (cached?.timestamp != null) tooltipMsg += ' (${cached!.timestamp})';
+        break;
+      case MailDeliveryStatus.deferred:
+        icon = FluentIcons.clock;
+        color = Colors.orange;
+        tooltipMsg = 'Deferred — retrying';
+        break;
+      case MailDeliveryStatus.bounced:
+        icon = FluentIcons.error_badge;
+        color = Colors.red;
+        tooltipMsg = 'Bounced — permanent failure';
+        break;
+      case MailDeliveryStatus.expired:
+        icon = FluentIcons.blocked2;
+        color = Colors.red;
+        tooltipMsg = 'Expired — gave up retrying';
+        break;
+      case MailDeliveryStatus.pending:
+        icon = FluentIcons.send;
+        color = Colors.blue;
+        tooltipMsg = 'Pending — in queue';
+        break;
+      case MailDeliveryStatus.notFound:
+      case MailDeliveryStatus.forbidden:
+        icon = FluentIcons.help;
+        color = theme.inactiveColor;
+        tooltipMsg = 'No delivery status available';
+        break;
+      case null:
+      case MailDeliveryStatus.unknown:
+        icon = FluentIcons.sync;
+        color = theme.inactiveColor;
+        tooltipMsg = 'Checking delivery status…';
+        break;
+    }
+
+    return Tooltip(
+      message: tooltipMsg,
+      child: Icon(icon, size: 14, color: color),
     );
   }
 
