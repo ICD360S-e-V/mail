@@ -252,9 +252,12 @@ Future<void> _appMain() async {
       center: true,
       skipTaskbar: false,
       titleBarStyle: TitleBarStyle.normal,
+      title: 'Mail Client by ICD360S e.V gemeinnützige Verein',
     );
 
     await windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.setTitle(
+          'Mail Client by ICD360S e.V gemeinnützige Verein');
       await windowManager.show();
       await windowManager.focus();
     });
@@ -287,7 +290,7 @@ class MyApp extends StatelessWidget {
           });
 
           return FluentApp(
-            title: 'ICD360S Mail Client',
+            title: 'Mail Client by ICD360S e.V gemeinnützige Verein',
             debugShowCheckedModeBanner: false,
 
             // Theme

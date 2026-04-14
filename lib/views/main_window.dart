@@ -511,17 +511,17 @@ class _MainWindowState extends State<MainWindow> {
     _updateTaskbarBadge(totalNewEmails);
   }
 
-  /// Update Windows taskbar with unread email count (via window title, desktop only)
+  /// Set desktop window title.
+  ///
+  /// SECURITY: Never expose unread-mail count in the window title.
+  /// The title is visible to anyone looking at the screen (screen
+  /// sharing, over-the-shoulder, taskbar previews), and revealing
+  /// "X unread" leaks mailbox activity to bystanders.
   Future<void> _updateTaskbarBadge(int count) async {
     if (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux) return;
     try {
-      if (count > 0) {
-        await windowManager.setTitle('ICD360S Mail Client ($count unread)');
-        LoggerService.log('TASKBAR', 'Title updated: $count unread emails');
-      } else {
-        await windowManager.setTitle('ICD360S Mail Client');
-        LoggerService.log('TASKBAR', 'Title cleared (no unread emails)');
-      }
+      await windowManager.setTitle(
+          'Mail Client by ICD360S e.V gemeinnützige Verein');
     } catch (ex, stackTrace) {
       LoggerService.logError('TASKBAR', ex, stackTrace);
     }
