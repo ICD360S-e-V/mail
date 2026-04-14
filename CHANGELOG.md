@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.43.0 - 2026-04-14
+#### Features
+- account switcher replaces PaneItemExpander - single active account - (07f1b84) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.42.0 - 2026-04-14
 #### Features
 - UI polish - compose FAB icon-only, version in header, quota removed (security) - (928c65f) - Claude Code, *Claude Opus 4.6 (1M context)*
