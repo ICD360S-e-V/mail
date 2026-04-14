@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.43.2 - 2026-04-14
+#### Bug Fixes
+- move Switch Account button from sidebar to header (next to Settings) - (116bcaf) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.43.1 - 2026-04-14
 #### Bug Fixes
 - remove unread count from window title (privacy leak) - (683a384) - Claude Code, *Claude Opus 4.6 (1M context)*
