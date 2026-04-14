@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.45.2 - 2026-04-14
+#### Bug Fixes
+- remove const from Icons using Colors.red (Fluent UI Colors not const) - (0b05237) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.45.1 - 2026-04-14
 #### Bug Fixes
 - apply research findings — bottom sheet on mobile, GrapheneOS fallback - (e248d86) - Claude Code, *Claude Opus 4.6 (1M context)*
