@@ -771,6 +771,21 @@ class _MainWindowState extends State<MainWindow> {
               ),
             ),
 
+            // Switch Account button — opens account picker dialog
+            Padding(
+              padding: const EdgeInsets.only(right: 4.0),
+              child: Tooltip(
+                message: l10nOf(context).mainWindowSwitchAccount,
+                child: IconButton(
+                  icon: const Icon(FluentIcons.switch_user, size: 16),
+                  onPressed: () {
+                    _resetAutoLockTimer();
+                    _showAccountPicker(emailProvider);
+                  },
+                ),
+              ),
+            ),
+
             // Settings button — notification privacy + PIN management
             Padding(
               padding: const EdgeInsets.only(right: 8.0),
@@ -1146,10 +1161,8 @@ class _MainWindowState extends State<MainWindow> {
     }
   }
 
-  /// Build account tree navigation
   /// Build navigation pane — flat list of folders for the ACTIVE account only.
-  /// Account switcher is rendered as a PaneItemHeader at the top with a
-  /// button that opens an account picker dialog.
+  /// Account switcher lives in the header (next to Settings), not in the sidebar.
   List<NavigationPaneItem> _buildAccountTree(EmailProvider emailProvider) {
     final items = <NavigationPaneItem>[];
     final theme = FluentTheme.of(context);
@@ -1158,13 +1171,6 @@ class _MainWindowState extends State<MainWindow> {
 
     final activeAccount = emailProvider.currentAccount;
     if (activeAccount == null) return items;
-
-    // ── Account Switcher Header ───────────────────────────────────
-    items.add(
-      PaneItemHeader(
-        header: _buildAccountSwitcher(emailProvider, activeAccount),
-      ),
-    );
 
     // ── Folders for the active account (flat) ─────────────────────
     for (final folder in activeAccount.folders) {
@@ -1208,72 +1214,6 @@ class _MainWindowState extends State<MainWindow> {
     }
 
     return items;
-  }
-
-  /// Account switcher button — shows current account, click opens picker.
-  Widget _buildAccountSwitcher(EmailProvider emailProvider, EmailAccount activeAccount) {
-    final theme = FluentTheme.of(context);
-    final l10n = l10nOf(context);
-
-    Color statusColor;
-    IconData statusIcon;
-    switch (activeAccount.connectionStatus) {
-      case AccountConnectionStatus.connected:
-        statusColor = Colors.green;
-        statusIcon = FluentIcons.accept_medium;
-        break;
-      case AccountConnectionStatus.authError:
-        statusColor = Colors.red;
-        statusIcon = FluentIcons.error_badge;
-        break;
-      case AccountConnectionStatus.networkError:
-        statusColor = Colors.orange;
-        statusIcon = FluentIcons.warning;
-        break;
-      case AccountConnectionStatus.unknown:
-        statusColor = Colors.grey;
-        statusIcon = FluentIcons.contact;
-        break;
-    }
-
-    return HoverButton(
-      onPressed: () => _showAccountPicker(emailProvider),
-      builder: (ctx, states) {
-        final hovering = states.isHovered;
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: hovering
-                ? theme.resources.subtleFillColorSecondary
-                : theme.resources.subtleFillColorTransparent,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: theme.resources.controlStrokeColorDefault,
-              width: 1,
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(statusIcon, color: statusColor, size: 16),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  activeAccount.username,
-                  style: theme.typography.body?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Tooltip(
-                message: l10n.mainWindowSwitchAccount,
-                child: const Icon(FluentIcons.chevron_down, size: 12),
-              ),
-            ],
-          ),
-        );
-      },
-    );
   }
 
   /// Show account picker dialog — list of all accounts, click to switch.
