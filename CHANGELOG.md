@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.45.8 - 2026-04-14
+#### Bug Fixes
+- remove edge_detection — incompatible with AGP 8.x (no namespace) - (e91b6a9) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.45.7 - 2026-04-14
 #### Bug Fixes
 - import showModalBottomSheet from material (not in fluent_ui) - (da7249e) - Claude Code, *Claude Opus 4.6 (1M context)*
