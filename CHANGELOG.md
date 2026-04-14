@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.45.0 - 2026-04-14
+#### Features
+- attachment source picker (file vs camera) in compose window - (4ce67e8) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.44.0 - 2026-04-14
 #### Features
 - delivery status icon + always-visible delete button in email list - (d68d523) - Claude Code, *Claude Opus 4.6 (1M context)*
