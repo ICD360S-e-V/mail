@@ -64,8 +64,13 @@ dependencies:
   # PDF Viewer - native PDFium rendering (no WebView dependency)
   pdfrx: ^1.0.100  # Native PDF viewer for Windows/macOS/Linux/Android/iOS
 
-  # Document Scanner (mobile only - uses VisionKit on iOS, ML Kit on Android)
+  # Document Scanner — primary: uses VisionKit on iOS, ML Kit on Android
+  # (ML Kit requires Google Play Services — works on standard Android).
   cunning_document_scanner: ^1.4.0  # Auto-crop, edge detection, perspective correction
+  # Fallback: WeScan (iOS) / SmartPaperScan (Android) — NO Google Play
+  # Services required. Use on GrapheneOS / CalyxOS / any AOSP without GMS.
+  # Manual 4-point corner drag + real-time corner detection.
+  edge_detection: ^3.0.2
 
   # NOTE: pdfrx uses PDFium natively, works on RDP sessions unlike WebView
   # NOTE: Using native webview plugin for integrated browser

@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:cunning_document_scanner/cunning_document_scanner.dart';
+import 'package:edge_detection/edge_detection.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../utils/l10n_helper.dart';
@@ -107,70 +109,62 @@ class _ComposeWindowState extends State<ComposeWindow> {
   String _sendingStatus = '';
 
   /// Show picker to choose attachment source (file vs camera).
-  /// Desktop: Fluent MenuFlyout anchored to the attach button.
-  /// Mobile: ContentDialog with large buttons.
+  /// Follows Gmail/Outlook/WinUI3 conventions per platform:
+  /// - Desktop: Fluent MenuFlyout anchored to the attach button
+  /// - Mobile: Material showModalBottomSheet (industry standard)
   Future<void> _showAttachmentSourcePicker(BuildContext context) async {
     final l10n = l10nOf(context);
     final isMobile = Platform.isAndroid || Platform.isIOS;
 
-    // Camera scanner available only on iOS (VisionKit) and Android (via
-    // cunning_document_scanner — may require Play Services, falls back
-    // gracefully with error toast on GrapheneOS).
+    // Camera scanner supported on iOS (VisionKit, always works) and
+    // Android (ML Kit — may require Play Services; on GrapheneOS the
+    // _scanDocument call fails gracefully with a toast).
     final canScan = Platform.isIOS || Platform.isAndroid;
 
     if (isMobile) {
-      // Mobile: ContentDialog with large tappable options
-      final choice = await showDialog<String>(
+      // Mobile: Material modal bottom sheet (Gmail/Outlook pattern,
+      // M3 guideline for "secondary actions requiring choice")
+      final choice = await showModalBottomSheet<String>(
         context: context,
-        builder: (ctx) => ContentDialog(
-          title: Text(l10n.buttonAddAttachments),
-          content: Column(
+        builder: (ctx) => SafeArea(
+          child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(FluentIcons.document, size: 24),
+                leading: const Icon(FluentIcons.document),
                 title: Text(l10n.attachSourceFile),
                 onPressed: () => Navigator.pop(ctx, 'file'),
               ),
               if (canScan)
                 ListTile(
-                  leading: const Icon(FluentIcons.camera, size: 24),
+                  leading: const Icon(FluentIcons.camera),
                   title: Text(l10n.attachSourceCamera),
                   onPressed: () => Navigator.pop(ctx, 'camera'),
                 ),
+              const SizedBox(height: 8),
             ],
           ),
-          actions: [
-            Button(
-              child: Text(l10n.buttonCancel),
-              onPressed: () => Navigator.pop(ctx),
-            ),
-          ],
         ),
       );
       if (choice == 'file') await _addAttachments();
       if (choice == 'camera') await _scanDocument();
     } else {
-      // Desktop: Fluent MenuFlyout
+      // Desktop: Fluent MenuFlyout (WinUI3/Outlook for Windows pattern).
+      // MenuFlyoutItem closes the flyout automatically when pressed —
+      // no Navigator.pop needed (that caused back-stack corruption).
       _attachFlyout.showFlyout(
         builder: (ctx) => MenuFlyout(
           items: [
             MenuFlyoutItem(
               leading: const Icon(FluentIcons.document),
               text: Text(l10n.attachSourceFile),
-              onPressed: () {
-                Navigator.pop(ctx);
-                _addAttachments();
-              },
+              onPressed: _addAttachments,
             ),
             if (canScan)
               MenuFlyoutItem(
                 leading: const Icon(FluentIcons.camera),
                 text: Text(l10n.attachSourceCamera),
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  _scanDocument();
-                },
+                onPressed: _scanDocument,
               ),
           ],
         ),
@@ -269,9 +263,9 @@ class _ComposeWindowState extends State<ComposeWindow> {
   }
 
   /// Scan document with camera.
-  /// iOS: VisionKit (on-device, no Google dependency).
-  /// Android: ML Kit Document Scanner — falls back with error on devices
-  /// without Play Services (GrapheneOS). User can use "File" option instead.
+  /// Primary: cunning_document_scanner (VisionKit on iOS, ML Kit on Android).
+  /// Fallback: edge_detection (WeScan/SmartPaperScan, no Google Play Services
+  ///           — works on GrapheneOS/CalyxOS/AOSP without GMS).
   Future<void> _scanDocument() async {
     if (!Platform.isIOS && !Platform.isAndroid) {
       final l10n = l10nOf(context);
@@ -280,78 +274,103 @@ class _ComposeWindowState extends State<ComposeWindow> {
       return;
     }
 
-    try {
-      LoggerService.log('COMPOSE', 'Opening document scanner...');
+    List<String>? imagePaths;
 
-      final List<String>? imagePaths = await CunningDocumentScanner.getPictures(
+    // Try primary scanner first
+    try {
+      LoggerService.log('COMPOSE', 'Opening document scanner (cunning)...');
+      imagePaths = await CunningDocumentScanner.getPictures(
         isGalleryImportAllowed: true,
       );
-
-      if (!mounted) return;
-
-      if (imagePaths == null || imagePaths.isEmpty) {
-        LoggerService.log('COMPOSE', 'Document scan cancelled by user');
-        return;
-      }
-
-      // Check max attachments
-      if (_attachments.length + imagePaths.length > maxAttachments) {
-        final l10n = l10nOf(context);
-        NotificationService.showErrorToast(l10n.errorTooManyFiles, l10n.errorTooManyFilesMessage(maxAttachments));
-        return;
-      }
-
-      // Convert scanned images to PlatformFile objects
-      final validFiles = <PlatformFile>[];
-      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-
-      for (var i = 0; i < imagePaths.length; i++) {
-        try {
-          final file = File(imagePaths[i]);
-          final bytes = await file.readAsBytes();
-          final ext = imagePaths[i].toLowerCase().endsWith('.png') ? 'png' : 'jpg';
-          final name = 'Scan_${timestamp}_${i + 1}.$ext';
-
-          validFiles.add(PlatformFile(
-            name: name,
-            size: bytes.length,
-            bytes: bytes,
-            path: imagePaths[i],
-          ));
-          LoggerService.log('COMPOSE', 'Scanned page ${i + 1}: $name (${(bytes.length / 1024).round()} KB)');
-        } catch (ex) {
-          LoggerService.logWarning('COMPOSE', 'Failed to read scanned image ${imagePaths[i]}: $ex');
+    } catch (ex) {
+      // ML Kit often fails on GrapheneOS / AOSP without GMS.
+      // Fall back to edge_detection which uses SmartPaperScan (no GMS).
+      LoggerService.logWarning('COMPOSE',
+          'Primary scanner failed ($ex), trying fallback...');
+      try {
+        final dir = await getApplicationDocumentsDirectory();
+        final fallbackPath =
+            '${dir.path}/scan_${DateTime.now().millisecondsSinceEpoch}.jpg';
+        final success = await EdgeDetection.detectEdge(
+          fallbackPath,
+          canUseGallery: true,
+          androidScanTitle: 'Scan Document',
+          androidCropTitle: 'Adjust Corners',
+          androidCropBlackWhiteTitle: 'B&W',
+          androidCropReset: 'Reset',
+        );
+        if (success) {
+          imagePaths = [fallbackPath];
+          LoggerService.log('COMPOSE', '✓ Fallback scanner succeeded');
         }
-      }
-
-      if (validFiles.isEmpty) {
-        LoggerService.logWarning('COMPOSE', 'No valid scanned images');
-        return;
-      }
-
-      // Calculate total size
-      int totalSize = _attachments.fold(0, (sum, file) => sum + file.size);
-      int newSize = validFiles.fold(0, (sum, file) => sum + file.size);
-      int totalSizeMB = ((totalSize + newSize) / (1024 * 1024)).round();
-
-      if (totalSizeMB > maxTotalSizeMB) {
+      } catch (ex2) {
+        LoggerService.logError('COMPOSE', ex2, StackTrace.current);
         if (!mounted) return;
         final l10n = l10nOf(context);
-        NotificationService.showErrorToast(l10n.errorFilesTooLarge, l10n.errorFilesTooLargeMessage(maxTotalSizeMB, totalSizeMB));
+        NotificationService.showErrorToast(l10n.errorTitle, l10n.errorScanFailed);
         return;
       }
+    }
 
-      setState(() {
-        _attachments.addAll(validFiles);
-      });
+    if (!mounted) return;
 
-      LoggerService.log('COMPOSE', 'Added ${validFiles.length} scanned document(s) (${totalSizeMB}MB total)');
-    } catch (ex, stackTrace) {
-      LoggerService.logError('COMPOSE', ex, stackTrace);
+    if (imagePaths == null || imagePaths.isEmpty) {
+      LoggerService.log('COMPOSE', 'Document scan cancelled by user');
+      return;
+    }
+
+    // Check max attachments
+    if (_attachments.length + imagePaths.length > maxAttachments) {
+      final l10n = l10nOf(context);
+      NotificationService.showErrorToast(l10n.errorTooManyFiles, l10n.errorTooManyFilesMessage(maxAttachments));
+      return;
+    }
+
+    // Convert scanned images to PlatformFile objects
+    final validFiles = <PlatformFile>[];
+    final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+
+    for (var i = 0; i < imagePaths.length; i++) {
+      try {
+        final file = File(imagePaths[i]);
+        final bytes = await file.readAsBytes();
+        final ext = imagePaths[i].toLowerCase().endsWith('.png') ? 'png' : 'jpg';
+        final name = 'Scan_${timestamp}_${i + 1}.$ext';
+
+        validFiles.add(PlatformFile(
+          name: name,
+          size: bytes.length,
+          bytes: bytes,
+          path: imagePaths[i],
+        ));
+        LoggerService.log('COMPOSE', 'Scanned page ${i + 1}: $name (${(bytes.length / 1024).round()} KB)');
+      } catch (ex) {
+        LoggerService.logWarning('COMPOSE', 'Failed to read scanned image ${imagePaths[i]}: $ex');
+      }
+    }
+
+    if (validFiles.isEmpty) {
+      LoggerService.logWarning('COMPOSE', 'No valid scanned images');
+      return;
+    }
+
+    // Calculate total size
+    int totalSize = _attachments.fold(0, (sum, file) => sum + file.size);
+    int newSize = validFiles.fold(0, (sum, file) => sum + file.size);
+    int totalSizeMB = ((totalSize + newSize) / (1024 * 1024)).round();
+
+    if (totalSizeMB > maxTotalSizeMB) {
       if (!mounted) return;
       final l10n = l10nOf(context);
-      NotificationService.showErrorToast(l10n.errorTitle, l10n.errorScanFailed);
+      NotificationService.showErrorToast(l10n.errorFilesTooLarge, l10n.errorFilesTooLargeMessage(maxTotalSizeMB, totalSizeMB));
+      return;
     }
+
+    setState(() {
+      _attachments.addAll(validFiles);
+    });
+
+    LoggerService.log('COMPOSE', 'Added ${validFiles.length} scanned document(s) (${totalSizeMB}MB total)');
   }
 
   /// Remove attachment
