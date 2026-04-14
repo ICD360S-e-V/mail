@@ -4,8 +4,6 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' show showModalBottomSheet;
 import 'package:file_picker/file_picker.dart';
 import 'package:cunning_document_scanner/cunning_document_scanner.dart';
-import 'package:edge_detection/edge_detection.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../utils/l10n_helper.dart';
@@ -264,9 +262,10 @@ class _ComposeWindowState extends State<ComposeWindow> {
   }
 
   /// Scan document with camera.
-  /// Primary: cunning_document_scanner (VisionKit on iOS, ML Kit on Android).
-  /// Fallback: edge_detection (WeScan/SmartPaperScan, no Google Play Services
-  ///           — works on GrapheneOS/CalyxOS/AOSP without GMS).
+  /// iOS: VisionKit (on-device, no Google dependency, works perfectly).
+  /// Android: ML Kit Document Scanner — requires Google Play Services.
+  /// On GrapheneOS/CalyxOS without GMS this will throw — user should
+  /// use "Choose File" option instead (or use Gallery import).
   Future<void> _scanDocument() async {
     if (!Platform.isIOS && !Platform.isAndroid) {
       final l10n = l10nOf(context);
@@ -277,40 +276,17 @@ class _ComposeWindowState extends State<ComposeWindow> {
 
     List<String>? imagePaths;
 
-    // Try primary scanner first
     try {
-      LoggerService.log('COMPOSE', 'Opening document scanner (cunning)...');
+      LoggerService.log('COMPOSE', 'Opening document scanner...');
       imagePaths = await CunningDocumentScanner.getPictures(
         isGalleryImportAllowed: true,
       );
     } catch (ex) {
-      // ML Kit often fails on GrapheneOS / AOSP without GMS.
-      // Fall back to edge_detection which uses SmartPaperScan (no GMS).
-      LoggerService.logWarning('COMPOSE',
-          'Primary scanner failed ($ex), trying fallback...');
-      try {
-        final dir = await getApplicationDocumentsDirectory();
-        final fallbackPath =
-            '${dir.path}/scan_${DateTime.now().millisecondsSinceEpoch}.jpg';
-        final success = await EdgeDetection.detectEdge(
-          fallbackPath,
-          canUseGallery: true,
-          androidScanTitle: 'Scan Document',
-          androidCropTitle: 'Adjust Corners',
-          androidCropBlackWhiteTitle: 'B&W',
-          androidCropReset: 'Reset',
-        );
-        if (success) {
-          imagePaths = [fallbackPath];
-          LoggerService.log('COMPOSE', '✓ Fallback scanner succeeded');
-        }
-      } catch (ex2) {
-        LoggerService.logError('COMPOSE', ex2, StackTrace.current);
-        if (!mounted) return;
-        final l10n = l10nOf(context);
-        NotificationService.showErrorToast(l10n.errorTitle, l10n.errorScanFailed);
-        return;
-      }
+      LoggerService.logError('COMPOSE', ex, StackTrace.current);
+      if (!mounted) return;
+      final l10n = l10nOf(context);
+      NotificationService.showErrorToast(l10n.errorTitle, l10n.errorScanFailed);
+      return;
     }
 
     if (!mounted) return;

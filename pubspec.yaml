@@ -67,10 +67,11 @@ dependencies:
   # Document Scanner — primary: uses VisionKit on iOS, ML Kit on Android
   # (ML Kit requires Google Play Services — works on standard Android).
   cunning_document_scanner: ^1.4.0  # Auto-crop, edge detection, perspective correction
-  # Fallback: WeScan (iOS) / SmartPaperScan (Android) — NO Google Play
-  # Services required. Use on GrapheneOS / CalyxOS / any AOSP without GMS.
-  # Manual 4-point corner drag + real-time corner detection.
-  edge_detection: ^1.1.3
+  # NOTE: edge_detection (WeScan/SmartPaperScan) was considered as a
+  # GMS-free fallback for GrapheneOS, but the package is from 2023 and
+  # doesn't set `namespace` in build.gradle, which breaks AGP 8.x. On
+  # GrapheneOS users will get an error toast when they try to scan —
+  # the "Choose File" option is always available as workaround.
 
   # NOTE: pdfrx uses PDFium natively, works on RDP sessions unlike WebView
   # NOTE: Using native webview plugin for integrated browser
