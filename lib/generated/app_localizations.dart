@@ -764,6 +764,18 @@ abstract class AppLocalizations {
   /// **'Junk'**
   String get mainWindowFolderJunk;
 
+  /// No description provided for @attachSourceFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose File'**
+  String get attachSourceFile;
+
+  /// No description provided for @attachSourceCamera.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan with Camera'**
+  String get attachSourceCamera;
+
   /// No description provided for @mainWindowSwitchAccount.
   ///
   /// In en, this message translates to:

@@ -112,6 +112,8 @@
   "mainWindowFolderDrafts": "Ciorne",
   "mainWindowFolderTrash": "Coș",
   "mainWindowFolderJunk": "Spam",
+  "attachSourceFile": "Alege fișier",
+  "attachSourceCamera": "Scanează cu camera",
   "mainWindowSwitchAccount": "Schimbă cont",
   "mainWindowInboxMessages": "mesaje în Inbox",
   "mainWindowStatusConnected": "Conectat",

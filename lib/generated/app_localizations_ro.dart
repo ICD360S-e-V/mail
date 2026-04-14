@@ -395,6 +395,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get mainWindowFolderJunk => 'Spam';
 
   @override
+  String get attachSourceFile => 'Alege fișier';
+
+  @override
+  String get attachSourceCamera => 'Scanează cu camera';
+
+  @override
   String get mainWindowSwitchAccount => 'Schimbă cont';
 
   @override

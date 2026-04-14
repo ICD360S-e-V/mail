@@ -396,6 +396,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get mainWindowFolderJunk => 'Junk';
 
   @override
+  String get attachSourceFile => 'Choose File';
+
+  @override
+  String get attachSourceCamera => 'Scan with Camera';
+
+  @override
   String get mainWindowSwitchAccount => 'Switch Account';
 
   @override

@@ -44,6 +44,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
 
   // Attachments
   final List<PlatformFile> _attachments = [];
+  final FlyoutController _attachFlyout = FlyoutController();
   static const int maxAttachments = 20;
   static const int maxTotalSizeMB = 25; // 25MB raw limit
 
@@ -104,6 +105,78 @@ class _ComposeWindowState extends State<ComposeWindow> {
 
   bool _isSending = false;
   String _sendingStatus = '';
+
+  /// Show picker to choose attachment source (file vs camera).
+  /// Desktop: Fluent MenuFlyout anchored to the attach button.
+  /// Mobile: ContentDialog with large buttons.
+  Future<void> _showAttachmentSourcePicker(BuildContext context) async {
+    final l10n = l10nOf(context);
+    final isMobile = Platform.isAndroid || Platform.isIOS;
+
+    // Camera scanner available only on iOS (VisionKit) and Android (via
+    // cunning_document_scanner — may require Play Services, falls back
+    // gracefully with error toast on GrapheneOS).
+    final canScan = Platform.isIOS || Platform.isAndroid;
+
+    if (isMobile) {
+      // Mobile: ContentDialog with large tappable options
+      final choice = await showDialog<String>(
+        context: context,
+        builder: (ctx) => ContentDialog(
+          title: Text(l10n.buttonAddAttachments),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(FluentIcons.document, size: 24),
+                title: Text(l10n.attachSourceFile),
+                onPressed: () => Navigator.pop(ctx, 'file'),
+              ),
+              if (canScan)
+                ListTile(
+                  leading: const Icon(FluentIcons.camera, size: 24),
+                  title: Text(l10n.attachSourceCamera),
+                  onPressed: () => Navigator.pop(ctx, 'camera'),
+                ),
+            ],
+          ),
+          actions: [
+            Button(
+              child: Text(l10n.buttonCancel),
+              onPressed: () => Navigator.pop(ctx),
+            ),
+          ],
+        ),
+      );
+      if (choice == 'file') await _addAttachments();
+      if (choice == 'camera') await _scanDocument();
+    } else {
+      // Desktop: Fluent MenuFlyout
+      _attachFlyout.showFlyout(
+        builder: (ctx) => MenuFlyout(
+          items: [
+            MenuFlyoutItem(
+              leading: const Icon(FluentIcons.document),
+              text: Text(l10n.attachSourceFile),
+              onPressed: () {
+                Navigator.pop(ctx);
+                _addAttachments();
+              },
+            ),
+            if (canScan)
+              MenuFlyoutItem(
+                leading: const Icon(FluentIcons.camera),
+                text: Text(l10n.attachSourceCamera),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _scanDocument();
+                },
+              ),
+          ],
+        ),
+      );
+    }
+  }
 
   /// Add attachment files (any file type allowed)
   Future<void> _addAttachments() async {
@@ -195,11 +268,15 @@ class _ComposeWindowState extends State<ComposeWindow> {
     }
   }
 
-  /// Scan document with camera (iOS only — uses VisionKit, no Google Play dependency)
-  /// On Android/GrapheneOS, document scanning is not available (ML Kit requires Play Services)
+  /// Scan document with camera.
+  /// iOS: VisionKit (on-device, no Google dependency).
+  /// Android: ML Kit Document Scanner — falls back with error on devices
+  /// without Play Services (GrapheneOS). User can use "File" option instead.
   Future<void> _scanDocument() async {
-    if (!Platform.isIOS) {
-      NotificationService.showErrorToast('Not available', 'Document scanning requires iOS. Use "Add Attachments" instead.');
+    if (!Platform.isIOS && !Platform.isAndroid) {
+      final l10n = l10nOf(context);
+      NotificationService.showErrorToast(
+          l10n.errorTitle, 'Camera scanning requires iOS or Android.');
       return;
     }
 
@@ -425,6 +502,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
     _bccController.dispose();
     _subjectController.dispose();
     _bodyController.dispose();
+    _attachFlyout.dispose();
     super.dispose();
   }
 
@@ -980,30 +1058,22 @@ class _ComposeWindowState extends State<ComposeWindow> {
               runSpacing: 8,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                FilledButton(
-                  onPressed: _isSending ? null : _addAttachments,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(FluentIcons.attach, size: 16),
-                      const SizedBox(width: 8),
-                      Text(l10n.buttonAddAttachments),
-                    ],
-                  ),
-                ),
-                // Scan Document button (iOS only — VisionKit, no Google Play dependency)
-                if (Platform.isIOS)
-                  FilledButton(
-                    onPressed: _isSending ? null : _scanDocument,
+                FlyoutTarget(
+                  controller: _attachFlyout,
+                  child: FilledButton(
+                    onPressed: _isSending ? null : () => _showAttachmentSourcePicker(context),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(FluentIcons.camera, size: 16),
+                        const Icon(FluentIcons.attach, size: 16),
                         const SizedBox(width: 8),
-                        Text(l10n.buttonScanDocument),
+                        Text(l10n.buttonAddAttachments),
+                        const SizedBox(width: 4),
+                        const Icon(FluentIcons.chevron_down, size: 10),
                       ],
                     ),
                   ),
+                ),
                 if (_attachments.isNotEmpty)
                   Text(
                     l10n.infoAttachmentsCount(_attachments.length, maxAttachments, _totalAttachmentsSizeMB, maxTotalSizeMB),

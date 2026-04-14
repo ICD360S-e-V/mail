@@ -227,6 +227,8 @@
   "mainWindowFolderDrafts": "Drafts",
   "mainWindowFolderTrash": "Trash",
   "mainWindowFolderJunk": "Junk",
+  "attachSourceFile": "Choose File",
+  "attachSourceCamera": "Scan with Camera",
   "mainWindowSwitchAccount": "Switch Account",
   "mainWindowInboxMessages": "messages in Inbox",
   "mainWindowStatusConnected": "Connected",
