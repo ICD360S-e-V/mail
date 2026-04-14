@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart' show showModalBottomSheet;
 import 'package:file_picker/file_picker.dart';
 import 'package:cunning_document_scanner/cunning_document_scanner.dart';
 import 'package:edge_detection/edge_detection.dart';
