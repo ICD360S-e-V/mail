@@ -112,6 +112,8 @@
   "mainWindowFolderDrafts": "Ciorne",
   "mainWindowFolderTrash": "Coș",
   "mainWindowFolderJunk": "Spam",
+  "mainWindowSwitchAccount": "Schimbă cont",
+  "mainWindowInboxMessages": "mesaje în Inbox",
   "mainWindowStatusConnected": "Conectat",
   "mainWindowStatusAuthError": "Autentificare eșuată: {error}",
   "mainWindowStatusNetworkError": "Eroare de conexiune: {error}",

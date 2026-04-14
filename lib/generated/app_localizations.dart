@@ -764,6 +764,18 @@ abstract class AppLocalizations {
   /// **'Junk'**
   String get mainWindowFolderJunk;
 
+  /// No description provided for @mainWindowSwitchAccount.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch Account'**
+  String get mainWindowSwitchAccount;
+
+  /// No description provided for @mainWindowInboxMessages.
+  ///
+  /// In en, this message translates to:
+  /// **'messages in Inbox'**
+  String get mainWindowInboxMessages;
+
   /// No description provided for @mainWindowStatusConnected.
   ///
   /// In en, this message translates to:

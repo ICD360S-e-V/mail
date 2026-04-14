@@ -396,6 +396,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get mainWindowFolderJunk => 'Junk';
 
   @override
+  String get mainWindowSwitchAccount => 'Switch Account';
+
+  @override
+  String get mainWindowInboxMessages => 'messages in Inbox';
+
+  @override
   String get mainWindowStatusConnected => 'Connected';
 
   @override

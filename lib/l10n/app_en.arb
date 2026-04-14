@@ -227,6 +227,8 @@
   "mainWindowFolderDrafts": "Drafts",
   "mainWindowFolderTrash": "Trash",
   "mainWindowFolderJunk": "Junk",
+  "mainWindowSwitchAccount": "Switch Account",
+  "mainWindowInboxMessages": "messages in Inbox",
   "mainWindowStatusConnected": "Connected",
   "mainWindowStatusAuthError": "Authentication failed: {error}",
   "@mainWindowStatusAuthError": {

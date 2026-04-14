@@ -395,6 +395,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get mainWindowFolderJunk => 'Spam';
 
   @override
+  String get mainWindowSwitchAccount => 'Schimbă cont';
+
+  @override
+  String get mainWindowInboxMessages => 'mesaje în Inbox';
+
+  @override
   String get mainWindowStatusConnected => 'Conectat';
 
   @override

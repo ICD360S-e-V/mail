@@ -1147,114 +1147,31 @@ class _MainWindowState extends State<MainWindow> {
   }
 
   /// Build account tree navigation
+  /// Build navigation pane — flat list of folders for the ACTIVE account only.
+  /// Account switcher is rendered as a PaneItemHeader at the top with a
+  /// button that opens an account picker dialog.
   List<NavigationPaneItem> _buildAccountTree(EmailProvider emailProvider) {
     final items = <NavigationPaneItem>[];
     final theme = FluentTheme.of(context);
-    final l10n = l10nOf(context);
 
     LoggerService.log('UI_BUILD', 'Building navigation pane. Accounts: ${emailProvider.accounts.length}');
 
-    for (final account in emailProvider.accounts) {
-      LoggerService.log('UI_BUILD', 'Building tree for ${account.username}: ${account.folders.length} folders (status: ${account.connectionStatus})');
+    final activeAccount = emailProvider.currentAccount;
+    if (activeAccount == null) return items;
 
-      // Determine account color based on connection status
-      Color accountColor;
-      IconData accountIcon;
-      String statusTooltip;
+    // ── Account Switcher Header ───────────────────────────────────
+    items.add(
+      PaneItemHeader(
+        header: _buildAccountSwitcher(emailProvider, activeAccount),
+      ),
+    );
 
-      switch (account.connectionStatus) {
-        case AccountConnectionStatus.connected:
-          accountColor = Colors.green;
-          accountIcon = FluentIcons.accept_medium;
-          statusTooltip = l10n.mainWindowStatusConnected;
-          break;
-        case AccountConnectionStatus.authError:
-          accountColor = Colors.red;
-          accountIcon = FluentIcons.error_badge;
-          statusTooltip = l10n.mainWindowStatusAuthError(account.connectionError ?? "Wrong username or password");
-          break;
-        case AccountConnectionStatus.networkError:
-          accountColor = Colors.orange;
-          accountIcon = FluentIcons.warning;
-          statusTooltip = l10n.mainWindowStatusNetworkError(account.connectionError ?? "Network error");
-          break;
-        case AccountConnectionStatus.unknown:
-          accountColor = Colors.grey;
-          accountIcon = FluentIcons.contact;
-          statusTooltip = l10n.mainWindowStatusChecking;
-          break;
-      }
-
+    // ── Folders for the active account (flat) ─────────────────────
+    for (final folder in activeAccount.folders) {
       items.add(
-        PaneItemExpander(
-          icon: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Tooltip(
-                message: statusTooltip,
-                child: Icon(accountIcon, color: accountColor, size: 16),
-              ),
-              // Quota indicator circle (lângă icon)
-              if (account.quotaPercentage != null)
-                Tooltip(
-                  message: l10n.mainWindowTooltipQuota(
-                    (account.quotaUsedKB! / 1024).toStringAsFixed(1),
-                    (account.quotaLimitKB! / 1024).toStringAsFixed(0),
-                    account.quotaPercentage!.toStringAsFixed(1),
-                  ),
-                  child: Container(
-                    width: 8,
-                    height: 8,
-                    margin: const EdgeInsets.only(left: 4),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: _getQuotaColor(account.quotaPercentage!),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          title: Text(
-            '${account.username} (${account.folderCounts['INBOX'] ?? 0})',
-            style: TextStyle(
-              color: accountColor,
-              fontWeight: account.connectionStatus == AccountConnectionStatus.authError
-                  ? FontWeight.bold
-                  : FontWeight.normal,
-            ),
-          ),
-          trailing: IconButton(
-            icon: const Icon(FluentIcons.cancel, size: 14),
-            onPressed: () async {
-              // Delete account from app only (not from server)
-              final confirmed = await showDialog<bool>(
-                context: context,
-                builder: (ctx) {
-                  final l10nDialog = l10nOf(ctx);
-                  return ContentDialog(
-                    title: Text(l10nDialog.mainWindowDialogDeleteAccountTitle),
-                    content: Text(l10nDialog.mainWindowDialogDeleteAccountMessage(account.username)),
-                    actions: [
-                      Button(
-                        child: Text(l10nDialog.buttonCancel),
-                        onPressed: () => Navigator.of(ctx).pop(false),
-                      ),
-                      FilledButton(
-                        child: Text(l10nDialog.mainWindowButtonDeleteFromApp),
-                        onPressed: () => Navigator.of(ctx).pop(true),
-                      ),
-                    ],
-                  );
-                },
-              );
-
-              if (confirmed == true) {
-                await emailProvider.removeAccount(account);
-                NotificationService.showSuccessToast('Removed', '${account.username} removed (server untouched)');
-                LoggerService.log('ACCOUNT', '✓ ${account.username} removed from app (NOT from server)');
-              }
-            },
-          ),
+        PaneItem(
+          icon: _getFolderIcon(folder),
+          title: Text('$folder (${activeAccount.folderCounts[folder] ?? 0})'),
           body: Stack(
             children: [
               _buildEmailList(theme, emailProvider),
@@ -1265,74 +1182,231 @@ class _MainWindowState extends State<MainWindow> {
                   right: 0,
                   child: _buildNotificationBar(theme),
                 ),
-                Positioned(
-                  bottom: 24,
-                  right: 24,
-                  child: Tooltip(
-                    message: 'Compose',
-                    child: FilledButton(
-                      style: ButtonStyle(
-                        shape: WidgetStatePropertyAll(CircleBorder()),
-                        padding: WidgetStatePropertyAll(
-                          EdgeInsets.all(16),
-                        ),
-                      ),
-                      onPressed: () {
-                        _resetAutoLockTimer();
-                        _showComposeWindow(context);
-                      },
-                      child: const Icon(FluentIcons.edit_mail, size: 24),
+              Positioned(
+                bottom: 24,
+                right: 24,
+                child: Tooltip(
+                  message: 'Compose',
+                  child: FilledButton(
+                    style: const ButtonStyle(
+                      shape: WidgetStatePropertyAll(CircleBorder()),
+                      padding: WidgetStatePropertyAll(EdgeInsets.all(16)),
                     ),
+                    onPressed: () {
+                      _resetAutoLockTimer();
+                      _showComposeWindow(context);
+                    },
+                    child: const Icon(FluentIcons.edit_mail, size: 24),
                   ),
                 ),
+              ),
             ],
           ),
-          items: account.folders
-              .map(
-                (folder) => PaneItem(
-                  icon: _getFolderIcon(folder),
-                  title: Text('$folder (${account.folderCounts[folder] ?? 0})'),
-                  body: Stack(
-                    children: [
-                      _buildEmailList(theme, emailProvider),
-                      if (_showNotification)
-                        Positioned(
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          child: _buildNotificationBar(theme),
-                        ),
-                      Positioned(
-                        bottom: 24,
-                        right: 24,
-                        child: Tooltip(
-                          message: 'Compose',
-                          child: FilledButton(
-                            style: ButtonStyle(
-                              shape: WidgetStatePropertyAll(CircleBorder()),
-                              padding: WidgetStatePropertyAll(
-                                EdgeInsets.all(16),
-                              ),
-                            ),
-                            onPressed: () {
-                              _resetAutoLockTimer();
-                              _showComposeWindow(context);
-                            },
-                            child: const Icon(FluentIcons.edit_mail, size: 24),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  onTap: () => emailProvider.selectFolder(account, folder),
-                ),
-              )
-              .toList(),
+          onTap: () => emailProvider.selectFolder(activeAccount, folder),
         ),
       );
     }
 
     return items;
+  }
+
+  /// Account switcher button — shows current account, click opens picker.
+  Widget _buildAccountSwitcher(EmailProvider emailProvider, EmailAccount activeAccount) {
+    final theme = FluentTheme.of(context);
+    final l10n = l10nOf(context);
+
+    Color statusColor;
+    IconData statusIcon;
+    switch (activeAccount.connectionStatus) {
+      case AccountConnectionStatus.connected:
+        statusColor = Colors.green;
+        statusIcon = FluentIcons.accept_medium;
+        break;
+      case AccountConnectionStatus.authError:
+        statusColor = Colors.red;
+        statusIcon = FluentIcons.error_badge;
+        break;
+      case AccountConnectionStatus.networkError:
+        statusColor = Colors.orange;
+        statusIcon = FluentIcons.warning;
+        break;
+      case AccountConnectionStatus.unknown:
+        statusColor = Colors.grey;
+        statusIcon = FluentIcons.contact;
+        break;
+    }
+
+    return HoverButton(
+      onPressed: () => _showAccountPicker(emailProvider),
+      builder: (ctx, states) {
+        final hovering = states.isHovered;
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: hovering
+                ? theme.resources.subtleFillColorSecondary
+                : theme.resources.subtleFillColorTransparent,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: theme.resources.controlStrokeColorDefault,
+              width: 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(statusIcon, color: statusColor, size: 16),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  activeAccount.username,
+                  style: theme.typography.body?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Tooltip(
+                message: l10n.mainWindowSwitchAccount,
+                child: const Icon(FluentIcons.chevron_down, size: 12),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Show account picker dialog — list of all accounts, click to switch.
+  Future<void> _showAccountPicker(EmailProvider emailProvider) async {
+    _resetAutoLockTimer();
+    final theme = FluentTheme.of(context);
+    final l10n = l10nOf(context);
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return ContentDialog(
+          constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+          title: Text(l10n.mainWindowSwitchAccount),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: emailProvider.accounts.length,
+              itemBuilder: (_, i) {
+                final acc = emailProvider.accounts[i];
+                final isActive = acc.username == emailProvider.currentAccount?.username;
+                Color statusColor;
+                IconData statusIcon;
+                switch (acc.connectionStatus) {
+                  case AccountConnectionStatus.connected:
+                    statusColor = Colors.green;
+                    statusIcon = FluentIcons.accept_medium;
+                    break;
+                  case AccountConnectionStatus.authError:
+                    statusColor = Colors.red;
+                    statusIcon = FluentIcons.error_badge;
+                    break;
+                  case AccountConnectionStatus.networkError:
+                    statusColor = Colors.orange;
+                    statusIcon = FluentIcons.warning;
+                    break;
+                  case AccountConnectionStatus.unknown:
+                    statusColor = Colors.grey;
+                    statusIcon = FluentIcons.contact;
+                    break;
+                }
+                return HoverButton(
+                  onPressed: () {
+                    Navigator.of(ctx).pop();
+                    emailProvider.selectFolder(acc, 'INBOX');
+                  },
+                  builder: (_, states) {
+                    final hovering = states.isHovered;
+                    return Container(
+                      margin: const EdgeInsets.symmetric(vertical: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: isActive
+                            ? theme.accentColor.withValues(alpha: 0.15)
+                            : hovering
+                                ? theme.resources.subtleFillColorSecondary
+                                : theme.resources.subtleFillColorTransparent,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: isActive
+                              ? theme.accentColor
+                              : theme.resources.controlStrokeColorDefault,
+                          width: isActive ? 2 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(statusIcon, color: statusColor, size: 18),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  acc.username,
+                                  style: theme.typography.body?.copyWith(
+                                    fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                                  ),
+                                ),
+                                Text(
+                                  '${acc.folderCounts['INBOX'] ?? 0} ${l10n.mainWindowInboxMessages}',
+                                  style: theme.typography.caption?.copyWith(
+                                    color: theme.inactiveColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(FluentIcons.cancel, size: 14),
+                            onPressed: () async {
+                              final l10nDialog = l10nOf(ctx);
+                              final confirmed = await showDialog<bool>(
+                                context: ctx,
+                                builder: (c) => ContentDialog(
+                                  title: Text(l10nDialog.mainWindowDialogDeleteAccountTitle),
+                                  content: Text(l10nDialog.mainWindowDialogDeleteAccountMessage(acc.username)),
+                                  actions: [
+                                    Button(
+                                      child: Text(l10nDialog.buttonCancel),
+                                      onPressed: () => Navigator.of(c).pop(false),
+                                    ),
+                                    FilledButton(
+                                      child: Text(l10nDialog.mainWindowButtonDeleteFromApp),
+                                      onPressed: () => Navigator.of(c).pop(true),
+                                    ),
+                                  ],
+                                ),
+                              );
+                              if (confirmed == true) {
+                                await emailProvider.removeAccount(acc);
+                                if (ctx.mounted) Navigator.of(ctx).pop();
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          actions: [
+            FilledButton(
+              child: Text(l10n.changelogButtonClose),
+              onPressed: () => Navigator.of(ctx).pop(),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   /// Get icon for folder type
