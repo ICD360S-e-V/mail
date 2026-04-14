@@ -684,24 +684,29 @@ class _MainWindowState extends State<MainWindow> {
           children: [
             const SizedBox(width: 16),
             Text(l10n.mainWindowTitle, style: theme.typography.subtitle),
-            // Spacer to center compose button
-            const Spacer(),
-
-            // Compose Email Button (center)
-            FilledButton(
-              onPressed: () => _showComposeWindow(context),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(FluentIcons.edit_mail, size: 16),
-                  const SizedBox(width: 8),
-                  Text(l10n.mainWindowComposeButton),
-                ],
-              ),
-            ),
-
             // Spacer to push buttons to far right
             const Spacer(),
+
+            // Version label — clickable, opens changelog
+            HoverButton(
+              onPressed: _showChangelog,
+              builder: (context, states) {
+                final theme = FluentTheme.of(context);
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: Text(
+                    'v${UpdateService.currentVersion}',
+                    style: theme.typography.caption?.copyWith(
+                      color: states.isHovered
+                          ? theme.accentColor.light
+                          : theme.accentColor,
+                      decoration: states.isHovered ? TextDecoration.underline : null,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                );
+              },
+            ),
 
             // Log Viewer button
             Tooltip(
@@ -1267,25 +1272,16 @@ class _MainWindowState extends State<MainWindow> {
                     message: 'Compose',
                     child: FilledButton(
                       style: ButtonStyle(
-                        shape: WidgetStatePropertyAll(RoundedRectangleBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(28)),
-                        )),
+                        shape: WidgetStatePropertyAll(CircleBorder()),
                         padding: WidgetStatePropertyAll(
-                          const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                          EdgeInsets.all(16),
                         ),
                       ),
                       onPressed: () {
                         _resetAutoLockTimer();
                         _showComposeWindow(context);
                       },
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(FluentIcons.edit_mail, size: 18),
-                          SizedBox(width: 8),
-                          Text('Compose'),
-                        ],
-                      ),
+                      child: const Icon(FluentIcons.edit_mail, size: 24),
                     ),
                   ),
                 ),
@@ -1313,25 +1309,16 @@ class _MainWindowState extends State<MainWindow> {
                           message: 'Compose',
                           child: FilledButton(
                             style: ButtonStyle(
-                              shape: WidgetStatePropertyAll(RoundedRectangleBorder(
-                                borderRadius: BorderRadius.all(Radius.circular(28)),
-                              )),
+                              shape: WidgetStatePropertyAll(CircleBorder()),
                               padding: WidgetStatePropertyAll(
-                                const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                                EdgeInsets.all(16),
                               ),
                             ),
                             onPressed: () {
                               _resetAutoLockTimer();
                               _showComposeWindow(context);
                             },
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(FluentIcons.edit_mail, size: 18),
-                                SizedBox(width: 8),
-                                Text('Compose'),
-                              ],
-                            ),
+                            child: const Icon(FluentIcons.edit_mail, size: 24),
                           ),
                         ),
                       ),
@@ -1903,31 +1890,7 @@ class _MainWindowState extends State<MainWindow> {
             ),
           ),
 
-          const SizedBox(height: 4),
-
-          // Row 1: Version
-          Row(
-            children: [
-              const Spacer(),
-
-              // Version button (clickable)
-              HoverButton(
-                onPressed: _showChangelog,
-                builder: (context, states) {
-                  return Text(
-                    l10n.mainWindowVersion(UpdateService.currentVersion),
-                    style: theme.typography.caption?.copyWith(
-                      color: states.isHovered ? theme.accentColor.light : theme.accentColor,
-                      fontWeight: FontWeight.bold,
-                      decoration: states.isHovered ? TextDecoration.underline : null,
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-
-          // Row 2: Legal links (centered) (was Row 1)
+          // Row 1: Legal links (centered)
           const SizedBox(height: 4),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,

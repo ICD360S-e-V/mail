@@ -7,7 +7,7 @@ import '../services/server_health_service.dart';
 import '../services/connection_monitor.dart';
 
 /// Server diagnostics dialog — shows connection status, health checks,
-/// ping latency, SPF/DKIM state, and per-account quota transparently.
+/// ping latency, and SPF/DKIM/blacklist state.
 class ServerInfoDialog extends StatefulWidget {
   const ServerInfoDialog({super.key});
 
@@ -149,8 +149,6 @@ class _ServerInfoDialogState extends State<ServerInfoDialog> {
             _buildConnectionSection(theme, provider.connectionStatus),
             const SizedBox(height: 16),
             _buildHealthSection(theme, provider.serverHealth),
-            const SizedBox(height: 16),
-            _buildQuotaSection(theme, provider),
           ],
         ),
       ),
@@ -331,100 +329,6 @@ class _ServerInfoDialogState extends State<ServerInfoDialog> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  // ── Section: Per-account quota ────────────────────────────────────
-
-  Widget _buildQuotaSection(FluentThemeData theme, EmailProvider provider) {
-    final accounts = provider.accounts;
-    final accountsWithQuota =
-        accounts.where((a) => a.quotaLimitKB != null).toList();
-
-    return _buildCard(
-      theme,
-      title: 'Mailbox Quota',
-      icon: FluentIcons.database,
-      children: accountsWithQuota.isEmpty
-          ? [
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  children: [
-                    Icon(FluentIcons.info, size: 14, color: theme.inactiveColor),
-                    const SizedBox(width: 8),
-                    Text(
-                      accounts.isEmpty
-                          ? 'No accounts configured'
-                          : 'Quota data not yet loaded',
-                      style: theme.typography.body?.copyWith(
-                        color: theme.inactiveColor,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ]
-          : [
-              for (final account in accountsWithQuota)
-                _buildQuotaRow(theme, account.username,
-                    account.quotaUsedKB, account.quotaLimitKB,
-                    account.quotaPercentage),
-            ],
-    );
-  }
-
-  Widget _buildQuotaRow(FluentThemeData theme, String username,
-      int? usedKB, int? limitKB, double? percentage) {
-    final usedMB = usedKB != null ? (usedKB / 1024).toStringAsFixed(1) : '?';
-    final limitMB = limitKB != null ? (limitKB / 1024).toStringAsFixed(0) : '?';
-    final pct = percentage ?? 0.0;
-
-    final barColor = pct >= 90
-        ? Colors.red
-        : pct >= 75
-            ? Colors.warningPrimaryColor
-            : Colors.green;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(FluentIcons.contact, size: 14, color: theme.inactiveColor),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  username,
-                  style: theme.typography.body,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Text(
-                '$usedMB MB / $limitMB MB',
-                style: theme.typography.caption?.copyWith(
-                  color: theme.inactiveColor,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '${pct.toStringAsFixed(1)}%',
-                style: theme.typography.bodyStrong?.copyWith(
-                  color: barColor,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          ProgressBar(
-            value: pct.clamp(0.0, 100.0),
-            backgroundColor: theme.resources.controlStrokeColorDefault,
-            activeColor: barColor,
-          ),
-        ],
       ),
     );
   }
