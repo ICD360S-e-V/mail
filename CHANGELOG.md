@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.45.12 - 2026-04-15
+#### Bug Fixes
+- RangeError on Android when DNS lookup returns empty list - (e0440e7) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.45.11 - 2026-04-15
 #### Bug Fixes
 - sync currentVersion with pubspec — was stuck at 2.45.8 causing update loop - (9eb03ec) - Claude Code, *Claude Opus 4.6 (1M context)*
