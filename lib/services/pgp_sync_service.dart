@@ -67,6 +67,18 @@ class PgpSyncService {
   // ── Public API ───────────────────────────────────────────────────────
 
   /// Download the encrypted blob from the server, decrypt it, and return
+  /// Returns true if a blob exists on the server for [email].
+  /// Used by migration to skip accounts already synced.
+  static Future<bool> hasServerBlob(String email) async {
+    try {
+      final payload = await _fetchBlob(email);
+      return payload != null;
+    } catch (_) {
+      // Network error → treat as unknown, don't block migration
+      return false;
+    }
+  }
+
   /// the armored PGP private key.
   ///
   /// Returns `null` if no blob exists yet for [email].
