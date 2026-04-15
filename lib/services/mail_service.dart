@@ -47,7 +47,12 @@ class MailService {
   /// UDP/53). This prevents local DNS poisoning attacks on untrusted
   /// networks from redirecting IMAP/SMTP connections to a rogue server.
   static Future<String> resolveServer() async {
-    if (_dnsCache != null && _dnsCacheExpiry != null && DateTime.now().isBefore(_dnsCacheExpiry!)) {
+    // Return cached IP if fresh AND non-empty (defensive — prevents
+    // RangeError on .first if cache was somehow set to empty list)
+    if (_dnsCache != null &&
+        _dnsCache!.isNotEmpty &&
+        _dnsCacheExpiry != null &&
+        DateTime.now().isBefore(_dnsCacheExpiry!)) {
       return _dnsCache!.first.address;
     }
     try {
@@ -62,14 +67,22 @@ class MailService {
         }
         _dohFailed = true; // Don't try DoH again this session
       }
-      // System resolver fallback
-      _dnsCache = await InternetAddress.lookup(allowedServer);
+      // System resolver fallback.
+      // Android CAN return an empty list for lookup() if the resolver is
+      // unavailable (airplane mode / no DNS / sandboxed VPN without
+      // DNS leak). Guard against RangeError on .first.
+      final lookup = await InternetAddress.lookup(allowedServer);
+      if (lookup.isEmpty) {
+        throw const SocketException('DNS resolver returned empty list');
+      }
+      _dnsCache = lookup;
       _dnsCacheExpiry = DateTime.now().add(const Duration(minutes: 5));
       return _dnsCache!.first.address;
     } catch (e) {
-      if (_dnsCache != null) {
+      if (_dnsCache != null && _dnsCache!.isNotEmpty) {
         _dnsCacheExpiry = DateTime.now().add(const Duration(minutes: 2));
-        LoggerService.log('DNS', '⚠️ Lookup failed, reusing cached IP ${_dnsCache!.first.address}');
+        LoggerService.log('DNS',
+            '⚠️ Lookup failed, reusing cached IP ${_dnsCache!.first.address}');
         return _dnsCache!.first.address;
       }
       rethrow;
