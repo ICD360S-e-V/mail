@@ -4,6 +4,7 @@ import '../models/models.dart';
 import '../services/services.dart';
 import '../services/device_registration_service.dart';
 import '../services/pgp_key_service.dart';
+import '../services/settings_service.dart';
 import '../services/pin_unlock_service.dart';
 import '../services/master_vault.dart';
 import '../utils/pii_redactor.dart';
@@ -154,6 +155,25 @@ class EmailProvider with ChangeNotifier {
         }
       }
     }
+
+    // One-time migration: upload existing local PGP keys to the sync server
+    // so other devices can fetch them (runs once per install, gated by flag).
+    unawaited(() async {
+      try {
+        final migrationDone =
+            await SettingsService.getFlag('pgp_blob_migration_v1_done');
+        if (!migrationDone && _accounts.isNotEmpty) {
+          LoggerService.log('PROVIDER', 'Running PGP blob migration v1...');
+          await PgpKeyService.migrateExistingKeysToServer(_accounts);
+          await SettingsService.setFlag('pgp_blob_migration_v1_done',
+              value: true);
+          LoggerService.log('PROVIDER', '✓ PGP blob migration v1 complete');
+        }
+      } catch (ex) {
+        LoggerService.logWarning(
+            'PROVIDER', 'PGP blob migration v1 failed (non-fatal): $ex');
+      }
+    }());
 
     // Start background checks (don't wait - async, with error handling)
     checkServerHealth().catchError((e) => LoggerService.logError('HEALTH_BG', e, StackTrace.current));

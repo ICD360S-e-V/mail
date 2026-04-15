@@ -12,6 +12,7 @@ import 'master_vault.dart';
 import 'mtls_service.dart';
 import 'pgp_isolate_worker.dart';
 import 'le_issuer_check.dart';
+import 'pgp_sync_service.dart';
 import 'pinned_security_context.dart';
 
 /// OpenPGP E2EE — key management + encrypt/decrypt (dart_pg 2.x API).
@@ -107,6 +108,29 @@ class PgpKeyService {
       }
     }
 
+    // NEW DEVICE FLOW: vault is empty — try fetching an existing key from the
+    // sync server before generating a brand-new one.
+    try {
+      final syncedArmor = await PgpSyncService.downloadAndDecrypt(email);
+      if (syncedArmor != null) {
+        LoggerService.log('PGP', 'Fetched PGP key from sync server for $email (new device)');
+        await vault.write(key: _vaultKey(email), value: syncedArmor);
+        final privateKey = OpenPGP.decryptPrivateKey(syncedArmor, passphrase);
+        _privateKeys[key] = privateKey;
+        _publicKeys[key] = privateKey.publicKey;
+        if (_activeEmail == null) {
+          _activeEmail = key;
+          await _startWorker(syncedArmor, passphrase);
+        }
+        return privateKey;
+      }
+      LoggerService.log('PGP', 'No key blob on sync server for $email — will generate new key');
+    } catch (ex) {
+      LoggerService.logWarning('PGP',
+          'PgpSyncService.downloadAndDecrypt failed for $email (falling back to local gen): $ex');
+    }
+
+    // FIRST DEVICE FLOW: no key anywhere — generate a fresh keypair.
     LoggerService.log('PGP', 'Generating Ed25519/X25519 keypair for $email...');
     final privateKey = await compute(_generateKeyIsolate, [email, passphrase]);
 
@@ -119,9 +143,52 @@ class PgpKeyService {
       await _startWorker(armoredKey, passphrase);
     }
 
+    // Upload encrypted blob so other devices can fetch this key.
+    try {
+      await PgpSyncService.encryptAndUpload(email, armoredKey);
+      LoggerService.log('PGP', 'PGP key blob uploaded to sync server for $email');
+    } catch (ex) {
+      LoggerService.logWarning('PGP',
+          'PgpSyncService.encryptAndUpload failed for $email (key still saved locally): $ex');
+    }
+
     await _uploadPublicKey(privateKey.publicKey, email);
     LoggerService.log('PGP', '✓ PGP keypair generated and uploaded for $email');
     return privateKey;
+  }
+
+  // ── Migration ────────────────────────────────────────────────────
+
+  /// One-time migration: upload existing local private keys to the sync server
+  /// for accounts that have a vault key but no server blob yet (local version == 0).
+  /// Called once from EmailProvider.initialize() and gated by
+  /// `pgp_blob_migration_v1_done` in SettingsService.
+  static Future<void> migrateExistingKeysToServer(
+      List<dynamic> accounts) async {
+    for (final account in accounts) {
+      final email = (account.username as String).toLowerCase();
+      try {
+        // Skip if we have no local key for this account.
+        final existingArmor =
+            await MasterVault.instance.read(key: _vaultKey(email));
+        if (existingArmor == null) continue;
+
+        // Skip if a blob already exists on the server (version > 0).
+        final alreadySynced = await PgpSyncService.hasServerBlob(email);
+        if (alreadySynced) {
+          LoggerService.log('PGP',
+              'Migration: blob already on server for $email — skipping');
+          continue;
+        }
+
+        await PgpSyncService.encryptAndUpload(email, existingArmor);
+        LoggerService.log('PGP',
+            'Migration: uploaded PGP blob to sync server for $email');
+      } catch (ex) {
+        LoggerService.logWarning('PGP',
+            'Migration: failed to upload blob for $email (non-fatal): $ex');
+      }
+    }
   }
 
   static Future<dynamic> getPublicKey(String email) async {

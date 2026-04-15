@@ -174,5 +174,29 @@ class SettingsService {
     final settings = await loadSettings();
     return settings['language'] as String?;
   }
+
+  /// Read a single boolean flag (returns false if absent).
+  static Future<bool> getFlag(String key) async {
+    final settings = await loadSettings();
+    return settings[key] as bool? ?? false;
+  }
+
+  /// Persist a single boolean flag without touching other settings.
+  static Future<void> setFlag(String key, {required bool value}) async {
+    final previous = _writeChain;
+    final ourTurn = previous.then((_) async {
+      try {
+        final settings = await loadSettings();
+        settings[key] = value;
+        final path = _getSettingsPath();
+        await File(path).writeAsString(jsonEncode(settings));
+        LoggerService.log('SETTINGS', 'Flag set: $key=$value');
+      } catch (ex, stackTrace) {
+        LoggerService.logError('SETTINGS', ex, stackTrace);
+      }
+    });
+    _writeChain = ourTurn.catchError((_) {});
+    return ourTurn;
+  }
 }
 
