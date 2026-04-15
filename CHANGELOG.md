@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.46.0 - 2026-04-15
+#### Features
+- automatic zero-knowledge PGP key sync across devices (ProtonMail pattern) - (eefde0b) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.45.15 - 2026-04-15
 #### Bug Fixes
 - RangeError on empty NavigationPane + PGP split-brain on re-upload - (0fdfd6f) - Claude Code, *Claude Opus 4.6 (1M context)*
