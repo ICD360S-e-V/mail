@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.46.1 - 2026-04-15
+#### Bug Fixes
+- add missing PgpSyncService.hasServerBlob (used by migration) - (d8efa63) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.46.0 - 2026-04-15
 #### Features
 - automatic zero-knowledge PGP key sync across devices (ProtonMail pattern) - (eefde0b) - Claude Code, *Claude Opus 4.6 (1M context)*
