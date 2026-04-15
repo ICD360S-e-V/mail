@@ -1427,11 +1427,34 @@ class _MainWindowState extends State<MainWindow> {
                         ),
                       ),
                     )
-                  : ListView.builder(
-                      itemCount: emailProvider.emails.length,
-                      itemBuilder: (context, index) {
-                        final email = emailProvider.emails[index];
-                        return _buildEmailListItem(email, theme, emailProvider.currentFolder);
+                  : Builder(
+                      builder: (ctx) {
+                        // Fetch delivery status for ALL visible emails in
+                        // ONE batch request (not per-widget). Previous
+                        // implementation fired 50 concurrent HTTP requests
+                        // when opening Sent folder on Android, blocking
+                        // the UI thread for 25+ seconds.
+                        final ids = emailProvider.emails
+                            .map((e) => e.messageId)
+                            .where((id) =>
+                                id.isNotEmpty &&
+                                !id.startsWith('CORRUPT-') &&
+                                MailStatusService.getCached(id) == null)
+                            .toList();
+                        if (ids.isNotEmpty) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            MailStatusService.fetchBatch(ids).then((_) {
+                              if (mounted) setState(() {});
+                            });
+                          });
+                        }
+                        return ListView.builder(
+                          itemCount: emailProvider.emails.length,
+                          itemBuilder: (context, index) {
+                            final email = emailProvider.emails[index];
+                            return _buildEmailListItem(email, theme, emailProvider.currentFolder);
+                          },
+                        );
                       },
                     ),
         ),
@@ -1715,20 +1738,10 @@ class _MainWindowState extends State<MainWindow> {
   }
 
   /// Build delivery status icon for an email.
-  /// Fetches server-side status (Postfix log) for this message-id.
+  /// Reads server-side status from the RAM cache populated by a single
+  /// batch fetch in _buildEmailList — no per-widget HTTP calls.
   Widget _buildDeliveryStatusIcon(Email email, FluentThemeData theme) {
     final cached = MailStatusService.getCached(email.messageId);
-
-    // Schedule a fetch if not cached yet
-    if (cached == null &&
-        !email.messageId.startsWith('CORRUPT-') &&
-        email.messageId.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        MailStatusService.fetchBatch([email.messageId]).then((_) {
-          if (mounted) setState(() {});
-        });
-      });
-    }
 
     IconData icon;
     Color color;
