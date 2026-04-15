@@ -505,7 +505,25 @@ class _ComposeWindowState extends State<ComposeWindow> {
   Future<void> _sendEmail() async {
     final l10n = l10nOf(context);
 
+    // CRITICAL: in-flight guard must be FIRST. A slow send (5MB attachment
+    // on Android = UI freeze for several seconds) lets the user tap the
+    // Send button multiple times before _isSending is flipped later. Each
+    // tap spawned a parallel _sendEmail() which authenticated separately
+    // and relayed the SAME 5MB message 3 times to the MX (seen in
+    // submission logs: 3 identical 'Successfully relayed' lines within
+    // the same second).
+    if (_isSending) {
+      LoggerService.log('COMPOSE', 'Send already in progress, ignoring duplicate tap');
+      return;
+    }
+    // Claim the flag synchronously, before any await, so the next tap
+    // sees isSending=true even if our UI hasn't rebuilt yet.
+    _isSending = true;
+    if (mounted) setState(() {});
+
     if (_selectedAccount == null) {
+      _isSending = false;
+      if (mounted) setState(() {});
       NotificationService.showErrorToast(l10n.errorTitle, l10n.errorPleaseSelectAccount);
       return;
     }
@@ -513,12 +531,20 @@ class _ComposeWindowState extends State<ComposeWindow> {
     final emailProvider = context.read<EmailProvider>();
     final recipients = _getRecipientsList();
 
+    // Helper to reset in-flight guard before returning on validation errors
+    void resetSending() {
+      _isSending = false;
+      if (mounted) setState(() {});
+    }
+
     if (recipients.isEmpty) {
+      resetSending();
       NotificationService.showErrorToast(l10n.errorTitle, l10n.errorAtLeastOneRecipient);
       return;
     }
 
     if (recipients.length > maxRecipients) {
+      resetSending();
       NotificationService.showErrorToast(l10n.errorTitle, l10n.errorMaxRecipientsExceeded(maxRecipients));
       return;
     }
@@ -527,6 +553,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
     final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
     for (final email in recipients) {
       if (!emailRegex.hasMatch(email)) {
+        resetSending();
         NotificationService.showErrorToast(l10n.errorInvalidEmail, l10n.errorInvalidEmailFormat(email));
         return;
       }
@@ -536,6 +563,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
     final ccRecipients = _getCcList();
     for (final email in ccRecipients) {
       if (!emailRegex.hasMatch(email)) {
+        resetSending();
         NotificationService.showErrorToast(l10n.errorInvalidCcEmail, l10n.errorInvalidCcEmailFormat(email));
         return;
       }
@@ -545,6 +573,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
     final bccRecipients = _getBccList();
     for (final email in bccRecipients) {
       if (!emailRegex.hasMatch(email)) {
+        resetSending();
         NotificationService.showErrorToast(l10n.errorInvalidBccEmail, l10n.errorInvalidBccEmailFormat(email));
         return;
       }
@@ -553,18 +582,17 @@ class _ComposeWindowState extends State<ComposeWindow> {
     // Check total recipients (TO + CC + BCC) doesn't exceed limit
     final totalRecipients = recipients.length + ccRecipients.length + bccRecipients.length;
     if (totalRecipients > maxRecipients) {
+      resetSending();
       NotificationService.showErrorToast(l10n.errorTitle, l10n.errorTotalRecipientsExceeded(maxRecipients));
       return;
     }
 
     // ── mail-admin pre-flight: check sending quota ──
-    // Returns CanSendResult.unknown() on network error → fails OPEN
-    // (we never block on a server outage, the SMTP layer is the
-    // real authority).
     final canSendResult = await DeviceRegistrationService.canSend(
       username: _selectedAccount!.username,
     );
     if (!canSendResult.allowed) {
+      resetSending();
       NotificationService.showErrorToast(
         'Sending limit reached',
         canSendResult.message ??
@@ -591,8 +619,9 @@ class _ComposeWindowState extends State<ComposeWindow> {
     }
     final totalSizeMB = (totalSizeBytes / (1024 * 1024)).toStringAsFixed(1);
 
+    // _isSending already claimed at top of function (in-flight guard).
+    // Just update the status text for the spinner.
     setState(() {
-      _isSending = true;
       _sendingStatus = _attachments.isNotEmpty
           ? '${l10n.buttonSending} ($totalSizeMB MB, ${_attachments.length} ${_attachments.length == 1 ? "file" : "files"})...'
           : '${l10n.buttonSending}...';
