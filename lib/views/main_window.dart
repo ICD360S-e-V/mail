@@ -1172,7 +1172,27 @@ class _MainWindowState extends State<MainWindow> {
     LoggerService.log('UI_BUILD', 'Building navigation pane. Accounts: ${emailProvider.accounts.length}');
 
     final activeAccount = emailProvider.currentAccount;
-    if (activeAccount == null) return items;
+    // Fluent UI NavigationView crashes with RangeError on empty items list
+    // (body.dart accesses index 0). Always provide a placeholder PaneItem
+    // so the pane can render during the 30-60s initial account loading.
+    if (activeAccount == null) {
+      items.add(PaneItem(
+        icon: const Icon(FluentIcons.sync),
+        title: const Text('Loading accounts…'),
+        body: const Center(child: ProgressRing()),
+      ));
+      return items;
+    }
+
+    // Same guard for an account with no folders yet (cert still downloading).
+    if (activeAccount.folders.isEmpty) {
+      items.add(PaneItem(
+        icon: const Icon(FluentIcons.sync),
+        title: const Text('Loading folders…'),
+        body: const Center(child: ProgressRing()),
+      ));
+      return items;
+    }
 
     // ── Folders for the active account (flat) ─────────────────────
     for (final folder in activeAccount.folders) {

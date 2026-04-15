@@ -89,9 +89,13 @@ class PgpKeyService {
         final privateKey = OpenPGP.decryptPrivateKey(existingArmor, passphrase);
         _privateKeys[key] = privateKey;
         _publicKeys[key] = privateKey.publicKey;
-        // Upload to server on every startup (fire-and-forget)
-        // This ensures the key is always available for other accounts to fetch
-        _uploadPublicKey(privateKey.publicKey, email);
+        // SECURITY: Do NOT re-upload the public key on every startup.
+        // If another device generated a different keypair for the same
+        // account, that device's pubkey is on the server. Re-uploading
+        // ours would overwrite it, causing a split-brain where senders
+        // use one pubkey (on server) but our private key is different →
+        // "Bad state: Decryption failed" for all incoming encrypted mail.
+        // Upload only happens once at key generation (below).
         if (_activeEmail == null) {
           _activeEmail = key;
           await _startWorker(existingArmor, passphrase);
