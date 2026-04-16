@@ -8,6 +8,7 @@ import 'package:enough_mail/enough_mail.dart';
 import 'package:flutter/foundation.dart' show compute, listEquals;
 
 import 'logger_service.dart';
+import 'certificate_service.dart';
 import 'master_vault.dart';
 import 'mtls_service.dart';
 import 'pgp_isolate_worker.dart';
@@ -172,6 +173,21 @@ class PgpKeyService {
         final existingArmor =
             await MasterVault.instance.read(key: _vaultKey(email));
         if (existingArmor == null) continue;
+
+        // CRITICAL: switch the active mTLS cert to THIS account's cert
+        // before any HTTP call. The mTLS client uses whatever cert is
+        // currently in CertificateService memory; without the swap,
+        // hasServerBlob/encryptAndUpload run with the previous account's
+        // cert → server CN-match check rejects with 401 "mTLS required"
+        // (or 403 "cert CN does not match"). On Android this manifested
+        // as: "PGP migration failed to upload blob ... HTTP 401".
+        final certOk =
+            await CertificateService.restoreFromSecureStorageFor(email);
+        if (!certOk) {
+          LoggerService.logWarning('PGP',
+              'Migration: no cert in secure storage for $email — skipping');
+          continue;
+        }
 
         // Skip if a blob already exists on the server (version > 0).
         final alreadySynced = await PgpSyncService.hasServerBlob(email);
