@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.47.12 - 2026-04-16
+#### Bug Fixes
+- make diagCallback public (was private, inaccessible from pgp_key_service) - (627035f) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.47.11 - 2026-04-16
 #### Bug Fixes
 - log actual dart_pg decrypt errors + worker key fingerprint - (e79c7c3) - Claude Code, *Claude Opus 4.6 (1M context)*
