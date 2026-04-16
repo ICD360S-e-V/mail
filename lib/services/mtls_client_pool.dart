@@ -73,7 +73,7 @@ class MtlsClientPool {
     final cached = _clients[key];
     if (cached != null) return cached.client;
 
-    final storage = PortableSecureStorage();
+    final storage = PortableSecureStorage.instance;
     final certPem = await storage.read(key: _certKey(key));
     final keyPem  = await storage.read(key: _keyKey(key));
     final caPem   = await storage.read(key: _caKey(key));
