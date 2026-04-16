@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'logger_service.dart';
+import 'master_vault.dart';
 import 'mtls_service.dart';
 import 'pinned_security_context.dart';
-import 'portable_secure_storage.dart';
 
 /// Per-account mTLS HttpClient pool.
 ///
@@ -73,10 +73,14 @@ class MtlsClientPool {
     final cached = _clients[key];
     if (cached != null) return cached.client;
 
-    final storage = PortableSecureStorage.instance;
-    final certPem = await storage.read(key: _certKey(key));
-    final keyPem  = await storage.read(key: _keyKey(key));
-    final caPem   = await storage.read(key: _caKey(key));
+    // CertificateService stores mTLS material in MasterVault (encrypted
+    // at rest with the master key), NOT in PortableSecureStorage. Read
+    // from the same vault or the pool will always miss and fall back
+    // to a non-mTLS client → HTTP 401 "mTLS required".
+    final vault = MasterVault.instance;
+    final certPem = await vault.read(key: _certKey(key));
+    final keyPem  = await vault.read(key: _keyKey(key));
+    final caPem   = await vault.read(key: _caKey(key));
 
     if (certPem == null || keyPem == null || caPem == null) {
       throw StateError(
