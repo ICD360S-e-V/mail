@@ -174,20 +174,11 @@ class PgpKeyService {
             await MasterVault.instance.read(key: _vaultKey(email));
         if (existingArmor == null) continue;
 
-        // CRITICAL: switch the active mTLS cert to THIS account's cert
-        // before any HTTP call. The mTLS client uses whatever cert is
-        // currently in CertificateService memory; without the swap,
-        // hasServerBlob/encryptAndUpload run with the previous account's
-        // cert → server CN-match check rejects with 401 "mTLS required"
-        // (or 403 "cert CN does not match"). On Android this manifested
-        // as: "PGP migration failed to upload blob ... HTTP 401".
-        final certOk =
-            await CertificateService.restoreFromSecureStorageFor(email);
-        if (!certOk) {
-          LoggerService.logWarning('PGP',
-              'Migration: no cert in secure storage for $email — skipping');
-          continue;
-        }
+        // PgpSyncService now uses MtlsClientPool which builds a
+        // dedicated HttpClient per account from secure storage —
+        // no global cert-swap needed. If secure storage has no cert
+        // for this email, the pool's get() throws StateError and
+        // hasServerBlob/encryptAndUpload return gracefully.
 
         // Skip if a blob already exists on the server (version > 0).
         final alreadySynced = await PgpSyncService.hasServerBlob(email);

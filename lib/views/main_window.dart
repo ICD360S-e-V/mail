@@ -19,6 +19,7 @@ import '../services/master_vault.dart';
 import '../services/security_health_service.dart';
 import '../services/certificate_service.dart';
 import '../services/imap_pool.dart';
+import '../services/mtls_client_pool.dart';
 import '../services/mail_status_service.dart';
 import '../services/pgp_key_service.dart';
 import '../services/pin_unlock_service.dart';
@@ -182,6 +183,10 @@ class _MainWindowState extends State<MainWindow> {
     // SECURITY: Close all pooled IMAP connections.
     try {
       await ImapPool.instance.closeAll();
+    } catch (_) {}
+    // SECURITY: Close all pooled mTLS HTTP clients (per-account).
+    try {
+      await MtlsClientPool.instance.closeAll();
     } catch (_) {}
     // SECURITY: Wipe all cached emails from RAM.
     try {

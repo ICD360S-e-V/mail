@@ -7,7 +7,7 @@ import 'package:cryptography/cryptography.dart';
 import 'le_issuer_check.dart';
 import 'logger_service.dart';
 import 'master_vault.dart';
-import 'mtls_service.dart';
+import 'mtls_client_pool.dart';
 import 'pinned_security_context.dart';
 
 /// Thrown when PGP blob sync encounters an unrecoverable error.
@@ -152,7 +152,7 @@ class PgpSyncService {
     final tag = 'PGP_SYNC';
     LoggerService.log(tag, 'deleteBlob: $email');
 
-    final client = _buildHttpClient();
+    final client = await _buildHttpClientFor(email);
     try {
       final request = await client
           .deleteUrl(Uri.parse(_endpoint))
@@ -163,7 +163,7 @@ class PgpSyncService {
       final response =
           await request.close().timeout(const Duration(seconds: 15));
       final body = await response.transform(utf8.decoder).join();
-      client.close();
+      // Pool owns client; do not close
 
       if (response.statusCode != 200) {
         throw PgpSyncException(
@@ -175,10 +175,10 @@ class PgpSyncService {
       LoggerService.log(tag, 'deleteBlob OK for $email');
       return true;
     } on PgpSyncException {
-      client.close(force: true);
+      // Pool owns client; do not close
       rethrow;
     } catch (ex) {
-      client.close(force: true);
+      // Pool owns client; do not close
       throw PgpSyncException('deleteBlob failed for $email', ex);
     }
   }
@@ -319,14 +319,14 @@ class PgpSyncService {
   static Future<Map<String, dynamic>?> _fetchBlob(String email) async {
     final url = Uri.parse(
         '$_endpoint?email=${Uri.encodeQueryComponent(email.toLowerCase())}');
-    final client = _buildHttpClient();
+    final client = await _buildHttpClientFor(email);
     try {
       final request =
           await client.getUrl(url).timeout(const Duration(seconds: 15));
       final response =
           await request.close().timeout(const Duration(seconds: 15));
       final body = await response.transform(utf8.decoder).join();
-      client.close();
+      // Pool owns client; do not close
 
       if (response.statusCode == 404) return null;
       if (response.statusCode != 200) {
@@ -337,10 +337,10 @@ class PgpSyncService {
       final decoded = jsonDecode(body) as Map<String, dynamic>;
       return decoded;
     } on PgpSyncException {
-      client.close(force: true);
+      // Pool owns client; do not close
       rethrow;
     } catch (ex) {
-      client.close(force: true);
+      // Pool owns client; do not close
       throw PgpSyncException('fetchBlob network error for $email', ex);
     }
   }
@@ -349,7 +349,7 @@ class PgpSyncService {
   /// The server MUST reject the upload if `version` ≤ its stored version.
   static Future<void> _uploadBlob(
       String email, int version, String blobBase64) async {
-    final client = _buildHttpClient();
+    final client = await _buildHttpClientFor(email);
     try {
       final request = await client
           .postUrl(Uri.parse(_endpoint))
@@ -364,7 +364,7 @@ class PgpSyncService {
       final response =
           await request.close().timeout(const Duration(seconds: 20));
       final body = await response.transform(utf8.decoder).join();
-      client.close();
+      // Pool owns client; do not close
 
       if (response.statusCode == 409) {
         // Version conflict: another device uploaded a newer version.
@@ -378,10 +378,10 @@ class PgpSyncService {
             'uploadBlob HTTP ${response.statusCode} for $email: $body');
       }
     } on PgpSyncException {
-      client.close(force: true);
+      // Pool owns client; do not close
       rethrow;
     } catch (ex) {
-      client.close(force: true);
+      // Pool owns client; do not close
       throw PgpSyncException('uploadBlob network error for $email', ex);
     }
   }
@@ -390,19 +390,24 @@ class PgpSyncService {
 
   /// Build an [HttpClient] with mTLS if certificates are available,
   /// falling back to a LE-pinned client without client auth.
-  static HttpClient _buildHttpClient() {
-    final mtls = MtlsService.createMtlsHttpClient();
-    if (mtls != null) return mtls;
-
-    // Fallback: no client cert yet (e.g. first login), still pin server cert.
-    return PinnedSecurityContext.createHttpClient()
-      ..connectionTimeout = const Duration(seconds: 10)
-      ..badCertificateCallback = (cert, host, port) {
-        if (host == 'mail.icd360s.de') {
-          return isTrustedLetsEncryptIssuer(cert.issuer);
-        }
-        return false;
-      };
+  /// Get an HttpClient pre-loaded with [email]'s mTLS cert from the pool.
+  /// Falls back to plain pinned client if Keychain has no cert (e.g. first
+  /// login before approval). The pool ensures concurrent uploads for
+  /// DIFFERENT accounts don't trample each other's SecurityContext.
+  static Future<HttpClient> _buildHttpClientFor(String email) async {
+    try {
+      return await MtlsClientPool.instance.get(email);
+    } catch (_) {
+      // No cert for this user yet — fall back to pinned non-mTLS client.
+      return PinnedSecurityContext.createHttpClient()
+        ..connectionTimeout = const Duration(seconds: 10)
+        ..badCertificateCallback = (cert, host, port) {
+          if (host == 'mail.icd360s.de') {
+            return isTrustedLetsEncryptIssuer(cert.issuer);
+          }
+          return false;
+        };
+    }
   }
 
   /// MasterVault key for the locally cached blob version.
