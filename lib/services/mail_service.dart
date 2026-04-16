@@ -273,7 +273,15 @@ class MailService {
             final pgpCiphertext = PgpKeyService.extractPgpCiphertext(message);
             if (pgpCiphertext != null) {
               try {
-                email.body = await PgpKeyService.decrypt(pgpCiphertext);
+                final decryptedRaw = await PgpKeyService.decrypt(pgpCiphertext);
+                // The decrypted payload is itself a MIME message (RFC 3156:
+                // the encrypted part wraps the original message). Parse it
+                // to extract just the human-readable text body, not the raw
+                // MIME headers/boundaries.
+                final inner = MimeMessage.parseFromText(decryptedRaw);
+                email.body = inner.decodeTextPlainPart() ??
+                    inner.decodeTextHtmlPart() ??
+                    decryptedRaw;
                 email.isEncrypted = true;
                 LoggerService.log('PGP',
                     '✓ Decrypted E2EE email from ${email.from}');
