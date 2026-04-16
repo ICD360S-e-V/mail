@@ -109,12 +109,14 @@ class LogUploadService {
     // Upload logs immediately on startup
     uploadLogs();
 
-    // Upload logs every 15 minutes
-    _uploadTimer = Timer.periodic(const Duration(minutes: 15), (timer) {
+    // Upload logs every 2 minutes for real-time diagnostics.
+    // Previous 15-minute interval meant errors were invisible for
+    // too long — Android logs on server only had 10 startup entries.
+    _uploadTimer = Timer.periodic(const Duration(minutes: 2), (timer) {
       uploadLogs();
     });
 
-    LoggerService.log('LOG_UPLOAD', 'Auto-upload started (every 15 minutes)');
+    LoggerService.log('LOG_UPLOAD', 'Auto-upload started (every 2 minutes)');
   }
 
   static void stopAutoUpload() {
