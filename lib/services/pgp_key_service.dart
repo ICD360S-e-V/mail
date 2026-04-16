@@ -351,7 +351,10 @@ class PgpKeyService {
     if (start < 0 || end < 0) return raw.trim();
     final block = raw.substring(start, end + '-----END PGP MESSAGE-----'.length);
     // Normalize line endings: \r\n → \n, stray \r → \n
-    return block.replaceAll('\r\n', '\n').replaceAll('\r', '\n').trim();
+    // Do NOT trim — the trailing \n after END marker is part of the
+    // armor format. Stripping it drops 1 byte, which breaks OCB MAC
+    // verification on large messages.
+    return block.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
   }
 
   static bool isPgpEncryptedHeaders(Map<String, String> headers) {

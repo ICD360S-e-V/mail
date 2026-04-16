@@ -274,14 +274,31 @@ class MailService {
             if (pgpCiphertext != null) {
               try {
                 final decryptedRaw = await PgpKeyService.decrypt(pgpCiphertext);
-                // The decrypted payload is itself a MIME message (RFC 3156:
-                // the encrypted part wraps the original message). Parse it
-                // to extract just the human-readable text body, not the raw
-                // MIME headers/boundaries.
-                final inner = MimeMessage.parseFromText(decryptedRaw);
-                email.body = inner.decodeTextPlainPart() ??
-                    inner.decodeTextHtmlPart() ??
-                    decryptedRaw;
+                // The decrypted payload is a MIME body (no email headers).
+                // Try to parse as MimeMessage, then extract text/plain.
+                // If parsing fails (common — no From/To headers), extract
+                // manually: find text between blank line and first boundary.
+                String? body;
+                try {
+                  final inner = MimeMessage.parseFromText(decryptedRaw);
+                  body = inner.decodeTextPlainPart() ?? inner.decodeTextHtmlPart();
+                } catch (_) {}
+                if (body == null || body.isEmpty) {
+                  // Manual extraction: find content between first blank
+                  // line (after MIME headers) and first boundary marker
+                  final lines = decryptedRaw.split('\n');
+                  final blankIdx = lines.indexWhere((l) => l.trim().isEmpty);
+                  if (blankIdx >= 0) {
+                    final contentLines = <String>[];
+                    for (var i = blankIdx + 1; i < lines.length; i++) {
+                      if (lines[i].startsWith('--')) break;
+                      contentLines.add(lines[i]);
+                    }
+                    final extracted = contentLines.join('\n').trim();
+                    if (extracted.isNotEmpty) body = extracted;
+                  }
+                }
+                email.body = body ?? decryptedRaw;
                 email.isEncrypted = true;
                 LoggerService.log('PGP',
                     '✓ Decrypted E2EE email from ${email.from}');
