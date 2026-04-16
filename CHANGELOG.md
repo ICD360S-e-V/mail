@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.47.11 - 2026-04-16
+#### Bug Fixes
+- log actual dart_pg decrypt errors + worker key fingerprint - (e79c7c3) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.47.10 - 2026-04-16
 #### Bug Fixes
 - await setActiveAccount before fetchEmails (decrypt race) - (d9d45dc) - Claude Code, *Claude Opus 4.6 (1M context)*
