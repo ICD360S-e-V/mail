@@ -633,10 +633,17 @@ class EmailProvider with ChangeNotifier {
     LoggerService.log('UI', 'User selected: ${account.username}/$folder');
     _currentAccount = account;
     _currentFolder = folder;
-    // Set active PGP key for decrypt (per-account keys)
-    unawaited(PgpKeyService.setActiveAccount(account.username).catchError(
-      (ex) => LoggerService.logWarning('PGP', 'setActiveAccount failed: $ex'),
-    ));
+    // Set active PGP key for decrypt (per-account keys).
+    // MUST await: fetchEmails decrypts incoming mail inline, so the
+    // worker must hold THIS account's private key before we fetch.
+    // The old unawaited() path raced: fetchEmails fired before the
+    // worker switched keys → every encrypted mail failed with
+    // "Bad state: Decryption failed".
+    try {
+      await PgpKeyService.setActiveAccount(account.username);
+    } catch (ex) {
+      LoggerService.logWarning('PGP', 'setActiveAccount failed: $ex');
+    }
     notifyListeners();
 
     await fetchEmails();
