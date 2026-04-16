@@ -244,36 +244,39 @@ class EmailProvider with ChangeNotifier {
   ///   loads the previously-persisted cert into the in-memory cache.
   ///   Verifies the loaded cert's CN matches the requested account.
   Future<bool> _ensureCertForAccount(EmailAccount account) async {
+    // Cert-first strategy (v2.46.2): try secure storage BEFORE API.
+    //
+    // Why: many accounts have a stale password from pre-Faza-3 era
+    // (when add-account stored a password) but ALSO have a valid cert
+    // in Keychain (because they later went through Faza 3 approval).
+    // The previous "password-first" path called the API with the stale
+    // password and got 401 "Authentication required" 18× per startup.
+    //
+    // Local Keychain restore is free (no network, no server contention),
+    // so we always prefer it. Password-based download is the fallback
+    // only when the Keychain has no cert for this account.
+    final restored =
+        await CertificateService.restoreFromSecureStorageFor(account.username);
+    if (restored) {
+      LoggerService.log('PROVIDER',
+          '✓ Cert for ${account.username} restored from secure storage');
+      return true;
+    }
+
+    // Fallback: legacy password-based download (account never went
+    // through Faza 3, or Keychain was wiped).
     final pwd = account.password;
     if (pwd != null && pwd.isNotEmpty) {
-      // LEGACY path
       LoggerService.log('PROVIDER',
           'Downloading per-user certificate for ${account.username}...');
       return CertificateService.downloadCertificateForUser(
           account.username, password: pwd);
     }
-    // FAZA 3 path: cert was stored by DeviceApprovalService.storeBundle()
-    // before this account was added. Restore from secure storage instead
-    // of re-downloading via password.
-    //
-    // v2.30.2: per-username keys — call restoreFromSecureStorageFor so
-    // each account loads its OWN cert. The previous global-key layout
-    // overwrote the first account's cert when a second account was
-    // added (the in-memory cache was correct after add but the next
-    // restore-after-unlock loaded whichever username was last written).
-    LoggerService.log('PROVIDER',
-        'Account ${account.username} has no password (Faza 3 cert-only) — '
-        'restoring cert from secure storage');
-    final restored =
-        await CertificateService.restoreFromSecureStorageFor(account.username);
-    if (!restored) {
-      LoggerService.logWarning('PROVIDER',
-          'Cert-only account ${account.username} but secure storage is empty');
-      return false;
-    }
-    LoggerService.log('PROVIDER',
-        '✓ Cert for ${account.username} restored from secure storage');
-    return true;
+
+    LoggerService.logWarning('PROVIDER',
+        'Cert-only account ${account.username} but secure storage is empty '
+        '— needs Faza 3 re-approval');
+    return false;
   }
 
   /// Add new account
