@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.47.14 - 2026-04-16
+#### Bug Fixes
+- parse inner MIME after PGP decrypt (was showing raw headers) - (12d5351) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.47.13 - 2026-04-16
 #### Bug Fixes
 - clean PGP armor extracted from MIME (CRLF + preamble caused FormatException) - (c42d402) - Claude Code, *Claude Opus 4.6 (1M context)*
