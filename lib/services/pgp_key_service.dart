@@ -315,12 +315,16 @@ class PgpKeyService {
     if (ct.mediaType.sub == MediaSubtype.multipartEncrypted) {
       for (final part in message.allPartsFlat) {
         if (part.mediaType.sub == MediaSubtype.applicationOctetStream) {
-          // Use raw text (not decodeContentText) to avoid encoding
-          // transformations that corrupt the PGP armor for large messages
-          // (e.g. emails with photo attachments). decodeContentText() can
-          // apply content-transfer-decoding that mangles binary-heavy base64
-          // → OCB MAC check fails on the receiver side.
-          final text = part.text ?? part.decodeContentText();
+          // For large messages (with attachments), decodeContentText()
+          // can corrupt PGP armor → OCB MAC check fails. Use raw
+          // binary bytes decoded as latin1 (preserves all byte values)
+          // to avoid charset/CTE transformations that mangle base64.
+          String? text;
+          final rawBytes = part.decodeContentBinary();
+          if (rawBytes != null) {
+            text = String.fromCharCodes(rawBytes);
+          }
+          text ??= part.decodeContentText();
           if (text != null && text.contains('-----BEGIN PGP MESSAGE-----')) {
             final cleaned = _cleanArmor(text);
             LoggerService.log('PGP',
