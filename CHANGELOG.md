@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.47.16 - 2026-04-16
+#### Bug Fixes
+- use decodeContentBinary for PGP ciphertext (part.text doesn't exist) - (a1d2c3f) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.47.15 - 2026-04-16
 #### Bug Fixes
 - use raw part.text for PGP ciphertext extraction (OCB MAC failure on large msgs) - (2e7b9c2) - Claude Code, *Claude Opus 4.6 (1M context)*
