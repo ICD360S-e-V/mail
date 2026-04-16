@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.47.10 - 2026-04-16
+#### Bug Fixes
+- await setActiveAccount before fetchEmails (decrypt race) - (d9d45dc) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.47.9 - 2026-04-16
 #### Bug Fixes
 - setActiveAccount awaits key load before starting worker - (be5e3f8) - Claude Code, *Claude Opus 4.6 (1M context)*
