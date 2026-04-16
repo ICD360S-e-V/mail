@@ -298,6 +298,7 @@ class PgpKeyService {
       armoredKey: armoredKey,
       passphrase: passphrase,
     );
+    _worker!._diagCallback = (msg) => LoggerService.log('PGP_WORKER', msg);
     LoggerService.log('PGP', '✓ Decrypt worker started (background isolate)');
   }
 

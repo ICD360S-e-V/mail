@@ -56,13 +56,29 @@ class PgpIsolateWorker {
 
   void _onResponse(dynamic message) {
     if (message is! Map) return;
+    // Diagnostic messages from isolate (key init, errors)
+    if (message.containsKey('diag')) {
+      _diagCallback?.call(message['diag'] as String);
+      return;
+    }
     final id = message['id'] as int;
     final completer = _pending.remove(id);
     if (completer == null) return;
     final plaintexts = (message['plaintexts'] as List).cast<String?>();
+    // Log decrypt errors for any failed messages
+    final errors = message['errors'] as List?;
+    if (errors != null) {
+      for (var i = 0; i < errors.length; i++) {
+        if (errors[i] != null) {
+          _diagCallback?.call('Decrypt error [$i]: ${errors[i]}');
+        }
+      }
+    }
     completer.complete(plaintexts);
     if (_closed && _pending.isEmpty) _responses.close();
   }
+
+  void Function(String)? _diagCallback;
 
   void close() {
     if (_closed) return;
@@ -94,8 +110,11 @@ class PgpIsolateWorker {
             msg['armoredKey'] as String,
             msg['passphrase'] as String,
           );
-        } catch (_) {
-          // Key parse failed — all future decrypts will return null
+          // Log the key fingerprint so we can verify which key the worker holds
+          final fp = privateKey.fingerprint;
+          mainPort.send({'diag': 'Worker initialized with key fingerprint: ${fp.toList().map((b) => b.toRadixString(16).padLeft(2, "0")).join().toUpperCase()}'});
+        } catch (ex) {
+          mainPort.send({'diag': 'Worker key parse FAILED: $ex'});
         }
         return;
       }
@@ -105,11 +124,13 @@ class PgpIsolateWorker {
         final id = msg['id'] as int;
         final ciphertexts = (msg['ciphertexts'] as List).cast<String>();
         final plaintexts = <String?>[];
+        final errors = <String?>[];
 
         for (final ct in ciphertexts) {
           try {
             if (privateKey == null) {
               plaintexts.add(null);
+              errors.add('no private key loaded');
               continue;
             }
             final result = OpenPGP.decrypt(ct, decryptionKeys: [privateKey]);
@@ -117,12 +138,14 @@ class PgpIsolateWorker {
             plaintexts.add(literal != null
                 ? utf8.decode(literal.binary, allowMalformed: true)
                 : null);
-          } catch (_) {
+            errors.add(null);
+          } catch (ex) {
             plaintexts.add(null);
+            errors.add(ex.toString());
           }
         }
 
-        mainPort.send({'id': id, 'plaintexts': plaintexts});
+        mainPort.send({'id': id, 'plaintexts': plaintexts, 'errors': errors});
       }
     });
   }
