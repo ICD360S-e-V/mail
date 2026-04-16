@@ -185,26 +185,28 @@ class PgpKeyService {
               'Migration: uploaded PGP blob to sync server for $email');
         }
 
-        // 2) Reconcile published public key. If the server's published
-        //    pubkey fingerprint differs from ours (other device published
-        //    first, or this account was regenerated), upload our pubkey
-        //    so future senders encrypt to a key we can actually decrypt.
-        //    Without this, the server pubkey and our private key live on
-        //    different branches → every incoming encrypted mail fails
-        //    with "Bad state: Decryption failed".
+        // 2) Reconcile published public key. Compare the full armored
+        //    public key (primary + ALL subkeys) against what the server
+        //    publishes. Comparing only the primary fingerprint is not
+        //    enough: OpenPGP v6 encrypts to the ENCRYPTION SUBKEY, so a
+        //    matching primary with a different subkey still fails to
+        //    decrypt ("Bad state: Decryption failed"). When anything
+        //    differs, republish our full local pubkey so the server
+        //    becomes consistent with the blob we just uploaded (or
+        //    already had).
         try {
           final local = OpenPGP.decryptPrivateKey(existingArmor, passphrase);
-          final localFpr =
-              List<int>.from(local.publicKey.fingerprint as Iterable<int>);
+          final localArmor = (local.publicKey.armor() as String).trim();
           final serverPub = await fetchRecipientKey(email);
-          final serverFpr = serverPub == null
-              ? null
-              : List<int>.from(serverPub.fingerprint as Iterable<int>);
-          if (serverFpr == null || !listEquals(localFpr, serverFpr)) {
+          final serverArmor =
+              (serverPub?.armor() as String?)?.trim();
+          if (serverArmor == null || serverArmor != localArmor) {
             LoggerService.log('PGP',
                 'Migration: server pubkey mismatch for $email — republishing local pubkey');
             _recipientKeyCache.remove(email);
             await _uploadPublicKey(local.publicKey, email);
+            _recipientKeyCache.remove(email);
+            _negativeCache.remove(email);
           }
         } catch (ex) {
           LoggerService.logWarning('PGP',
