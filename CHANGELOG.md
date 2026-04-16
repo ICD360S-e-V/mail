@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.46.2 - 2026-04-16
+#### Bug Fixes
+- PGP migration uploads use wrong cert → 401 mTLS required on Android - (75d8e01) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.46.1 - 2026-04-15
 #### Bug Fixes
 - add missing PgpSyncService.hasServerBlob (used by migration) - (d8efa63) - Claude Code, *Claude Opus 4.6 (1M context)*
