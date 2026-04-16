@@ -475,12 +475,18 @@ class _ComposeWindowState extends State<ComposeWindow> {
       setState(() => _encryptionPossible = false);
       return;
     }
+    LoggerService.log('COMPOSE',
+        'Looking up keys for ${allEmails.length} recipients (sender: ${_selectedAccount?.username})');
     final results = await PgpKeyService.lookupAllRecipients(
       allEmails,
       senderEmail: _selectedAccount?.username,
       forceRefresh: true,
     );
     if (!mounted) return;
+    for (final entry in results.entries) {
+      LoggerService.log('COMPOSE',
+          'Key lookup: ${entry.key} → ${entry.value != null ? "FOUND" : "NOT FOUND"}');
+    }
     setState(() {
       _recipientHasKey.clear();
       for (final entry in results.entries) {
