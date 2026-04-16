@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.47.20 - 2026-04-16
+#### Bug Fixes
+- key lookup only on complete emails + multipart text extraction - (1b4280c) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.47.19 - 2026-04-16
 #### Bug Fixes
 - reduce log upload interval to 2 minutes for real-time diagnostics - (7b3da27) - Claude Code, *Claude Opus 4.6 (1M context)*
