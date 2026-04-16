@@ -160,10 +160,11 @@ class PgpKeyService {
 
   // ── Migration ────────────────────────────────────────────────────
 
-  /// One-time migration: upload existing local private keys to the sync server
-  /// for accounts that have a vault key but no server blob yet (local version == 0).
-  /// Called once from EmailProvider.initialize() and gated by
-  /// `pgp_blob_migration_v1_done` in SettingsService.
+  /// Reconcile local vault keys with the sync server: for each account
+  /// that has a local key but no server blob yet, upload it. Idempotent —
+  /// safe to call on every startup. Accounts added later, or accounts
+  /// whose upload failed on a previous run (e.g. transient 401), get
+  /// synced the next time this runs.
   static Future<void> migrateExistingKeysToServer(
       List<dynamic> accounts) async {
     for (final account in accounts) {
