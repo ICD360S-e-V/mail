@@ -408,7 +408,10 @@ class PgpKeyService {
       if (senderEmail != null) {
         try {
           client = await MtlsClientPool.instance.get(senderEmail);
-        } catch (_) {
+          LoggerService.log('PGP', 'Key fetch using mTLS pool for $senderEmail');
+        } catch (e) {
+          LoggerService.logWarning('PGP',
+              'mTLS pool failed for $senderEmail (falling back): $e');
           client = null;
         }
       }

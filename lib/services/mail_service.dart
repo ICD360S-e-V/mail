@@ -280,7 +280,13 @@ class MailService {
                 // manually: find text between blank line and first boundary.
                 String? body;
                 try {
-                  final inner = MimeMessage.parseFromText(decryptedRaw);
+                  // enough_mail's MIME parser expects CRLF line endings
+                  // (RFC 5322). The decrypted payload has LF only (from
+                  // _cleanArmor normalization). Convert back to CRLF.
+                  final crlf = decryptedRaw
+                      .replaceAll('\r\n', '\n')
+                      .replaceAll('\n', '\r\n');
+                  final inner = MimeMessage.parseFromText(crlf);
                   body = inner.decodeTextPlainPart() ?? inner.decodeTextHtmlPart();
                 } catch (_) {}
                 if (body == null || body.isEmpty) {
