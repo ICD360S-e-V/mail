@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.47.4 - 2026-04-16
+#### Bug Fixes
+- reconcile published pubkey with local private key on startup - (0d3fc40) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.47.3 - 2026-04-16
 #### Bug Fixes
 - MtlsClientPool reads from MasterVault, not PortableSecureStorage - (6857abb) - Claude Code, *Claude Opus 4.6 (1M context)*
