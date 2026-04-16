@@ -58,7 +58,7 @@ class PgpIsolateWorker {
     if (message is! Map) return;
     // Diagnostic messages from isolate (key init, errors)
     if (message.containsKey('diag')) {
-      _diagCallback?.call(message['diag'] as String);
+      diagCallback?.call(message['diag'] as String);
       return;
     }
     final id = message['id'] as int;
@@ -70,7 +70,7 @@ class PgpIsolateWorker {
     if (errors != null) {
       for (var i = 0; i < errors.length; i++) {
         if (errors[i] != null) {
-          _diagCallback?.call('Decrypt error [$i]: ${errors[i]}');
+          diagCallback?.call('Decrypt error [$i]: ${errors[i]}');
         }
       }
     }
@@ -78,7 +78,7 @@ class PgpIsolateWorker {
     if (_closed && _pending.isEmpty) _responses.close();
   }
 
-  void Function(String)? _diagCallback;
+  void Function(String)? diagCallback;
 
   void close() {
     if (_closed) return;
