@@ -290,19 +290,36 @@ class MailService {
                   body = inner.decodeTextPlainPart() ?? inner.decodeTextHtmlPart();
                 } catch (_) {}
                 if (body == null || body.isEmpty) {
-                  // Manual extraction: find content between first blank
-                  // line (after MIME headers) and first boundary marker
+                  // Manual extraction for multipart: find the text/plain
+                  // content inside the MIME structure. Look for a text/plain
+                  // Content-Type header, skip to its blank line, then read
+                  // until the next boundary.
                   final lines = decryptedRaw.split('\n');
-                  final blankIdx = lines.indexWhere((l) => l.trim().isEmpty);
-                  if (blankIdx >= 0) {
-                    final contentLines = <String>[];
-                    for (var i = blankIdx + 1; i < lines.length; i++) {
-                      if (lines[i].startsWith('--')) break;
-                      contentLines.add(lines[i]);
+                  var inTextPart = false;
+                  var pastHeader = false;
+                  final contentLines = <String>[];
+                  for (final line in lines) {
+                    final trimmed = line.trim();
+                    if (trimmed.startsWith('Content-Type:') &&
+                        trimmed.contains('text/plain')) {
+                      inTextPart = true;
+                      pastHeader = false;
+                      continue;
                     }
-                    final extracted = contentLines.join('\n').trim();
-                    if (extracted.isNotEmpty) body = extracted;
+                    if (inTextPart && !pastHeader) {
+                      if (trimmed.isEmpty) {
+                        pastHeader = true;
+                        continue;
+                      }
+                      continue; // skip other headers (CTE, etc)
+                    }
+                    if (inTextPart && pastHeader) {
+                      if (trimmed.startsWith('--')) break;
+                      contentLines.add(line);
+                    }
                   }
+                  final extracted = contentLines.join('\n').trim();
+                  if (extracted.isNotEmpty) body = extracted;
                 }
                 email.body = body ?? decryptedRaw;
                 email.isEncrypted = true;
