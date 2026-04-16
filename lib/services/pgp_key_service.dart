@@ -317,15 +317,29 @@ class PgpKeyService {
         if (part.mediaType.sub == MediaSubtype.applicationOctetStream) {
           final text = part.decodeContentText();
           if (text != null && text.contains('-----BEGIN PGP MESSAGE-----')) {
-            return text;
+            return _cleanArmor(text);
           }
         }
       }
     }
 
     final body = message.decodeTextPlainPart() ?? '';
-    if (body.contains('-----BEGIN PGP MESSAGE-----')) return body;
+    if (body.contains('-----BEGIN PGP MESSAGE-----')) return _cleanArmor(body);
     return null;
+  }
+
+  /// Clean armored PGP text extracted from MIME parts.
+  /// enough_mail's decodeContentText() can leave \r line endings,
+  /// leading/trailing whitespace, or BOM bytes that make dart_pg's
+  /// base64 parser throw FormatException at the armor header.
+  static String _cleanArmor(String raw) {
+    // Extract just the PGP block (drop any MIME preamble / trailing boundary)
+    final start = raw.indexOf('-----BEGIN PGP MESSAGE-----');
+    final end = raw.indexOf('-----END PGP MESSAGE-----');
+    if (start < 0 || end < 0) return raw.trim();
+    final block = raw.substring(start, end + '-----END PGP MESSAGE-----'.length);
+    // Normalize line endings: \r\n → \n, stray \r → \n
+    return block.replaceAll('\r\n', '\n').replaceAll('\r', '\n').trim();
   }
 
   static bool isPgpEncryptedHeaders(Map<String, String> headers) {
