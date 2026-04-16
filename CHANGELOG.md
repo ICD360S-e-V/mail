@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.47.5 - 2026-04-16
+#### Bug Fixes
+- PGP sync runs early + pubkey fetch uses sender's mTLS client - (e1cf10e) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.47.4 - 2026-04-16
 #### Bug Fixes
 - reconcile published pubkey with local private key on startup - (0d3fc40) - Claude Code, *Claude Opus 4.6 (1M context)*
