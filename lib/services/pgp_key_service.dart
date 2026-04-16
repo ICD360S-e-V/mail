@@ -236,12 +236,25 @@ class PgpKeyService {
   static Future<void> setActiveAccount(String email) async {
     final key = email.toLowerCase();
     if (_activeEmail == key) return;
+    // Ensure the private key is actually loaded before switching.
+    // Race observed in the wild: during startup the FIRST account to
+    // finish loading sets _activeEmail and starts the worker. If the
+    // UI (or selectFolder) calls setActiveAccount for a DIFFERENT
+    // account before that account's load has populated _privateKeys,
+    // the old flow saw priv == null, skipped _startWorker, but still
+    // flipped _activeEmail — leaving the worker running on the wrong
+    // account's private key. Every incoming encrypted mail then
+    // failed with "Bad state: Decryption failed" even though the
+    // local private key and server pubkey were consistent.
+    final priv = _privateKeys[key] ?? await getOrCreatePrivateKey(email);
     _activeEmail = key;
-    final priv = _privateKeys[key];
     if (priv != null) {
       final passphrase = await _getOrCreatePassphrase();
       await _startWorker(priv.armor(), passphrase);
       LoggerService.log('PGP', 'Switched active decrypt key to $email');
+    } else {
+      LoggerService.logWarning('PGP',
+          'setActiveAccount: no private key available for $email — worker NOT switched');
     }
   }
 
