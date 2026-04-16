@@ -478,6 +478,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
     final results = await PgpKeyService.lookupAllRecipients(
       allEmails,
       senderEmail: _selectedAccount?.username,
+      forceRefresh: true,
     );
     if (!mounted) return;
     setState(() {

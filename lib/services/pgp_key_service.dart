@@ -191,34 +191,31 @@ class PgpKeyService {
               'Migration: uploaded PGP blob to sync server for $email');
         }
 
-        // 2) Reconcile published public key. Compare the full armored
-        //    public key (primary + ALL subkeys) against what the server
-        //    publishes. Comparing only the primary fingerprint is not
-        //    enough: OpenPGP v6 encrypts to the ENCRYPTION SUBKEY, so a
-        //    matching primary with a different subkey still fails to
-        //    decrypt ("Bad state: Decryption failed"). When anything
-        //    differs, republish our full local pubkey so the server
-        //    becomes consistent with the blob we just uploaded (or
-        //    already had).
+        // 2) Republish our local public key to the server unconditionally.
+        //    Earlier attempts tried to detect a mismatch and only republish
+        //    on diff — but dart_pg's armor() is not byte-stable across
+        //    parse→serialize (whitespace / headers / comment lines differ),
+        //    and checking only the primary fingerprint missed subkey
+        //    rotations (OpenPGP v6 encrypts to the ENCRYPTION SUBKEY, not
+        //    the primary). The result was either a false-negative (skip
+        //    republish while the subkey actually differed → decryption
+        //    failed on recipients) or a false-positive (republish every
+        //    startup anyway).
+        //
+        //    Unconditional republish is idempotent on the server side
+        //    (writes the same file) and only runs once per app startup.
+        //    Safe in our deployment because at most one device owns the
+        //    private key per account, so there's no inter-device race over
+        //    who the authoritative pubkey should be.
         try {
           final local = OpenPGP.decryptPrivateKey(existingArmor, passphrase);
-          final localArmor = (local.publicKey.armor() as String).trim();
-          final serverPub = await fetchRecipientKey(email);
-          final serverArmor =
-              (serverPub?.armor() as String?)?.trim();
-          if (serverArmor == null || serverArmor != localArmor) {
-            LoggerService.log('PGP',
-                'Migration: server pubkey mismatch for $email — republishing local pubkey');
-            _recipientKeyCache.remove(email);
-            _recipientKeyCacheAt.remove(email);
-            await _uploadPublicKey(local.publicKey, email);
-            _recipientKeyCache.remove(email);
-            _recipientKeyCacheAt.remove(email);
-            _negativeCache.remove(email);
-          }
+          _recipientKeyCache.remove(email);
+          _recipientKeyCacheAt.remove(email);
+          _negativeCache.remove(email);
+          await _uploadPublicKey(local.publicKey, email);
         } catch (ex) {
           LoggerService.logWarning('PGP',
-              'Migration: pubkey reconciliation failed for $email (non-fatal): $ex');
+              'Migration: pubkey republish failed for $email (non-fatal): $ex');
         }
       } catch (ex) {
         LoggerService.logWarning('PGP',
@@ -326,10 +323,15 @@ class PgpKeyService {
   // ── Recipient Key Discovery ──────────────────────────────────────
 
   static Future<dynamic> fetchRecipientKey(String email,
-      {String? senderEmail}) async {
+      {String? senderEmail, bool forceRefresh = false}) async {
     if (!email.endsWith('@icd360s.de')) return null;
 
     final key = email.toLowerCase();
+    if (forceRefresh) {
+      _recipientKeyCache.remove(key);
+      _recipientKeyCacheAt.remove(key);
+      _negativeCache.remove(key);
+    }
     final cached = _recipientKeyCache[key];
     final cachedAt = _recipientKeyCacheAt[key];
     if (cached != null &&
@@ -420,10 +422,11 @@ class PgpKeyService {
 
   static Future<Map<String, dynamic>> lookupAllRecipients(
       List<String> emails,
-      {String? senderEmail}) async {
+      {String? senderEmail, bool forceRefresh = false}) async {
     final results = <String, dynamic>{};
     await Future.wait(emails.map((email) async {
-      results[email] = await fetchRecipientKey(email, senderEmail: senderEmail);
+      results[email] = await fetchRecipientKey(email,
+          senderEmail: senderEmail, forceRefresh: forceRefresh);
     }));
     return results;
   }
