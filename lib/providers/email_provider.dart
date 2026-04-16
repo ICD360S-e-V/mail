@@ -138,6 +138,22 @@ class EmailProvider with ChangeNotifier {
         LoggerService.log('PROVIDER', '✓ Certificate active for: ${_currentAccount!.username}');
       }
 
+      // Kick off PGP blob sync + pubkey reconciliation EARLY, in parallel
+      // with the (slow, sequential) email IDs cache init below. Otherwise
+      // the user can open Compose or receive encrypted mail before the
+      // reconciled pubkey is published and see "no encryption key" /
+      // "Bad state: Decryption failed".
+      unawaited(() async {
+        try {
+          if (_accounts.isNotEmpty) {
+            await PgpKeyService.migrateExistingKeysToServer(_accounts);
+          }
+        } catch (ex) {
+          LoggerService.logWarning(
+              'PROVIDER', 'PGP blob sync failed (non-fatal): $ex');
+        }
+      }());
+
       // Initialize email IDs cache to prevent false "new email" notifications on first check
       LoggerService.log('PROVIDER', 'Initializing email IDs cache...');
       for (final account in _accounts) {
@@ -154,22 +170,6 @@ class EmailProvider with ChangeNotifier {
         }
       }
     }
-
-    // Sync any local PGP keys that aren't on the server yet. Runs every
-    // startup — idempotent because hasServerBlob() skips accounts already
-    // synced. Not gated by a one-shot flag: a previous run may have failed
-    // (e.g. transient 401 before MtlsClientPool), and accounts added AFTER
-    // a flagged run would otherwise never upload their key.
-    unawaited(() async {
-      try {
-        if (_accounts.isNotEmpty) {
-          await PgpKeyService.migrateExistingKeysToServer(_accounts);
-        }
-      } catch (ex) {
-        LoggerService.logWarning(
-            'PROVIDER', 'PGP blob sync failed (non-fatal): $ex');
-      }
-    }());
 
     // Start background checks (don't wait - async, with error handling)
     checkServerHealth().catchError((e) => LoggerService.logError('HEALTH_BG', e, StackTrace.current));

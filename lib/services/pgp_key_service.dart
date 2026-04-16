@@ -314,7 +314,8 @@ class PgpKeyService {
 
   // ── Recipient Key Discovery ──────────────────────────────────────
 
-  static Future<dynamic> fetchRecipientKey(String email) async {
+  static Future<dynamic> fetchRecipientKey(String email,
+      {String? senderEmail}) async {
     if (!email.endsWith('@icd360s.de')) return null;
 
     final key = email.toLowerCase();
@@ -335,8 +336,18 @@ class PgpKeyService {
     );
 
     try {
-      final baseClient = MtlsService.createMtlsHttpClient();
-      final client = baseClient ??
+      // /api/pubkeys requires mTLS (any valid client cert). Prefer the
+      // sender's pooled client when we know who's composing, so we never
+      // depend on the shared global SecurityContext that Android races.
+      HttpClient? client;
+      if (senderEmail != null) {
+        try {
+          client = await MtlsClientPool.instance.get(senderEmail);
+        } catch (_) {
+          client = null;
+        }
+      }
+      client ??= MtlsService.createMtlsHttpClient() ??
           (PinnedSecurityContext.createHttpClient()
             ..badCertificateCallback = (cert, host, port) {
               if (host == 'mail.icd360s.de') {
@@ -352,7 +363,9 @@ class PgpKeyService {
 
       if (response.statusCode != 200) {
         final errBody = await response.transform(utf8.decoder).join();
-        client.close();
+        // Pool owns client when senderEmail path was taken; closing an
+        // already-pooled client would break future requests. Only close
+        // the fallback (non-pooled) clients.
         LoggerService.logWarning('PGP',
             'Key fetch HTTP ${response.statusCode} for $email: $errBody');
         _negativeCache[key] = DateTime.now();
@@ -360,7 +373,6 @@ class PgpKeyService {
       }
 
       final armored = await response.transform(utf8.decoder).join();
-      client.close();
 
       final pubKey = OpenPGP.readPublicKey(armored);
 
@@ -386,10 +398,11 @@ class PgpKeyService {
   }
 
   static Future<Map<String, dynamic>> lookupAllRecipients(
-      List<String> emails) async {
+      List<String> emails,
+      {String? senderEmail}) async {
     final results = <String, dynamic>{};
     await Future.wait(emails.map((email) async {
-      results[email] = await fetchRecipientKey(email);
+      results[email] = await fetchRecipientKey(email, senderEmail: senderEmail);
     }));
     return results;
   }

@@ -475,7 +475,10 @@ class _ComposeWindowState extends State<ComposeWindow> {
       setState(() => _encryptionPossible = false);
       return;
     }
-    final results = await PgpKeyService.lookupAllRecipients(allEmails);
+    final results = await PgpKeyService.lookupAllRecipients(
+      allEmails,
+      senderEmail: _selectedAccount?.username,
+    );
     if (!mounted) return;
     setState(() {
       _recipientHasKey.clear();
