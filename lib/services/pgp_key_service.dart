@@ -44,8 +44,14 @@ class PgpKeyService {
   // Background isolate worker for non-blocking decrypt
   static PgpIsolateWorker? _worker;
 
-  // Recipient key cache (RAM only)
+  // Recipient key cache (RAM only) with 5-minute TTL. Without a TTL
+  // an app session that cached the recipient's OLD pubkey before the
+  // recipient's device republished would keep encrypting to the stale
+  // key forever — decryption on the receiver fails with "Bad state:
+  // Decryption failed" even after server-side pubkey reconciliation.
   static final Map<String, dynamic> _recipientKeyCache = {};
+  static final Map<String, DateTime> _recipientKeyCacheAt = {};
+  static const _recipientCacheTtl = Duration(minutes: 5);
   // Negative cache: tracks failed lookups to avoid hammering the server,
   // but expires after 30s so keys uploaded during the session are found.
   static final Map<String, DateTime> _negativeCache = {};
@@ -204,8 +210,10 @@ class PgpKeyService {
             LoggerService.log('PGP',
                 'Migration: server pubkey mismatch for $email — republishing local pubkey');
             _recipientKeyCache.remove(email);
+            _recipientKeyCacheAt.remove(email);
             await _uploadPublicKey(local.publicKey, email);
             _recipientKeyCache.remove(email);
+            _recipientKeyCacheAt.remove(email);
             _negativeCache.remove(email);
           }
         } catch (ex) {
@@ -245,6 +253,7 @@ class PgpKeyService {
     _publicKeys.clear();
     _activeEmail = null;
     _recipientKeyCache.clear();
+    _recipientKeyCacheAt.clear();
     _negativeCache.clear();
     _worker?.close();
     _worker = null;
@@ -322,7 +331,16 @@ class PgpKeyService {
 
     final key = email.toLowerCase();
     final cached = _recipientKeyCache[key];
-    if (cached != null) return cached;
+    final cachedAt = _recipientKeyCacheAt[key];
+    if (cached != null &&
+        cachedAt != null &&
+        DateTime.now().difference(cachedAt) < _recipientCacheTtl) {
+      return cached;
+    }
+    if (cached != null) {
+      _recipientKeyCache.remove(key);
+      _recipientKeyCacheAt.remove(key);
+    }
 
     // Negative cache: don't re-fetch within 30s of a miss
     final lastMiss = _negativeCache[key];
@@ -390,6 +408,7 @@ class PgpKeyService {
       _tofuFingerprints[key] = fpr;
 
       _recipientKeyCache[key] = pubKey;
+      _recipientKeyCacheAt[key] = DateTime.now();
       LoggerService.log('PGP', '✓ Fetched key for $email');
       return pubKey;
     } catch (ex) {
