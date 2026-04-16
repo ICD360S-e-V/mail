@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart' show compute, listEquals;
 import 'logger_service.dart';
 import 'certificate_service.dart';
 import 'master_vault.dart';
+import 'mtls_client_pool.dart';
 import 'mtls_service.dart';
 import 'pgp_isolate_worker.dart';
 import 'le_issuer_check.dart';
@@ -167,6 +168,7 @@ class PgpKeyService {
   /// synced the next time this runs.
   static Future<void> migrateExistingKeysToServer(
       List<dynamic> accounts) async {
+    final passphrase = await _getOrCreatePassphrase();
     for (final account in accounts) {
       final email = (account.username as String).toLowerCase();
       try {
@@ -175,23 +177,39 @@ class PgpKeyService {
             await MasterVault.instance.read(key: _vaultKey(email));
         if (existingArmor == null) continue;
 
-        // PgpSyncService now uses MtlsClientPool which builds a
-        // dedicated HttpClient per account from secure storage —
-        // no global cert-swap needed. If secure storage has no cert
-        // for this email, the pool's get() throws StateError and
-        // hasServerBlob/encryptAndUpload return gracefully.
-
-        // Skip if a blob already exists on the server (version > 0).
+        // 1) Upload the encrypted private-key blob if not on server yet.
         final alreadySynced = await PgpSyncService.hasServerBlob(email);
-        if (alreadySynced) {
+        if (!alreadySynced) {
+          await PgpSyncService.encryptAndUpload(email, existingArmor);
           LoggerService.log('PGP',
-              'Migration: blob already on server for $email — skipping');
-          continue;
+              'Migration: uploaded PGP blob to sync server for $email');
         }
 
-        await PgpSyncService.encryptAndUpload(email, existingArmor);
-        LoggerService.log('PGP',
-            'Migration: uploaded PGP blob to sync server for $email');
+        // 2) Reconcile published public key. If the server's published
+        //    pubkey fingerprint differs from ours (other device published
+        //    first, or this account was regenerated), upload our pubkey
+        //    so future senders encrypt to a key we can actually decrypt.
+        //    Without this, the server pubkey and our private key live on
+        //    different branches → every incoming encrypted mail fails
+        //    with "Bad state: Decryption failed".
+        try {
+          final local = OpenPGP.decryptPrivateKey(existingArmor, passphrase);
+          final localFpr =
+              List<int>.from(local.publicKey.fingerprint as Iterable<int>);
+          final serverPub = await fetchRecipientKey(email);
+          final serverFpr = serverPub == null
+              ? null
+              : List<int>.from(serverPub.fingerprint as Iterable<int>);
+          if (serverFpr == null || !listEquals(localFpr, serverFpr)) {
+            LoggerService.log('PGP',
+                'Migration: server pubkey mismatch for $email — republishing local pubkey');
+            _recipientKeyCache.remove(email);
+            await _uploadPublicKey(local.publicKey, email);
+          }
+        } catch (ex) {
+          LoggerService.logWarning('PGP',
+              'Migration: pubkey reconciliation failed for $email (non-fatal): $ex');
+        }
       } catch (ex) {
         LoggerService.logWarning('PGP',
             'Migration: failed to upload blob for $email (non-fatal): $ex');
@@ -489,16 +507,10 @@ class PgpKeyService {
 
   static Future<void> _uploadPublicKey(dynamic key, String email) async {
     try {
-      final baseClient = MtlsService.createMtlsHttpClient();
-      final client = baseClient ??
-          (PinnedSecurityContext.createHttpClient()
-            ..badCertificateCallback = (cert, host, port) {
-              if (host == 'mail.icd360s.de') {
-                return isTrustedLetsEncryptIssuer(cert.issuer);
-              }
-              return false;
-            });
-
+      // Use MtlsClientPool — per-account HttpClient avoids the global
+      // SecurityContext race that made uploads pick up whichever cert
+      // was loaded last.
+      final client = await MtlsClientPool.instance.get(email);
       final request = await client
           .postUrl(Uri.parse(_uploadEndpoint))
           .timeout(const Duration(seconds: 15));
@@ -511,7 +523,7 @@ class PgpKeyService {
       final response =
           await request.close().timeout(const Duration(seconds: 15));
       final body = await response.transform(utf8.decoder).join();
-      client.close();
+      // Pool owns client; do not close
 
       if (response.statusCode == 200) {
         LoggerService.log('PGP', '✓ Public key uploaded for $email');
