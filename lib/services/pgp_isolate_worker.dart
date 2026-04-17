@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:isolate';
 
 import 'package:dart_pg/dart_pg.dart';
+import 'package:dart_pg/src/type/private_key.dart';
 
 /// Long-lived background isolate for PGP decryption.
 ///
@@ -148,8 +149,10 @@ class PgpIsolateWorker {
               errors.add('no private key loaded');
               continue;
             }
-            // Try primary (v4) key first, fall back to v6 backup
-            final allKeys = [privateKey, if (fallbackKey != null) fallbackKey];
+            final allKeys = <PrivateKeyInterface>[
+              privateKey as PrivateKeyInterface,
+              if (fallbackKey != null) fallbackKey as PrivateKeyInterface,
+            ];
             final result = OpenPGP.decrypt(ct, decryptionKeys: allKeys);
             final literal = result.literalData;
             plaintexts.add(literal != null
