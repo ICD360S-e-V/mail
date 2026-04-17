@@ -315,16 +315,7 @@ class PgpKeyService {
     if (ct.mediaType.sub == MediaSubtype.multipartEncrypted) {
       for (final part in message.allPartsFlat) {
         if (part.mediaType.sub == MediaSubtype.applicationOctetStream) {
-          // For large messages (with attachments), decodeContentText()
-          // can corrupt PGP armor → OCB MAC check fails. Use raw
-          // binary bytes decoded as latin1 (preserves all byte values)
-          // to avoid charset/CTE transformations that mangle base64.
-          String? text;
-          final rawBytes = part.decodeContentBinary();
-          if (rawBytes != null) {
-            text = String.fromCharCodes(rawBytes);
-          }
-          text ??= part.decodeContentText();
+          final text = part.decodeContentText();
           if (text != null && text.contains('-----BEGIN PGP MESSAGE-----')) {
             final cleaned = _cleanArmor(text);
             LoggerService.log('PGP',
@@ -514,10 +505,13 @@ class PgpKeyService {
 
     // dart_pg 2.x: encryptCleartext for text encryption
     // Cast dynamic lists to the expected types for dart_pg
+    // Encrypt WITHOUT signing for now. Signing + encrypting large
+    // messages triggers "Mac check in OCB failed" in dart_pg's AEAD
+    // implementation. ProtonMail also separates signing from encryption.
+    // TODO: re-enable signing once dart_pg fixes OCB multi-chunk bug
     final encrypted = OpenPGP.encryptCleartext(
       innerMimeBody,
       encryptionKeys: List.from(allKeys),
-      signingKeys: List.from([_cachedPrivateKey]),
     );
     final ciphertext = encrypted.armor();
 
