@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.47.26 - 2026-04-17
+#### Bug Fixes
+- move PGP encryption to background isolate + extract attachments from decrypted inner MIME - (8c4e9da) - icd360sevofficial, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.47.25 - 2026-04-17
 #### Bug Fixes
 - disable AEAD/OCB — force CFB+MDC for encryption (dart_pg OCB bug) - (f6aa7a3) - Claude Code, *Claude Opus 4.6 (1M context)*
