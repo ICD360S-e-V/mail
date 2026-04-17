@@ -4,6 +4,7 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:dart_pg/dart_pg.dart';
+import 'package:dart_pg/src/common/config.dart' as pgp_config;
 import 'package:enough_mail/enough_mail.dart';
 import 'package:flutter/foundation.dart' show compute, listEquals;
 
@@ -505,14 +506,12 @@ class PgpKeyService {
 
     // dart_pg 2.x: encryptCleartext for text encryption
     // Cast dynamic lists to the expected types for dart_pg
-    // Use encryptBinaryData instead of encryptCleartext. The cleartext
-    // method creates a Literal Data Packet with format 't' (text) which
-    // applies CRLF canonicalization. When the inner MIME body contains
-    // base64-encoded attachments, this normalization corrupts the base64
-    // stream → OCB MAC check fails on decrypt for large messages.
-    // encryptBinaryData creates format 'b' (binary) → no CRLF mangling.
-    // Research: Sequoia PGP docs confirm format 't' "may need line ends
-    // converted to local form" while format 'b' preserves bytes as-is.
+    // Force legacy CFB+MDC (tag 18) instead of AEAD/OCB (tag 20).
+    // dart_pg's OCB implementation has a confirmed bug where MAC check
+    // fails on multi-chunk AEAD messages (>~2KB). v6 keys default to
+    // AEAD which triggers this. Setting aeadProtect=false forces the
+    // older SymEncryptedIntegrityProtectedDataPacket path.
+    pgp_config.Config.aeadProtect = false;
     final encrypted = OpenPGP.encryptBinaryData(
       Uint8List.fromList(utf8.encode(innerMimeBody)),
       encryptionKeys: List.from(allKeys),
