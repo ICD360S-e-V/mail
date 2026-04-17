@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.47.25 - 2026-04-17
+#### Bug Fixes
+- disable AEAD/OCB — force CFB+MDC for encryption (dart_pg OCB bug) - (f6aa7a3) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.47.24 - 2026-04-17
 #### Bug Fixes
 - use encryptBinaryData instead of encryptCleartext for PGP/MIME - (32dbb7b) - Claude Code, *Claude Opus 4.6 (1M context)*
