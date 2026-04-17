@@ -270,30 +270,22 @@ class MailService {
             }
 
             // E2EE: Detect PGP/MIME at the MimeMessage level (RFC 3156).
+            // Decrypt body AND extract inner attachments (Proton/Tuta pattern:
+            // outer message is just the PGP wrapper — real MIME is inside).
             final pgpCiphertext = PgpKeyService.extractPgpCiphertext(message);
+            MimeMessage? decryptedInner;
             if (pgpCiphertext != null) {
               try {
                 final decryptedRaw = await PgpKeyService.decrypt(pgpCiphertext);
-                // The decrypted payload is a MIME body (no email headers).
-                // Try to parse as MimeMessage, then extract text/plain.
-                // If parsing fails (common — no From/To headers), extract
-                // manually: find text between blank line and first boundary.
                 String? body;
                 try {
-                  // enough_mail's MIME parser expects CRLF line endings
-                  // (RFC 5322). The decrypted payload has LF only (from
-                  // _cleanArmor normalization). Convert back to CRLF.
                   final crlf = decryptedRaw
                       .replaceAll('\r\n', '\n')
                       .replaceAll('\n', '\r\n');
-                  final inner = MimeMessage.parseFromText(crlf);
-                  body = inner.decodeTextPlainPart() ?? inner.decodeTextHtmlPart();
+                  decryptedInner = MimeMessage.parseFromText(crlf);
+                  body = decryptedInner.decodeTextPlainPart() ?? decryptedInner.decodeTextHtmlPart();
                 } catch (_) {}
                 if (body == null || body.isEmpty) {
-                  // Manual extraction for multipart: find the text/plain
-                  // content inside the MIME structure. Look for a text/plain
-                  // Content-Type header, skip to its blank line, then read
-                  // until the next boundary.
                   final lines = decryptedRaw.split('\n');
                   var inTextPart = false;
                   var pastHeader = false;
@@ -311,7 +303,7 @@ class MailService {
                         pastHeader = true;
                         continue;
                       }
-                      continue; // skip other headers (CTE, etc)
+                      continue;
                     }
                     if (inTextPart && pastHeader) {
                       if (trimmed.startsWith('--')) break;
@@ -339,8 +331,12 @@ class MailService {
             email.threatScore = threatAnalysis.score;
             email.threatDetails = threatAnalysis.details;
 
-            // Extract attachments (both 'attachment' and 'inline' with filename)
-            for (final part in message.allPartsFlat) {
+            // Extract attachments: from decrypted inner MIME if encrypted,
+            // otherwise from outer message. PGP/MIME wraps the entire MIME
+            // tree (body + attachments) inside the ciphertext — the outer
+            // message only has application/pgp-encrypted + encrypted.asc.
+            final attachmentSource = decryptedInner ?? message;
+            for (final part in attachmentSource.allPartsFlat) {
               final disposition = part.getHeaderContentDisposition();
               final fileName = part.decodeFileName();
               final isAttachment = disposition?.disposition == ContentDisposition.attachment;
@@ -358,6 +354,10 @@ class MailService {
                   ));
                 }
               }
+            }
+            if (decryptedInner != null && email.attachments.isNotEmpty) {
+              LoggerService.log('PGP',
+                  '✓ Extracted ${email.attachments.length} attachment(s) from encrypted inner MIME');
             }
 
             emails.add(email);
@@ -646,12 +646,14 @@ class MailService {
         LoggerService.log('EMAIL-HISTORY', '✓ Recipients saved to history');
       });
 
-      // Save to Sent folder (awaited to ensure it completes)
-      try {
-        await _saveToSentFolder(account, mimeMessage, subject, draftUid: draftUid);
-      } catch (sentEx) {
+      // Save to Sent folder — fire-and-forget (Proton pattern: UI returns
+      // immediately after SMTP success, Sent-folder APPEND runs in background).
+      // This avoids a second 5-7MB upload blocking the UI after sending.
+      _saveToSentFolder(account, mimeMessage, subject, draftUid: draftUid).then((_) {
+        LoggerService.log('SMTP', '✓ Sent folder save completed in background');
+      }).catchError((sentEx) {
         LoggerService.logWarning('SMTP', '⚠ Email sent but could not save to Sent folder: $sentEx');
-      }
+      });
     } catch (ex, stackTrace) {
       // Ensure SMTP client is disconnected on error
       try { await smtpClient?.disconnect(); } catch (_) {}
@@ -740,12 +742,12 @@ class MailService {
         LoggerService.log('EMAIL-HISTORY', '✓ Recipients saved to history');
       });
 
-      // Save to Sent folder (awaited to ensure it completes)
-      try {
-        await _saveToSentFolder(account, mimeMessage, subject, draftUid: draftUid);
-      } catch (sentEx) {
+      // Save to Sent folder — fire-and-forget (same pattern as sendEmailWithAttachmentsAsync)
+      _saveToSentFolder(account, mimeMessage, subject, draftUid: draftUid).then((_) {
+        LoggerService.log('SMTP', '✓ Sent folder save completed in background');
+      }).catchError((sentEx) {
         LoggerService.logWarning('SMTP', '⚠ Email sent but could not save to Sent folder: $sentEx');
-      }
+      });
     } catch (ex, stackTrace) {
       LoggerService.logError('SMTP', ex, stackTrace);
       rethrow;
