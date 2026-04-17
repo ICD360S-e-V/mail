@@ -26,6 +26,7 @@ import 'pinned_security_context.dart';
 /// and only the first account's key was ever uploaded.
 class PgpKeyService {
   static const _vaultKeyPrivatePrefix = 'pgp_private_key_v1';
+  static const _vaultKeyV6Backup = 'pgp_private_key_v6_backup';
   static const _vaultKeyPassphrase = 'pgp_passphrase_v1';
   static const _uploadEndpoint =
       'https://mail.icd360s.de/api/upload-pubkey.php';
@@ -97,21 +98,31 @@ class PgpKeyService {
     if (existingArmor != null) {
       try {
         final privateKey = OpenPGP.decryptPrivateKey(existingArmor, passphrase);
-        _privateKeys[key] = privateKey;
-        _publicKeys[key] = privateKey.publicKey;
-        // SECURITY: Do NOT re-upload the public key on every startup.
-        // If another device generated a different keypair for the same
-        // account, that device's pubkey is on the server. Re-uploading
-        // ours would overwrite it, causing a split-brain where senders
-        // use one pubkey (on server) but our private key is different →
-        // "Bad state: Decryption failed" for all incoming encrypted mail.
-        // Upload only happens once at key generation (below).
-        if (_activeEmail == null) {
-          _activeEmail = key;
-          await _startWorker(existingArmor, passphrase);
+
+        // MIGRATION: v6 keys (Ed25519/X25519) use AEAD/OCB which has a
+        // confirmed dart_pg bug: MAC check fails on multi-chunk messages
+        // (>~2KB). Regenerate as v4 keys (EdDSA legacy/ECDH) which use
+        // CFB+MDC (SEIPD v1) — no AEAD, no OCB bug.
+        if (privateKey.publicKey.aeadSupported) {
+          LoggerService.log('PGP',
+              '⚠ Detected v6 key for $email (AEAD-capable) — migrating to v4');
+          // Backup v6 key for decrypting old messages
+          final v6Backup = await vault.read(key: '${_vaultKeyV6Backup}_$key');
+          if (v6Backup == null) {
+            await vault.write(key: '${_vaultKeyV6Backup}_$key', value: existingArmor);
+            LoggerService.log('PGP', 'v6 key backed up for decrypt fallback');
+          }
+          // Fall through to key generation below (will create v4 key)
+        } else {
+          _privateKeys[key] = privateKey;
+          _publicKeys[key] = privateKey.publicKey;
+          if (_activeEmail == null) {
+            _activeEmail = key;
+            await _startWorker(existingArmor, passphrase);
+          }
+          LoggerService.log('PGP', 'Loaded existing v4 PGP key for $email');
+          return privateKey;
         }
-        LoggerService.log('PGP', 'Loaded existing PGP key for $email');
-        return privateKey;
       } catch (ex) {
         LoggerService.logWarning('PGP', 'Failed to load PGP key for $email: $ex');
       }
@@ -139,8 +150,10 @@ class PgpKeyService {
           'PgpSyncService.downloadAndDecrypt failed for $email (falling back to local gen): $ex');
     }
 
-    // FIRST DEVICE FLOW: no key anywhere — generate a fresh keypair.
-    LoggerService.log('PGP', 'Generating Ed25519/X25519 keypair for $email...');
+    // FIRST DEVICE FLOW (or v6→v4 migration): generate a fresh v4 keypair.
+    // v4 keys use EdDSA legacy + ECDH (Curve25519) — no AEAD/SEIPD v2,
+    // avoiding dart_pg's OCB bug on multi-chunk messages.
+    LoggerService.log('PGP', 'Generating v4 EdDSA/ECDH keypair for $email...');
     final privateKey = await compute(_generateKeyIsolate, [email, passphrase]);
 
     final armoredKey = privateKey.armor();
@@ -292,15 +305,22 @@ class PgpKeyService {
     return _worker!.decryptBatch(ciphertexts);
   }
 
-  /// Start the background decrypt worker.
+  /// Start the background decrypt worker with optional v6 fallback key.
   static Future<void> _startWorker(String armoredKey, String passphrase) async {
     _worker?.close();
+    // Load v6 backup key for decrypting old messages (pre-migration)
+    final email = _activeEmail ?? '';
+    String? v6Backup;
+    try {
+      v6Backup = await MasterVault.instance.read(key: '${_vaultKeyV6Backup}_$email');
+    } catch (_) {}
     _worker = await PgpIsolateWorker.spawn(
       armoredKey: armoredKey,
       passphrase: passphrase,
+      fallbackArmoredKey: v6Backup,
     );
     _worker!.diagCallback = (msg) => LoggerService.log('PGP_WORKER', msg);
-    LoggerService.log('PGP', '✓ Decrypt worker started (background isolate)');
+    LoggerService.log('PGP', '✓ Decrypt worker started${v6Backup != null ? " (with v6 fallback)" : ""}');
   }
 
   // ── PGP/MIME Detection + Extraction ──────────────────────────────
@@ -556,11 +576,14 @@ class PgpKeyService {
   // ── Isolate-safe functions (must be top-level or static) ────────
 
   /// Key generation for compute() — must be static, not a lambda.
+  /// Uses v4 ECC (EdDSA legacy + ECDH/Curve25519) instead of v6
+  /// (Ed25519/X25519) to avoid dart_pg's AEAD/OCB multi-chunk bug.
   static dynamic _generateKeyIsolate(List<String> args) {
     return OpenPGP.generateKey(
       [args[0]],
       args[1],
-      type: KeyType.curve25519,
+      type: KeyType.ecc,
+      curve: Ecc.ed25519,
     );
   }
 
