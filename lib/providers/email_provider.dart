@@ -2,8 +2,12 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'dart:async';
 import '../models/models.dart';
 import '../services/services.dart';
+import 'dart:io' show Platform;
+import '../services/device_approval_service.dart';
 import '../services/device_registration_service.dart';
+import '../services/log_upload_service.dart';
 import '../services/pgp_key_service.dart';
+import '../services/update_service.dart';
 import '../services/pin_unlock_service.dart';
 import '../services/master_vault.dart';
 import '../utils/pii_redactor.dart';
@@ -269,9 +273,40 @@ class EmailProvider with ChangeNotifier {
           account.username, password: pwd);
     }
 
+    // Cert-only account with no cert in storage. Instead of silently
+    // failing (leaves the account stuck on spinning circle forever),
+    // auto-submit a Faza 3 re-approval request so the admin gets
+    // notified and can approve. The account stays disconnected until
+    // approved, but at least progress is made automatically.
     LoggerService.logWarning('PROVIDER',
-        'Cert-only account ${account.username} but secure storage is empty '
-        '— needs Faza 3 re-approval');
+        'Cert-only account ${account.username} — secure storage empty, '
+        'requesting Faza 3 re-approval automatically');
+    try {
+      final deviceId = await LogUploadService.getDeviceId();
+      final result = await DeviceApprovalService.requestAccess(
+        username: account.username,
+        deviceId: deviceId,
+        deviceName: Platform.localHostname,
+        deviceType: Platform.operatingSystem,
+        osVersion: Platform.operatingSystemVersion,
+        clientVersion: UpdateService.currentVersion,
+        hostname: 'mail.icd360s.de',
+      );
+      if (result.success) {
+        LoggerService.log('PROVIDER',
+            '✓ Auto re-approval request submitted for ${account.username} '
+            '(requestId: ${result.requestId})');
+        account.connectionError = 'Awaiting admin re-approval (cert lost)';
+        account.connectionStatus = AccountConnectionStatus.authError;
+      } else {
+        LoggerService.logWarning('PROVIDER',
+            'Auto re-approval request failed for ${account.username}: '
+            '${result.error}');
+      }
+    } catch (ex) {
+      LoggerService.logWarning('PROVIDER',
+          'Auto re-approval request error for ${account.username}: $ex');
+    }
     return false;
   }
 
