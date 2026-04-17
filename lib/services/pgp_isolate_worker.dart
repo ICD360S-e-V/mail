@@ -21,9 +21,12 @@ class PgpIsolateWorker {
   }
 
   /// Spawn the worker and send key material. Call once at vault unlock.
+  /// [fallbackArmoredKey] is an optional v6 key kept for decrypting old
+  /// messages encrypted before the v6→v4 migration.
   static Future<PgpIsolateWorker> spawn({
     required String armoredKey,
     required String passphrase,
+    String? fallbackArmoredKey,
   }) async {
     final initPort = RawReceivePort();
     final completer = Completer<(ReceivePort, SendPort)>.sync();
@@ -38,8 +41,12 @@ class PgpIsolateWorker {
     await Isolate.spawn(_isolateEntry, initPort.sendPort);
     final (responses, commands) = await completer.future;
 
-    // Send key material once — isolate parses and caches it
-    commands.send({'init': true, 'armoredKey': armoredKey, 'passphrase': passphrase});
+    commands.send({
+      'init': true,
+      'armoredKey': armoredKey,
+      'passphrase': passphrase,
+      'fallbackArmoredKey': fallbackArmoredKey,
+    });
 
     return PgpIsolateWorker._(responses, commands);
   }
@@ -93,7 +100,8 @@ class PgpIsolateWorker {
     final receivePort = ReceivePort();
     mainPort.send(receivePort.sendPort);
 
-    dynamic privateKey; // PrivateKeyInterface — held in isolate memory
+    dynamic privateKey;
+    dynamic fallbackKey; // v6 key for decrypting pre-migration messages
 
     receivePort.listen((dynamic message) {
       if (message == 'shutdown') {
@@ -103,23 +111,30 @@ class PgpIsolateWorker {
 
       final msg = message as Map;
 
-      // Init: parse and cache key
       if (msg.containsKey('init')) {
+        final passphrase = msg['passphrase'] as String;
         try {
           privateKey = OpenPGP.decryptPrivateKey(
             msg['armoredKey'] as String,
-            msg['passphrase'] as String,
+            passphrase,
           );
-          // Log the key fingerprint so we can verify which key the worker holds
           final fp = privateKey.fingerprint;
           mainPort.send({'diag': 'Worker initialized with key fingerprint: ${fp.toList().map((b) => b.toRadixString(16).padLeft(2, "0")).join().toUpperCase()}'});
         } catch (ex) {
           mainPort.send({'diag': 'Worker key parse FAILED: $ex'});
         }
+        final fbArmor = msg['fallbackArmoredKey'] as String?;
+        if (fbArmor != null) {
+          try {
+            fallbackKey = OpenPGP.decryptPrivateKey(fbArmor, passphrase);
+            mainPort.send({'diag': 'v6 fallback key loaded for old messages'});
+          } catch (ex) {
+            mainPort.send({'diag': 'v6 fallback key parse failed: $ex'});
+          }
+        }
         return;
       }
 
-      // Batch decrypt
       if (msg.containsKey('id')) {
         final id = msg['id'] as int;
         final ciphertexts = (msg['ciphertexts'] as List).cast<String>();
@@ -133,7 +148,9 @@ class PgpIsolateWorker {
               errors.add('no private key loaded');
               continue;
             }
-            final result = OpenPGP.decrypt(ct, decryptionKeys: [privateKey]);
+            // Try primary (v4) key first, fall back to v6 backup
+            final allKeys = [privateKey, if (fallbackKey != null) fallbackKey];
+            final result = OpenPGP.decrypt(ct, decryptionKeys: allKeys);
             final literal = result.literalData;
             plaintexts.add(literal != null
                 ? utf8.decode(literal.binary, allowMalformed: true)
