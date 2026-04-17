@@ -505,12 +505,16 @@ class PgpKeyService {
 
     // dart_pg 2.x: encryptCleartext for text encryption
     // Cast dynamic lists to the expected types for dart_pg
-    // Encrypt WITHOUT signing for now. Signing + encrypting large
-    // messages triggers "Mac check in OCB failed" in dart_pg's AEAD
-    // implementation. ProtonMail also separates signing from encryption.
-    // TODO: re-enable signing once dart_pg fixes OCB multi-chunk bug
-    final encrypted = OpenPGP.encryptCleartext(
-      innerMimeBody,
+    // Use encryptBinaryData instead of encryptCleartext. The cleartext
+    // method creates a Literal Data Packet with format 't' (text) which
+    // applies CRLF canonicalization. When the inner MIME body contains
+    // base64-encoded attachments, this normalization corrupts the base64
+    // stream → OCB MAC check fails on decrypt for large messages.
+    // encryptBinaryData creates format 'b' (binary) → no CRLF mangling.
+    // Research: Sequoia PGP docs confirm format 't' "may need line ends
+    // converted to local form" while format 'b' preserves bytes as-is.
+    final encrypted = OpenPGP.encryptBinaryData(
+      Uint8List.fromList(utf8.encode(innerMimeBody)),
       encryptionKeys: List.from(allKeys),
     );
     final ciphertext = encrypted.armor();
