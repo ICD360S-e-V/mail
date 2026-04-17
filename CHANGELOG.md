@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.47.29 - 2026-04-17
+#### Bug Fixes
+- decrypt worker accepts v6 fallback key for pre-migration messages - (861aaee) - icd360sevofficial, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.47.28 - 2026-04-17
 #### Bug Fixes
 - migrate v6→v4 PGP keys to avoid dart_pg AEAD/OCB bug - (ccd2fac) - icd360sevofficial, *Claude Opus 4.6 (1M context)*
