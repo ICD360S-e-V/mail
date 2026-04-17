@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.47.27 - 2026-04-17
+#### Bug Fixes
+- extract attachments from decrypted PGP/MIME + non-blocking Sent save - (4b26f41) - icd360sevofficial, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.47.26 - 2026-04-17
 #### Bug Fixes
 - move PGP encryption to background isolate + extract attachments from decrypted inner MIME - (8c4e9da) - icd360sevofficial, *Claude Opus 4.6 (1M context)*
