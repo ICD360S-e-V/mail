@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.47.22 - 2026-04-17
+#### Bug Fixes
+- include trailing \n after END marker + stricter email validation - (72c2b91) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.47.21 - 2026-04-17
 #### Bug Fixes
 - auto re-request Faza 3 approval when cert is lost from storage - (959ff82) - Claude Code, *Claude Opus 4.6 (1M context)*
