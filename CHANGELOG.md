@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.47.24 - 2026-04-17
+#### Bug Fixes
+- use encryptBinaryData instead of encryptCleartext for PGP/MIME - (32dbb7b) - Claude Code, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.47.23 - 2026-04-17
 #### Bug Fixes
 - encrypt without signing to work around dart_pg OCB multi-chunk bug - (59357af) - Claude Code, *Claude Opus 4.6 (1M context)*
