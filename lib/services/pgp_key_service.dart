@@ -504,19 +504,14 @@ class PgpKeyService {
     });
     if (!alreadyHasSelf) allKeys.add(_cachedPublicKey);
 
-    // dart_pg 2.x: encryptCleartext for text encryption
-    // Cast dynamic lists to the expected types for dart_pg
-    // Force legacy CFB+MDC (tag 18) instead of AEAD/OCB (tag 20).
-    // dart_pg's OCB implementation has a confirmed bug where MAC check
-    // fails on multi-chunk AEAD messages (>~2KB). v6 keys default to
-    // AEAD which triggers this. Setting aeadProtect=false forces the
-    // older SymEncryptedIntegrityProtectedDataPacket path.
-    pgp_config.Config.aeadProtect = false;
-    final encrypted = OpenPGP.encryptBinaryData(
-      Uint8List.fromList(utf8.encode(innerMimeBody)),
-      encryptionKeys: List.from(allKeys),
-    );
-    final ciphertext = encrypted.armor();
+    // Encrypt on background isolate (Proton/Tuta pattern: never block UI).
+    // Serialize keys to armored strings — Isolate boundary cannot transfer
+    // dart_pg key objects (they contain closures/FFI handles).
+    final armoredKeys = allKeys.map((k) => k.armor() as String).toList();
+    final ciphertext = await compute(_encryptIsolate, [
+      innerMimeBody,
+      ...armoredKeys,
+    ]);
 
     // RFC 2047 encode subject if non-ASCII
     final encodedSubject = _rfc2047Encode(subject);
@@ -567,6 +562,21 @@ class PgpKeyService {
       args[1],
       type: KeyType.curve25519,
     );
+  }
+
+  /// PGP encryption on background isolate — prevents UI freeze on large
+  /// messages (5-7MB with attachments caused 10-30s freeze on Android).
+  /// args[0] = plaintext MIME body, args[1..N] = armored public keys.
+  static String _encryptIsolate(List<String> args) {
+    final plaintext = args[0];
+    final armoredKeys = args.sublist(1);
+    final keys = armoredKeys.map((a) => OpenPGP.readPublicKey(a)).toList();
+    pgp_config.Config.aeadProtect = false;
+    final encrypted = OpenPGP.encryptBinaryData(
+      Uint8List.fromList(utf8.encode(plaintext)),
+      encryptionKeys: keys,
+    );
+    return encrypted.armor();
   }
 
   // ── Helpers ──────────────────────────────────────────────────────
