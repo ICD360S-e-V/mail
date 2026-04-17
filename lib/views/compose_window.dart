@@ -470,7 +470,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
       ..._getRecipientsList(),
       ..._getCcList(),
       ..._getBccList(),
-    ].where((e) => e.contains('@')).toList();
+    ].where((e) => e.contains('@') && e.contains('.')).toList();
     if (allEmails.isEmpty) {
       setState(() => _encryptionPossible = false);
       return;

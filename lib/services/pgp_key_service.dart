@@ -349,11 +349,18 @@ class PgpKeyService {
     final start = raw.indexOf('-----BEGIN PGP MESSAGE-----');
     final end = raw.indexOf('-----END PGP MESSAGE-----');
     if (start < 0 || end < 0) return raw.trim();
-    final block = raw.substring(start, end + '-----END PGP MESSAGE-----'.length);
+    // Include the trailing \n after the END marker — it's part of the
+    // armor format. Missing it drops 1 byte which breaks OCB MAC on
+    // large messages. Server has N bytes, we must extract exactly N.
+    var endIdx = end + '-----END PGP MESSAGE-----'.length;
+    if (endIdx < raw.length && (raw[endIdx] == '\n' || raw[endIdx] == '\r')) {
+      endIdx++; // include trailing newline
+      if (endIdx < raw.length && raw[endIdx] == '\n') {
+        endIdx++; // \r\n case: include both
+      }
+    }
+    final block = raw.substring(start, endIdx);
     // Normalize line endings: \r\n → \n, stray \r → \n
-    // Do NOT trim — the trailing \n after END marker is part of the
-    // armor format. Stripping it drops 1 byte, which breaks OCB MAC
-    // verification on large messages.
     return block.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
   }
 
