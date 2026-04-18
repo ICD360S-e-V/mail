@@ -282,7 +282,7 @@ class EmailProvider with ChangeNotifier {
         'Cert-only account ${account.username} — secure storage empty, '
         'requesting Faza 3 re-approval automatically');
     try {
-      final deviceId = await LogUploadService.getDeviceId();
+      final deviceId = await DeviceRegistrationService.getOrCreateDeviceId();
       final result = await DeviceApprovalService.requestAccess(
         username: account.username,
         deviceId: deviceId,
