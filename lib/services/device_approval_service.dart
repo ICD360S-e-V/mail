@@ -52,6 +52,10 @@ class AccessRequestResult {
   /// If `error == "rate_limited"`, seconds until the user may retry.
   final int? retryAfterSeconds;
 
+  /// Set when the server auto-approved (same device_id already registered).
+  final bool autoApproved;
+  final String? oneTimeToken;
+
   AccessRequestResult({
     required this.success,
     this.requestId,
@@ -61,6 +65,8 @@ class AccessRequestResult {
     this.pollIntervalSeconds = 5,
     this.expiresInSeconds = 300,
     this.retryAfterSeconds,
+    this.autoApproved = false,
+    this.oneTimeToken,
   });
 
   bool get isRateLimited => error == 'rate_limited';
@@ -197,8 +203,11 @@ class DeviceApprovalService {
           return AccessRequestResult(
               success: false, error: 'no_request_id');
         }
+        final isAutoApproved = body['auto_approved'] == true;
+        final token = body['one_time_token']?.toString();
         LoggerService.log('APPROVAL',
-            'Request accepted: $requestId (transfer=${body['is_transfer']})');
+            'Request accepted: $requestId (transfer=${body['is_transfer']}'
+            '${isAutoApproved ? ", auto-approved" : ""})');
         return AccessRequestResult(
           success: true,
           requestId: requestId,
@@ -207,6 +216,8 @@ class DeviceApprovalService {
               (body['poll_interval_seconds'] as num?)?.toInt() ?? 5,
           expiresInSeconds:
               (body['expires_in_seconds'] as num?)?.toInt() ?? 300,
+          autoApproved: isAutoApproved,
+          oneTimeToken: token,
         );
       }
 
