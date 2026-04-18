@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.47.33 - 2026-04-18
+#### Bug Fixes
+- pass current account username to delivery status fetch - (6be1440) - icd360sevofficial, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.47.32 - 2026-04-18
 #### Bug Fixes
 - use per-account mTLS cert for delivery status API - (2142c06) - icd360sevofficial, *Claude Opus 4.6 (1M context)*
