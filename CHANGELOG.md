@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.47.31 - 2026-04-18
+#### Bug Fixes
+- revert _saveToSentFolder to await — fire-and-forget lost Sent copies - (2b4f74e) - icd360sevofficial, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.47.30 - 2026-04-17
 #### Bug Fixes
 - type-safe decrypt key list (List<PrivateKeyInterface>) - (f0d9577) - icd360sevofficial, *Claude Opus 4.6 (1M context)*
