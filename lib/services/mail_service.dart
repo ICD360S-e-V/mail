@@ -646,14 +646,14 @@ class MailService {
         LoggerService.log('EMAIL-HISTORY', '✓ Recipients saved to history');
       });
 
-      // Save to Sent folder — fire-and-forget (Proton pattern: UI returns
-      // immediately after SMTP success, Sent-folder APPEND runs in background).
-      // This avoids a second 5-7MB upload blocking the UI after sending.
-      _saveToSentFolder(account, mimeMessage, subject, draftUid: draftUid).then((_) {
-        LoggerService.log('SMTP', '✓ Sent folder save completed in background');
-      }).catchError((sentEx) {
+      // Save to Sent folder (awaited — losing the Sent copy is worse than
+      // a few extra seconds of spinner). Previous fire-and-forget silently
+      // swallowed errors, leaving Sent folder empty.
+      try {
+        await _saveToSentFolder(account, mimeMessage, subject, draftUid: draftUid);
+      } catch (sentEx) {
         LoggerService.logWarning('SMTP', '⚠ Email sent but could not save to Sent folder: $sentEx');
-      });
+      }
     } catch (ex, stackTrace) {
       // Ensure SMTP client is disconnected on error
       try { await smtpClient?.disconnect(); } catch (_) {}
@@ -742,12 +742,12 @@ class MailService {
         LoggerService.log('EMAIL-HISTORY', '✓ Recipients saved to history');
       });
 
-      // Save to Sent folder — fire-and-forget (same pattern as sendEmailWithAttachmentsAsync)
-      _saveToSentFolder(account, mimeMessage, subject, draftUid: draftUid).then((_) {
-        LoggerService.log('SMTP', '✓ Sent folder save completed in background');
-      }).catchError((sentEx) {
+      // Save to Sent folder (awaited)
+      try {
+        await _saveToSentFolder(account, mimeMessage, subject, draftUid: draftUid);
+      } catch (sentEx) {
         LoggerService.logWarning('SMTP', '⚠ Email sent but could not save to Sent folder: $sentEx');
-      });
+      }
     } catch (ex, stackTrace) {
       LoggerService.logError('SMTP', ex, stackTrace);
       rethrow;
