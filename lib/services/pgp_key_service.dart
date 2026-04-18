@@ -5,13 +5,6 @@ import 'dart:typed_data';
 
 import 'package:dart_pg/dart_pg.dart';
 import 'package:dart_pg/src/common/config.dart' as pgp_config;
-import 'package:dart_pg/src/message/encrypted_message.dart' as pgp_em;
-import 'package:dart_pg/src/packet/key/session_key.dart' as pgp_sk;
-import 'package:dart_pg/src/packet/packet_list.dart' as pgp_pl;
-import 'package:dart_pg/src/packet/public_key_encrypted_session_key.dart'
-    as pgp_pkesk;
-import 'package:dart_pg/src/packet/sym_encrypted_integrity_protected_data.dart'
-    as pgp_seipd;
 import 'package:enough_mail/enough_mail.dart';
 import 'package:flutter/foundation.dart' show compute, listEquals;
 
@@ -597,37 +590,15 @@ class PgpKeyService {
   /// PGP encryption on background isolate — prevents UI freeze on large
   /// messages (5-7MB with attachments caused 10-30s freeze on Android).
   /// args[0] = plaintext MIME body, args[1..N] = armored public keys.
-  ///
-  /// Bypasses dart_pg's generateSessionKey() which forces AEAD when ANY
-  /// recipient key has aeadSupported=true (v6 keys). AEAD/OCB has a
-  /// confirmed multi-chunk bug (_crypt offset calculation) that corrupts
-  /// messages >262KB — exactly the case with attachments. We create the
-  /// session key manually with aead=null to force SEIPD v1 (CFB+MDC).
   static String _encryptIsolate(List<String> args) {
     final plaintext = args[0];
     final armoredKeys = args.sublist(1);
     final keys = armoredKeys.map((a) => OpenPGP.readPublicKey(a)).toList();
-
-    final message = OpenPGP.createLiteralMessage(
+    pgp_config.Config.aeadProtect = false;
+    final encrypted = OpenPGP.encryptBinaryData(
       Uint8List.fromList(utf8.encode(plaintext)),
+      encryptionKeys: keys,
     );
-
-    final sessionKey = pgp_sk.SessionKey.produceKey(SymmetricAlgorithm.aes256);
-
-    final encrypted = pgp_em.EncryptedMessage(pgp_pl.PacketList([
-      ...keys.map((key) =>
-        pgp_pkesk.PublicKeyEncryptedSessionKeyPacket.encryptSessionKey(
-          key.getEncryptionKeyPacket()!,
-          sessionKey,
-        ),
-      ),
-      pgp_seipd.SymEncryptedIntegrityProtectedDataPacket.encryptPackets(
-        sessionKey.encryptionKey,
-        (message as BaseMessage).packetList,
-        symmetric: sessionKey.symmetric,
-      ),
-    ]));
-
     return encrypted.armor();
   }
 
