@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.47.35 - 2026-04-18
+#### Bug Fixes
+- auto re-approval used wrong device ID — sent random log ID instead of persistent UUID - (af078c0) - icd360sevofficial
+
+- - -
+
 ## v2.47.34 - 2026-04-18
 #### Bug Fixes
 - bypass dart_pg AEAD override — force SEIPD v1 for all encryption - (f2b4e5a) - icd360sevofficial
