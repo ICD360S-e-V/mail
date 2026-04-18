@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.49.0 - 2026-04-18
+#### Features
+- auto-restore cert when server auto-approves same device - (a980659) - icd360sevofficial
+
+- - -
+
 ## v2.48.0 - 2026-04-18
 #### Features
 - parse auto-approve response from server (same device cert re-enrollment) - (2dc2160) - icd360sevofficial
