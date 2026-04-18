@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.47.34 - 2026-04-18
+#### Bug Fixes
+- bypass dart_pg AEAD override — force SEIPD v1 for all encryption - (f2b4e5a) - icd360sevofficial
+
+- - -
+
 ## v2.47.33 - 2026-04-18
 #### Bug Fixes
 - pass current account username to delivery status fetch - (6be1440) - icd360sevofficial, *Claude Opus 4.6 (1M context)*
