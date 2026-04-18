@@ -1467,8 +1467,9 @@ class _MainWindowState extends State<MainWindow> {
                                 MailStatusService.getCached(id) == null)
                             .toList();
                         if (ids.isNotEmpty) {
+                          final sender = emailProvider.currentAccount?.username;
                           WidgetsBinding.instance.addPostFrameCallback((_) {
-                            MailStatusService.fetchBatch(ids).then((_) {
+                            MailStatusService.fetchBatch(ids, senderUsername: sender).then((_) {
                               if (mounted) setState(() {});
                             });
                           });
