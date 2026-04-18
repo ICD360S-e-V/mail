@@ -292,9 +292,31 @@ class EmailProvider with ChangeNotifier {
         clientVersion: UpdateService.currentVersion,
         hostname: 'mail.icd360s.de',
       );
-      if (result.success) {
+      if (result.success && result.autoApproved && result.oneTimeToken != null) {
         LoggerService.log('PROVIDER',
-            '✓ Auto re-approval request submitted for ${account.username} '
+            '✓ Auto-approved (same device) for ${account.username} — downloading cert');
+        try {
+          final certBundle = await DeviceApprovalService.downloadCert(
+            requestId: result.requestId!,
+            oneTimeToken: result.oneTimeToken!,
+          );
+          if (certBundle == null) throw StateError('Cert download returned null');
+          await CertificateService.storeBundle(
+            username: account.username,
+            clientCert: certBundle.clientCert,
+            clientKey: certBundle.clientKey,
+            caCert: certBundle.caCert,
+          );
+          LoggerService.log('PROVIDER',
+              '✓ Cert auto-restored for ${account.username}');
+          return true;
+        } catch (certEx) {
+          LoggerService.logWarning('PROVIDER',
+              'Auto-approved but cert download failed for ${account.username}: $certEx');
+        }
+      } else if (result.success) {
+        LoggerService.log('PROVIDER',
+            '✓ Re-approval request submitted for ${account.username} '
             '(requestId: ${result.requestId})');
         account.connectionError = 'Awaiting admin re-approval (cert lost)';
         account.connectionStatus = AccountConnectionStatus.authError;
