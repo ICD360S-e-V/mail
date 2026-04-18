@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'le_issuer_check.dart';
 import 'logger_service.dart';
+import 'mtls_client_pool.dart';
 import 'mtls_service.dart';
 import 'pinned_security_context.dart';
 
@@ -85,7 +86,9 @@ class MailStatusService {
 
   /// Fetch delivery status for a batch of message IDs. Results are cached.
   /// IDs already in the cache or currently being fetched are skipped.
-  static Future<void> fetchBatch(List<String> messageIds) async {
+  /// [senderUsername] selects the per-account mTLS cert so the server
+  /// sees the correct CN and matches from=<user@icd360s.de> in maillog.
+  static Future<void> fetchBatch(List<String> messageIds, {String? senderUsername}) async {
     final toFetch = messageIds
         .where((id) => !_cache.containsKey(id) && !_inFlight.contains(id))
         .toSet()
@@ -95,12 +98,28 @@ class MailStatusService {
     _inFlight.addAll(toFetch);
 
     try {
-      final client = MtlsService.createMtlsHttpClient() ??
-          (PinnedSecurityContext.createHttpClient()
-            ..badCertificateCallback = (cert, host, port) {
-              if (host != 'mail.icd360s.de') return false;
-              return isTrustedLetsEncryptIssuer(cert.issuer);
-            });
+      HttpClient client;
+      bool poolOwned = false;
+      if (senderUsername != null) {
+        try {
+          client = await MtlsClientPool.instance.get(senderUsername);
+          poolOwned = true;
+        } catch (_) {
+          client = MtlsService.createMtlsHttpClient() ??
+              (PinnedSecurityContext.createHttpClient()
+                ..badCertificateCallback = (cert, host, port) {
+                  if (host != 'mail.icd360s.de') return false;
+                  return isTrustedLetsEncryptIssuer(cert.issuer);
+                });
+        }
+      } else {
+        client = MtlsService.createMtlsHttpClient() ??
+            (PinnedSecurityContext.createHttpClient()
+              ..badCertificateCallback = (cert, host, port) {
+                if (host != 'mail.icd360s.de') return false;
+                return isTrustedLetsEncryptIssuer(cert.issuer);
+              });
+      }
 
       try {
         final request = await client
@@ -126,9 +145,9 @@ class MailStatusService {
           _cache[entry.key] = result;
         }
         LoggerService.log('MAIL_STATUS',
-            '✓ Fetched ${results.length} statuses');
+            '✓ Fetched ${results.length} statuses (cert: ${senderUsername ?? "global"})');
       } finally {
-        client.close();
+        if (!poolOwned) client.close();
       }
     } catch (ex) {
       LoggerService.logWarning('MAIL_STATUS', 'Fetch failed: $ex');
