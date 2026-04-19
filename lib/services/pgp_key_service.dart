@@ -613,38 +613,44 @@ class PgpKeyService {
   /// always forces AEAD/OCB. We bypass it by creating the session key
   /// and calling encryptPackets directly with aead=null (SEIPD v1).
   static String _encryptIsolate(List<String> args) {
-    final plaintext = args[0];
-    final armoredKeys = args.sublist(1);
-    final keys = armoredKeys.map((a) => OpenPGP.readPublicKey(a)).toList();
+    try {
+      final plaintext = args[0];
+      final armoredKeys = args.sublist(1);
+      final keys = armoredKeys.map((a) => OpenPGP.readPublicKey(a)).toList();
 
-    final message = OpenPGP.createLiteralMessage(
-      Uint8List.fromList(utf8.encode(plaintext)),
-    );
-
-    final sessionKey = pgp_sk.SessionKey.produceKey(SymmetricAlgorithm.aes256);
-
-    final eskPackets = <dynamic>[];
-    for (final key in keys) {
-      final encKeyPacket = key.getEncryptionKeyPacket();
-      if (encKeyPacket == null) continue;
-      eskPackets.add(
-        pgp_pkesk.PublicKeyEncryptedSessionKeyPacket.encryptSessionKey(
-          encKeyPacket,
-          sessionKey,
-        ),
+      final message = OpenPGP.createLiteralMessage(
+        Uint8List.fromList(utf8.encode(plaintext)),
       );
-    }
 
-    final encrypted = pgp_em.EncryptedMessage(pgp_pl.PacketList([
-      ...eskPackets,
-      pgp_seipd.SymEncryptedIntegrityProtectedDataPacket.encryptPackets(
+      final sessionKey = pgp_sk.SessionKey.produceKey(SymmetricAlgorithm.aes256);
+
+      final eskPackets = <dynamic>[];
+      for (var i = 0; i < keys.length; i++) {
+        final encKeyPacket = keys[i].getEncryptionKeyPacket();
+        if (encKeyPacket == null) continue;
+        eskPackets.add(
+          pgp_pkesk.PublicKeyEncryptedSessionKeyPacket.encryptSessionKey(
+            encKeyPacket,
+            sessionKey,
+          ),
+        );
+      }
+
+      final seipd = pgp_seipd.SymEncryptedIntegrityProtectedDataPacket.encryptPackets(
         sessionKey.encryptionKey,
         (message as BaseMessage).packetList,
         symmetric: sessionKey.symmetric,
-      ),
-    ]));
+      );
 
-    return encrypted.armor();
+      final encrypted = pgp_em.EncryptedMessage(pgp_pl.PacketList([
+        ...eskPackets,
+        seipd,
+      ]));
+
+      return encrypted.armor();
+    } catch (e, st) {
+      throw StateError('_encryptIsolate failed: $e\n$st');
+    }
   }
 
   // ── Helpers ──────────────────────────────────────────────────────
