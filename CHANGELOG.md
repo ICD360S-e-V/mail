@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.51.3 - 2026-04-19
+#### Bug Fixes
+- check keyPacket.isV6Key instead of aeadSupported for v6 migration - (93c83c1) - icd360sevofficial
+
+- - -
+
 ## v2.51.2 - 2026-04-19
 #### Bug Fixes
 - force single-chunk AEAD to avoid OCB multi-chunk offset bug - (566cd65) - icd360sevofficial
