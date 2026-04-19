@@ -5,13 +5,6 @@ import 'dart:typed_data';
 
 import 'package:dart_pg/dart_pg.dart';
 import 'package:dart_pg/src/common/config.dart' as pgp_config;
-import 'package:dart_pg/src/message/encrypted_message.dart' as pgp_em;
-import 'package:dart_pg/src/packet/key/session_key.dart' as pgp_sk;
-import 'package:dart_pg/src/packet/packet_list.dart' as pgp_pl;
-import 'package:dart_pg/src/packet/public_key_encrypted_session_key.dart'
-    as pgp_pkesk;
-import 'package:dart_pg/src/packet/sym_encrypted_integrity_protected_data.dart'
-    as pgp_seipd;
 import 'package:enough_mail/enough_mail.dart';
 import 'package:flutter/foundation.dart' show compute, listEquals;
 
@@ -613,44 +606,21 @@ class PgpKeyService {
   /// always forces AEAD/OCB. We bypass it by creating the session key
   /// and calling encryptPackets directly with aead=null (SEIPD v1).
   static String _encryptIsolate(List<String> args) {
-    try {
-      final plaintext = args[0];
-      final armoredKeys = args.sublist(1);
-      final keys = armoredKeys.map((a) => OpenPGP.readPublicKey(a)).toList();
-
-      final message = OpenPGP.createLiteralMessage(
-        Uint8List.fromList(utf8.encode(plaintext)),
-      );
-
-      final sessionKey = pgp_sk.SessionKey.produceKey(SymmetricAlgorithm.aes256);
-
-      final eskPackets = <dynamic>[];
-      for (var i = 0; i < keys.length; i++) {
-        final encKeyPacket = keys[i].getEncryptionKeyPacket();
-        if (encKeyPacket == null) continue;
-        eskPackets.add(
-          pgp_pkesk.PublicKeyEncryptedSessionKeyPacket.encryptSessionKey(
-            encKeyPacket,
-            sessionKey,
-          ),
-        );
-      }
-
-      final seipd = pgp_seipd.SymEncryptedIntegrityProtectedDataPacket.encryptPackets(
-        sessionKey.encryptionKey,
-        (message as BaseMessage).packetList,
-        symmetric: sessionKey.symmetric,
-      );
-
-      final encrypted = pgp_em.EncryptedMessage(pgp_pl.PacketList([
-        ...eskPackets,
-        seipd,
-      ]));
-
-      return encrypted.armor();
-    } catch (e, st) {
-      throw StateError('_encryptIsolate failed: $e\n$st');
-    }
+    final plaintext = args[0];
+    final armoredKeys = args.sublist(1);
+    final keys = armoredKeys.map((a) => OpenPGP.readPublicKey(a)).toList();
+    pgp_config.Config.aeadProtect = false;
+    // dart_pg ignores aeadProtect when keys have seipdV2 in Features
+    // (which it sets unconditionally for ALL keys). Since we can't
+    // prevent AEAD, make the chunk size large enough that the entire
+    // message fits in ONE chunk — the OCB multi-chunk offset bug only
+    // triggers on chunk boundaries.
+    pgp_config.Config.aeadChunkSize = 26; // 1 << 32 = 4GB per chunk
+    final encrypted = OpenPGP.encryptBinaryData(
+      Uint8List.fromList(utf8.encode(plaintext)),
+      encryptionKeys: keys,
+    );
+    return encrypted.armor();
   }
 
   // ── Helpers ──────────────────────────────────────────────────────
