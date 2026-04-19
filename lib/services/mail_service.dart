@@ -288,7 +288,14 @@ class MailService {
                       .replaceAll('\n', '\r\n');
                   decryptedInner = MimeMessage.parseFromText(crlf);
                   body = decryptedInner.decodeTextPlainPart() ?? decryptedInner.decodeTextHtmlPart();
-                } catch (_) {}
+                  final innerParts = decryptedInner.allPartsFlat.length;
+                  final innerCt = decryptedInner.getHeaderContentType()?.mediaType.toString() ?? 'unknown';
+                  LoggerService.log('PGP',
+                      'Inner MIME parsed: $innerParts parts, type=$innerCt, body=${body?.length ?? 0} chars');
+                } catch (parseEx) {
+                  LoggerService.logWarning('PGP',
+                      'Inner MIME parse failed: $parseEx — first 200 chars: ${decryptedRaw.substring(0, decryptedRaw.length > 200 ? 200 : decryptedRaw.length)}');
+                }
                 if (body == null || body.isEmpty) {
                   final lines = decryptedRaw.split('\n');
                   var inTextPart = false;
@@ -349,6 +356,9 @@ class MailService {
             // tree (body + attachments) inside the ciphertext — the outer
             // message only has application/pgp-encrypted + encrypted.asc.
             final attachmentSource = decryptedInner ?? message;
+            LoggerService.log('PGP',
+                'Attachment source: ${decryptedInner != null ? "decryptedInner" : "outerMessage"} '
+                '(${attachmentSource.allPartsFlat.length} parts)');
             for (final part in attachmentSource.allPartsFlat) {
               final disposition = part.getHeaderContentDisposition();
               final fileName = part.decodeFileName();
