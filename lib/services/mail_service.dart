@@ -7,6 +7,7 @@ import 'imap_pool.dart';
 import 'logger_service.dart';
 import 'mtls_service.dart';
 import 'pgp_key_service.dart';
+import 'pgp_packet_inspector.dart';
 import 'threat_intelligence_service.dart';
 import 'trash_tracker_service.dart';
 import 'email_history_service.dart';
@@ -276,6 +277,9 @@ class MailService {
             MimeMessage? decryptedInner;
             if (pgpCiphertext != null) {
               try {
+                final packetDump = PgpPacketInspector.summary(pgpCiphertext);
+                LoggerService.log('PGP_INSPECT',
+                    'Message ${email.messageId} packets:\n$packetDump');
                 final decryptedRaw = await PgpKeyService.decrypt(pgpCiphertext);
                 String? body;
                 try {
@@ -318,8 +322,17 @@ class MailService {
                 LoggerService.log('PGP',
                     '✓ Decrypted E2EE email from ${email.from}');
               } catch (ex) {
+                final errStr = ex.toString().toLowerCase();
+                String diagnosis = '';
+                if (errStr.contains('mac check') || errStr.contains('ocb')) {
+                  diagnosis = ' | DIAGNOSIS: AEAD/OCB corruption — sender used v6 key with SEIPD v2';
+                } else if (errStr.contains('session key') || errStr.contains('decrypt')) {
+                  diagnosis = ' | DIAGNOSIS: wrong key or unsupported PKESK version';
+                } else if (errStr.contains('checksum')) {
+                  diagnosis = ' | DIAGNOSIS: key checksum failure';
+                }
                 LoggerService.logWarning('PGP',
-                    'Decryption failed for ${email.messageId}: $ex');
+                    'Decryption failed for ${email.messageId}: $ex$diagnosis');
                 email.body = '[Encrypted email — decryption failed]';
                 email.isEncrypted = true;
               }
@@ -546,6 +559,11 @@ class MailService {
 
             mimeMessage = MimeMessage.parseFromText(pgpMimeRaw);
             isEncrypted = true;
+            final outCipher = PgpKeyService.extractPgpCiphertext(mimeMessage);
+            if (outCipher != null) {
+              final outDump = PgpPacketInspector.summary(outCipher);
+              LoggerService.log('PGP_INSPECT', 'Outbound encrypted:\n$outDump');
+            }
             LoggerService.log('PGP',
                 '✓ Encrypted for ${allRecipientEmails.length} recipients');
           } else {
