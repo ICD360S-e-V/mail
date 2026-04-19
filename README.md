@@ -31,9 +31,12 @@ ICD360S Mail is a security-first email client built for [ICD360S e.V.](https://i
 
 | | Feature | Details |
 |---|---|---|
-| | **E2EE Internal Mail** | OpenPGP (Ed25519 + X25519). Client encrypts before sending. Server never sees plaintext. |
+| | **E2EE Internal Mail** | All emails between `@icd360s.de` addresses are automatically encrypted end-to-end using OpenPGP (PGP/MIME, RFC 3156). The server only sees `encrypted.asc` — body text and attachments are invisible to the server, admin, or anyone without the recipient's private key. |
+| | **OpenPGP Keys** | Ed25519 (signing) + X25519/ECDH (encryption), v4 key packets. Keys are generated on device, stored in an Argon2id-protected vault, and synced between devices via encrypted blobs. |
+| | **PGP/MIME Attachments** | Attachments are encrypted inside the PGP payload alongside the message body (RFC 3156 compliant). The outer message contains only the PGP wrapper — no metadata about attachment names or types leaks to the server. |
+| | **Automatic Key Management** | Keys are generated on first login, uploaded to the server for recipient discovery, and synced across devices. TOFU (Trust on First Use) warns if a recipient's key changes unexpectedly. |
 | | **Zero-Access at Rest** | Incoming mail encrypted with recipient's PGP key on the server before storage. |
-| | **Password-Protected Email** | Send encrypted email to anyone. Recipient opens a secure link, enters password, reads in browser. AES-256-GCM + PBKDF2, 100% client-side decryption. |
+| | **Password-Protected Email** | Send encrypted email to anyone (external). Recipient opens a secure link, enters password, reads in browser. AES-256-GCM + PBKDF2, 100% client-side decryption. |
 | | **WKD Key Discovery** | External clients (Thunderbird) auto-discover your public key via Web Key Directory. |
 
 ### Authentication
@@ -62,6 +65,24 @@ ICD360S Mail is a security-first email client built for [ICD360S e.V.](https://i
 | | **DNS-over-HTTPS** | Quad9 (RFC 8484 wireformat) + Cloudflare fallback. No cleartext DNS. |
 | | **Notification Privacy** | Configurable: minimal / sender only / full content on lock screen. |
 | | **No Telemetry** | Zero analytics. Zero tracking. Zero CDN dependencies. |
+
+---
+
+## Internal E2EE: What the Server Sees
+
+When a member sends an email to another `@icd360s.de` address, the message is encrypted **on the sender's device** before it leaves. The server handles delivery but cannot read the content.
+
+| | Visible to Server | Encrypted (E2EE) |
+|---|---|---|
+| | Sender address | Message body |
+| | Recipient address | Attachments |
+| | Subject line | Attachment names and types |
+| | Date and time | Inner MIME structure |
+| | Message size | Everything inside `encrypted.asc` |
+
+The server sees only the SMTP envelope (like a postal envelope — sender, recipient, date) and a single `encrypted.asc` blob. Even a compromised server or malicious admin cannot decrypt the message content — only the recipient's device holds the private key.
+
+> **Note:** Subject lines are currently visible in the outer headers (standard PGP/MIME behavior). Protected Headers for encrypted subjects may be added in a future version, following the approach used by Proton Mail and Thunderbird.
 
 ---
 
