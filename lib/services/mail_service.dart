@@ -525,20 +525,13 @@ class MailService {
         }
       }
 
-      // Request read receipt (MDN)
-      messageBuilder.setHeader('Disposition-Notification-To', account.username);
-      messageBuilder.setHeader('Return-Receipt-To', account.username);
-      messageBuilder.setHeader('X-Confirm-Reading-To', account.username);
-
-      // Request delivery status notification (DSN)
-      messageBuilder.setHeader('Return-Path', account.username);
-      messageBuilder.setHeader('Delivery-Status-Notification-To', account.username);
-      messageBuilder.setHeader('X-Delivery-Status-Notification', 'SUCCESS,FAILURE,DELAY');
-
+      // Build the MIME message WITHOUT read-receipt/DSN headers first.
+      // These headers are added AFTER encryption so they don't pollute
+      // the inner MIME body that gets encrypted (which must be clean
+      // multipart/mixed for enough_mail to parse after decryption).
       var mimeMessage = messageBuilder.buildMimeMessage();
 
       // ── E2EE: Encrypt for internal @icd360s.de recipients ──────────
-      // Set the sender's PGP key as active (for self-encryption)
       await PgpKeyService.setActiveAccount(account.username);
 
       final allRecipientEmails = [
@@ -547,7 +540,6 @@ class MailService {
       final allInternal = allRecipientEmails.every(
           (e) => e.endsWith('@icd360s.de'));
 
-      // Track if we encrypted (for BCC recipient handling)
       var isEncrypted = false;
 
       if (allInternal && allRecipientEmails.isNotEmpty) {
@@ -559,14 +551,20 @@ class MailService {
           if (allKeysFound) {
             final recipientKeys = keyMap.values.toList();
 
-            // Build inner MIME body — keep ONLY Content-* and MIME-Version
-            // headers. Strip everything else (transport headers, read-receipt
-            // headers, DSN headers) to prevent BCC leakage and ensure
-            // enough_mail can parse the inner MIME correctly after decryption.
-            var innerMime = mimeMessage.renderMessage();
-            innerMime = innerMime.replaceAll(
-                RegExp(r'^(?!Content-|MIME-Version:)[A-Za-z][A-Za-z0-9\-]*:.*\r?\n',
-                    multiLine: true, caseSensitive: false), '');
+            // Inner MIME = just Content-Type + body + attachments.
+            // renderMessage() includes all headers, so we build a clean
+            // inner body by extracting only the MIME content part.
+            final renderedFull = mimeMessage.renderMessage();
+            final headerEnd = renderedFull.indexOf('\r\n\r\n');
+            final mimeBody = headerEnd >= 0
+                ? renderedFull.substring(headerEnd + 4)
+                : renderedFull;
+            final contentType = mimeMessage.getHeaderValue('content-type') ?? '';
+            final mimeVersion = mimeMessage.getHeaderValue('mime-version') ?? '1.0';
+            final innerMime = 'MIME-Version: $mimeVersion\r\n'
+                'Content-Type: $contentType\r\n'
+                '\r\n'
+                '$mimeBody';
 
             // Extract Date and Message-ID before replacing
             final date = mimeMessage.getHeaderValue('date') ??
@@ -607,6 +605,15 @@ class MailService {
               'Encryption failed, sending plaintext: $ex');
         }
       }
+
+      // Add read-receipt and DSN headers to the OUTER message
+      // (after encryption, so they don't pollute the inner MIME body).
+      mimeMessage.addHeader('Disposition-Notification-To', account.username);
+      mimeMessage.addHeader('Return-Receipt-To', account.username);
+      mimeMessage.addHeader('X-Confirm-Reading-To', account.username);
+      mimeMessage.addHeader('Return-Path', account.username);
+      mimeMessage.addHeader('Delivery-Status-Notification-To', account.username);
+      mimeMessage.addHeader('X-Delivery-Status-Notification', 'SUCCESS,FAILURE,DELAY');
 
       // Calculate total message size
       final messageSizeKB = (mimeMessage.toString().length / 1024).round();
