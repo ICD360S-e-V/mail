@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.51.1 - 2026-04-19
+#### Bug Fixes
+- bypass dart_pg AEAD — it sets seipdV2 in Features for ALL keys including v4 - (ce71df7) - icd360sevofficial
+
+- - -
+
 ## v2.51.0 - 2026-04-19
 #### Features
 - PGP packet inspection logging before encrypt/decrypt - (1373ddc) - icd360sevofficial
