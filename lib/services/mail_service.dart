@@ -559,12 +559,13 @@ class MailService {
           if (allKeysFound) {
             final recipientKeys = keyMap.values.toList();
 
-            // Build inner MIME body — strip transport headers (From/To/Cc/
-            // Bcc/Subject/Date/Message-ID). Only keep MIME content headers.
-            // This prevents BCC leakage and follows RFC 3156 practice.
+            // Build inner MIME body — keep ONLY Content-* and MIME-Version
+            // headers. Strip everything else (transport headers, read-receipt
+            // headers, DSN headers) to prevent BCC leakage and ensure
+            // enough_mail can parse the inner MIME correctly after decryption.
             var innerMime = mimeMessage.renderMessage();
             innerMime = innerMime.replaceAll(
-                RegExp(r'^(From|To|Cc|Bcc|Subject|Date|Message-ID):.*\r?\n',
+                RegExp(r'^(?!Content-|MIME-Version:)[A-Za-z][A-Za-z0-9\-]*:.*\r?\n',
                     multiLine: true, caseSensitive: false), '');
 
             // Extract Date and Message-ID before replacing
