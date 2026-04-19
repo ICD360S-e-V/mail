@@ -286,12 +286,29 @@ class MailService {
                   final crlf = decryptedRaw
                       .replaceAll('\r\n', '\n')
                       .replaceAll('\n', '\r\n');
+                  LoggerService.log('PGP',
+                      'Inner MIME raw: ${crlf.length} chars, hasCRLF=${crlf.contains("\r\n")}, '
+                      'first200=${crlf.substring(0, crlf.length > 200 ? 200 : crlf.length).replaceAll("\r", "\\r").replaceAll("\n", "\\n")}');
                   decryptedInner = MimeMessage.parseFromText(crlf);
                   body = decryptedInner.decodeTextPlainPart() ?? decryptedInner.decodeTextHtmlPart();
-                  final innerParts = decryptedInner.allPartsFlat.length;
-                  final innerCt = decryptedInner.getHeaderContentType()?.mediaType.toString() ?? 'unknown';
+                  final innerCt = decryptedInner.getHeaderContentType();
+                  final boundary = innerCt?.boundary;
+                  final childParts = decryptedInner.parts;
+                  final flatParts = decryptedInner.allPartsFlat.length;
                   LoggerService.log('PGP',
-                      'Inner MIME parsed: $innerParts parts, type=$innerCt, body=${body?.length ?? 0} chars');
+                      'Inner MIME parsed: type=${innerCt?.mediaType}, boundary=$boundary, '
+                      'children=${childParts?.length ?? 0}, flatParts=$flatParts, body=${body?.length ?? 0} chars');
+                  if (childParts != null) {
+                    for (var i = 0; i < childParts.length; i++) {
+                      final p = childParts[i];
+                      final pCt = p.getHeaderContentType()?.mediaType;
+                      final pDisp = p.getHeaderContentDisposition()?.disposition;
+                      final pName = p.decodeFileName();
+                      final pBin = p.decodeContentBinary()?.length;
+                      LoggerService.log('PGP',
+                          '  Part[$i]: type=$pCt, disposition=$pDisp, name=$pName, binSize=$pBin');
+                    }
+                  }
                 } catch (parseEx) {
                   LoggerService.logWarning('PGP',
                       'Inner MIME parse failed: $parseEx — first 200 chars: ${decryptedRaw.substring(0, decryptedRaw.length > 200 ? 200 : decryptedRaw.length)}');
