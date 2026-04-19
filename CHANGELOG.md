@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.51.8 - 2026-04-19
+#### Bug Fixes
+- auto-version now syncs update_service.dart currentVersion - (97fd220) - icd360sevofficial
+
+- - -
+
 ## v2.51.7 - 2026-04-19
 #### Bug Fixes
 - update currentVersion to 2.51.7 — was stuck at 2.51.3 - (d89be1d) - icd360sevofficial
