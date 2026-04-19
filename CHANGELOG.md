@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.51.7 - 2026-04-19
+#### Bug Fixes
+- update currentVersion to 2.51.7 — was stuck at 2.51.3 - (d89be1d) - icd360sevofficial
+
+- - -
+
 ## v2.51.3 - 2026-04-19
 #### Bug Fixes
 - check keyPacket.isV6Key instead of aeadSupported for v6 migration - (93c83c1) - icd360sevofficial
