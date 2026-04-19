@@ -290,11 +290,34 @@ class MailService {
                       'Inner MIME raw: ${crlf.length} chars, hasCRLF=${crlf.contains("\r\n")}, '
                       'first200=${crlf.substring(0, crlf.length > 200 ? 200 : crlf.length).replaceAll("\r", "\\r").replaceAll("\n", "\\n")}');
                   decryptedInner = MimeMessage.parseFromText(crlf);
-                  decryptedInner.parse();
-                  body = decryptedInner.decodeTextPlainPart() ?? decryptedInner.decodeTextHtmlPart();
                   final innerCt = decryptedInner.getHeaderContentType();
+                  final boundary = innerCt?.boundary;
+                  if (boundary != null && boundary.isNotEmpty) {
+                    final sections = crlf.split('--$boundary');
+                    for (var i = 1; i < sections.length; i++) {
+                      final section = sections[i];
+                      if (section.startsWith('--')) continue;
+                      var partText = section;
+                      if (partText.startsWith('\r\n')) partText = partText.substring(2);
+                      if (partText.endsWith('\r\n')) partText = partText.substring(0, partText.length - 2);
+                      if (partText.trim().isEmpty) continue;
+                      final partMsg = MimeMessage.parseFromText(partText);
+                      decryptedInner.addPart(partMsg);
+                    }
+                  }
+                  body = decryptedInner.decodeTextPlainPart();
+                  if (body == null || body.isEmpty) {
+                    for (final p in decryptedInner.parts ?? <MimePart>[]) {
+                      final pCt = p.getHeaderContentType()?.mediaType;
+                      if (pCt?.sub == MediaSubtype.textPlain) {
+                        body = p.decodeContentText();
+                        if (body != null && body.isNotEmpty) break;
+                      }
+                    }
+                  }
+                  body ??= decryptedInner.decodeTextHtmlPart();
                   LoggerService.log('PGP',
-                      'Inner MIME: type=${innerCt?.mediaType}, boundary=${innerCt?.boundary}, '
+                      'Inner MIME: type=${innerCt?.mediaType}, boundary=$boundary, '
                       'parts=${decryptedInner.parts?.length ?? 0}, body=${body?.length ?? 0} chars');
                 } catch (parseEx) {
                   LoggerService.logWarning('PGP',
