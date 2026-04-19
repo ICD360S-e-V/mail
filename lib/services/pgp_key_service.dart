@@ -103,9 +103,9 @@ class PgpKeyService {
         // confirmed dart_pg bug: MAC check fails on multi-chunk messages
         // (>~2KB). Regenerate as v4 keys (EdDSA legacy/ECDH) which use
         // CFB+MDC (SEIPD v1) — no AEAD, no OCB bug.
-        if (privateKey.publicKey.aeadSupported) {
+        if (privateKey.publicKey.keyPacket.isV6Key) {
           LoggerService.log('PGP',
-              '⚠ Detected v6 key for $email (AEAD-capable) — migrating to v4');
+              '⚠ Detected v6 key for $email — migrating to v4');
           // Backup v6 key for decrypting old messages
           final v6Backup = await vault.read(key: '${_vaultKeyV6Backup}_$key');
           if (v6Backup == null) {
@@ -134,7 +134,7 @@ class PgpKeyService {
       final syncedArmor = await PgpSyncService.downloadAndDecrypt(email);
       if (syncedArmor != null) {
         final privateKey = OpenPGP.decryptPrivateKey(syncedArmor, passphrase);
-        if (privateKey.publicKey.aeadSupported) {
+        if (privateKey.publicKey.keyPacket.isV6Key) {
           LoggerService.log('PGP',
               '⚠ Sync server returned v6 key for $email — discarding, will generate v4');
           final v6Backup = await vault.read(key: '${_vaultKeyV6Backup}_$key');
