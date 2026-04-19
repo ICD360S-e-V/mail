@@ -133,16 +133,26 @@ class PgpKeyService {
     try {
       final syncedArmor = await PgpSyncService.downloadAndDecrypt(email);
       if (syncedArmor != null) {
-        LoggerService.log('PGP', 'Fetched PGP key from sync server for $email (new device)');
-        await vault.write(key: _vaultKey(email), value: syncedArmor);
         final privateKey = OpenPGP.decryptPrivateKey(syncedArmor, passphrase);
-        _privateKeys[key] = privateKey;
-        _publicKeys[key] = privateKey.publicKey;
-        if (_activeEmail == null) {
-          _activeEmail = key;
-          await _startWorker(syncedArmor, passphrase);
+        if (privateKey.publicKey.aeadSupported) {
+          LoggerService.log('PGP',
+              '⚠ Sync server returned v6 key for $email — discarding, will generate v4');
+          final v6Backup = await vault.read(key: '${_vaultKeyV6Backup}_$key');
+          if (v6Backup == null) {
+            await vault.write(key: '${_vaultKeyV6Backup}_$key', value: syncedArmor);
+            LoggerService.log('PGP', 'v6 sync key backed up for decrypt fallback');
+          }
+        } else {
+          LoggerService.log('PGP', 'Fetched PGP key from sync server for $email (new device)');
+          await vault.write(key: _vaultKey(email), value: syncedArmor);
+          _privateKeys[key] = privateKey;
+          _publicKeys[key] = privateKey.publicKey;
+          if (_activeEmail == null) {
+            _activeEmail = key;
+            await _startWorker(syncedArmor, passphrase);
+          }
+          return privateKey;
         }
-        return privateKey;
       }
       LoggerService.log('PGP', 'No key blob on sync server for $email — will generate new key');
     } catch (ex) {
