@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.51.0 - 2026-04-19
+#### Features
+- PGP packet inspection logging before encrypt/decrypt - (1373ddc) - icd360sevofficial
+
+- - -
+
 ## v2.50.0 - 2026-04-19
 #### Features
 - PGP packet inspector — log SEIPD version and AEAD params before decrypt - (ca8d5df) - icd360sevofficial
