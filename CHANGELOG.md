@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.50.0 - 2026-04-19
+#### Features
+- PGP packet inspector — log SEIPD version and AEAD params before decrypt - (ca8d5df) - icd360sevofficial
+
+- - -
+
 ## v2.49.2 - 2026-04-19
 #### Bug Fixes
 - reject v6 keys from sync server — was bypassing v6→v4 migration - (c07b810) - icd360sevofficial
