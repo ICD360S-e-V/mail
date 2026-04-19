@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.51.10 - 2026-04-19
+#### Bug Fixes
+- build clean inner MIME without regex — extract Content-Type + body only - (b1b96a4) - icd360sevofficial
+
+- - -
+
 ## v2.51.8 - 2026-04-19
 #### Bug Fixes
 - auto-version now syncs update_service.dart currentVersion - (97fd220) - icd360sevofficial
