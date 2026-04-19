@@ -113,6 +113,16 @@ jobs:
           echo "Tag message:"
           echo "$TAG_MSG"
 
+          # Sync hardcoded currentVersion in update_service.dart
+          sed -i "s/static const String currentVersion = '.*'/static const String currentVersion = '${VERSION}'/" lib/services/update_service.dart
+          if git diff --quiet lib/services/update_service.dart; then
+            echo "update_service.dart already up to date"
+          else
+            git add lib/services/update_service.dart
+            git commit --amend --no-edit
+            echo "✓ update_service.dart synced to ${VERSION}"
+          fi
+
           # cog creates lightweight tags; build workflow requires annotated.
           git tag -d "$TAG"
           git tag -a "$TAG" -m "$TAG_MSG"
