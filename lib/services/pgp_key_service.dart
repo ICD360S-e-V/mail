@@ -28,6 +28,7 @@ class PgpKeyService {
   static const _vaultKeyPrivatePrefix = 'pgp_private_key_v1';
   static const _vaultKeyV6Backup = 'pgp_private_key_v6_backup';
   static const _vaultKeyPassphrase = 'pgp_passphrase_v1';
+  static const _vaultKeyTofuDb = 'pgp_tofu_fingerprints_v1';
   static const _uploadEndpoint =
       'https://mail.icd360s.de/api/upload-pubkey.php';
   static const _pubkeyEndpoint = 'https://mail.icd360s.de/api/pubkeys';
@@ -58,8 +59,54 @@ class PgpKeyService {
   // but expires after 30s so keys uploaded during the session are found.
   static final Map<String, DateTime> _negativeCache = {};
 
-  // TOFU: first-seen fingerprint per email (key substitution protection)
-  static final Map<String, List<int>> _tofuFingerprints = {};
+  // ── TOFU (Trust On First Use) ──────────────────────────────────
+  //
+  // Persistent fingerprint database. On first contact with an email,
+  // the key fingerprint is recorded. On subsequent fetches, if the
+  // fingerprint changes:
+  //   - Internal (@icd360s.de): auto-accept (server is trust anchor)
+  //   - External: notify UI via callback so user can decide
+  //
+  // Persisted in MasterVault as JSON under _vaultKeyTofuDb.
+
+  static final Map<String, String> _tofuFingerprints = {};
+  static bool _tofuLoaded = false;
+
+  /// UI callback for external key change warnings.
+  /// Set by EmailProvider to show a dialog/info bar.
+  /// Parameters: email, old fingerprint (hex), new fingerprint (hex).
+  /// Returns true if user accepts the new key, false to reject.
+  static Future<bool> Function(String email, String oldFpr, String newFpr)?
+      onExternalKeyChanged;
+
+  static Future<void> _loadTofuDb() async {
+    if (_tofuLoaded) return;
+    try {
+      final json = await MasterVault.instance.read(key: _vaultKeyTofuDb);
+      if (json != null) {
+        final map = jsonDecode(json) as Map<String, dynamic>;
+        _tofuFingerprints.clear();
+        map.forEach((k, v) => _tofuFingerprints[k] = v as String);
+      }
+    } catch (ex) {
+      LoggerService.logWarning('TOFU', 'Failed to load TOFU db: $ex');
+    }
+    _tofuLoaded = true;
+    LoggerService.log('TOFU',
+        'Loaded ${_tofuFingerprints.length} pinned fingerprints');
+  }
+
+  static Future<void> _saveTofuDb() async {
+    try {
+      await MasterVault.instance.write(
+          key: _vaultKeyTofuDb, value: jsonEncode(_tofuFingerprints));
+    } catch (ex) {
+      LoggerService.logWarning('TOFU', 'Failed to save TOFU db: $ex');
+    }
+  }
+
+  static String _fingerprintHex(List<int> fpr) =>
+      fpr.map((b) => b.toRadixString(16).padLeft(2, '0')).join().toUpperCase();
 
   /// Vault key for a specific account's private PGP key.
   static String _vaultKey(String email) =>
@@ -82,6 +129,9 @@ class PgpKeyService {
 
     final vault = MasterVault.instance;
     final passphrase = await _getOrCreatePassphrase();
+
+    // Ensure TOFU database is loaded before any key operations
+    await _loadTofuDb();
 
     // Try account-specific vault key first, then legacy singleton key
     var existingArmor = await vault.read(key: _vaultKey(email));
@@ -289,9 +339,11 @@ class PgpKeyService {
     _recipientKeyCache.clear();
     _recipientKeyCacheAt.clear();
     _negativeCache.clear();
+    _tofuFingerprints.clear();
+    _tofuLoaded = false;
     _worker?.close();
     _worker = null;
-    LoggerService.log('PGP', 'PGP key cache + worker cleared');
+    LoggerService.log('PGP', 'PGP key cache + worker + TOFU db cleared');
   }
 
   // ── Decrypt (via background isolate worker) ───────────────────────
@@ -473,16 +525,53 @@ class PgpKeyService {
 
       final pubKey = OpenPGP.readPublicKey(armored);
 
-      // TOFU: check fingerprint consistency
+      // ── TOFU: persistent fingerprint verification ──
+      await _loadTofuDb();
       final fpr = List<int>.from(pubKey.fingerprint as Iterable<int>);
-      final prevFpr = _tofuFingerprints[key];
-      if (prevFpr != null && !listEquals(fpr, prevFpr)) {
-        LoggerService.logWarning('PGP',
-            '⚠ KEY CHANGED for $email! Previous fingerprint differs. '
-            'Possible key substitution attack.');
-        // Still use the new key but warn — full KT is out of scope
+      final fprHex = _fingerprintHex(fpr);
+      final prevFprHex = _tofuFingerprints[key];
+
+      if (prevFprHex != null && prevFprHex != fprHex) {
+        final isInternal = email.endsWith('@icd360s.de');
+
+        if (isInternal) {
+          // Internal keys are server-managed — auto-accept rotation
+          LoggerService.log('TOFU',
+              'Key rotated for internal address $email '
+              '(${prevFprHex.substring(0, 16)}... → ${fprHex.substring(0, 16)}...)');
+          _tofuFingerprints[key] = fprHex;
+          await _saveTofuDb();
+        } else {
+          // External key change — potential MITM, ask user
+          LoggerService.logWarning('TOFU',
+              '⚠ KEY CHANGED for external address $email! '
+              'Old: ${prevFprHex.substring(0, 16)}... '
+              'New: ${fprHex.substring(0, 16)}...');
+
+          if (onExternalKeyChanged != null) {
+            final accepted =
+                await onExternalKeyChanged!(email, prevFprHex, fprHex);
+            if (!accepted) {
+              LoggerService.logWarning('TOFU',
+                  'User REJECTED new key for $email — using cached key');
+              final cachedKey = _recipientKeyCache[key];
+              if (cachedKey != null) return cachedKey;
+              return null;
+            }
+            LoggerService.log('TOFU',
+                'User accepted new key for $email');
+          }
+
+          _tofuFingerprints[key] = fprHex;
+          await _saveTofuDb();
+        }
+      } else if (prevFprHex == null) {
+        // First contact — record fingerprint
+        _tofuFingerprints[key] = fprHex;
+        await _saveTofuDb();
+        LoggerService.log('TOFU',
+            'Pinned fingerprint for $email: ${fprHex.substring(0, 16)}...');
       }
-      _tofuFingerprints[key] = fpr;
 
       _recipientKeyCache[key] = pubKey;
       _recipientKeyCacheAt[key] = DateTime.now();
