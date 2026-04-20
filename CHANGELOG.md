@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.52.0 - 2026-04-20
+#### Features
+- (**pgp**) persistent TOFU fingerprint database with internal/external trust model - (01bc7ba) - icd360sevofficial
+
+- - -
+
 ## v2.51.10 - 2026-04-19
 #### Bug Fixes
 - build clean inner MIME without regex — extract Content-Type + body only - (b1b96a4) - icd360sevofficial
