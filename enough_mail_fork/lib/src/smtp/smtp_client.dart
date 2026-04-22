@@ -138,6 +138,10 @@ class SmtpClient extends ClientBase {
           securityContext: securityContext,
         );
 
+  /// Optional progress callback for send operations.
+  /// Reports (bytesSent, totalBytes) during DATA transmission.
+  void Function(int bytesSent, int totalBytes)? onSendProgress;
+
   /// Information about the SMTP service
   late SmtpServerInfo serverInfo;
 
@@ -522,7 +526,11 @@ class SmtpClient extends ClientBase {
         final text = next?.text;
         final data = next?.data;
         if (text != null) {
-          writeText(text);
+          if (onSendProgress != null && text.length > 32768) {
+            writeTextChunked(text, onProgress: onSendProgress);
+          } else {
+            writeText(text);
+          }
         } else if (data != null) {
           writeData(data);
         } else if (cmd.isCommandDone(response)) {
