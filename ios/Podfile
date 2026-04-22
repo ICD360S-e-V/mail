@@ -30,6 +30,12 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 
 flutter_ios_podfile_setup
 
+# file_picker: disable photo gallery picker (DKImagePickerController).
+# We only use FileType.any (UIDocumentPickerViewController) and
+# cunning_document_scanner for camera. This removes DKImagePickerController
+# and DKPhotoGallery pods which produce Swift 6 sendability warnings.
+Pod::PICKER_MEDIA = false
+
 target 'Runner' do
   use_frameworks!
 
