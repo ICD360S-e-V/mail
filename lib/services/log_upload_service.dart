@@ -8,6 +8,7 @@ import 'logger_service.dart';
 import 'update_service.dart';
 import 'platform_service.dart';
 import 'pinned_security_context.dart';
+import '../utils/pii_redactor.dart';
 
 /// Log upload service for diagnostics (cross-platform)
 class LogUploadService {
@@ -58,7 +59,12 @@ class LogUploadService {
 
     try {
       final deviceId = await getDeviceId();
-      final logs = LoggerService.getLogs(); // Get all logs
+      // Double-sanitize before upload: buffer entries are already
+      // redacted by _addToBuffer(), but this catches edge cases
+      // (e.g. logDebug in release, or future code paths that bypass
+      // the buffer). Belt-and-suspenders for GDPR compliance.
+      final rawLogs = LoggerService.getLogs();
+      final logs = rawLogs.map(PiiRedactor.sanitize).toList();
 
       final payload = {
         'device_id': deviceId,
