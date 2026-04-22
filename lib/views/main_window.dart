@@ -1208,9 +1208,9 @@ class _MainWindowState extends State<MainWindow> {
               _buildEmailList(theme, emailProvider),
               if (_showNotification)
                 Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
+                  bottom: 8,
+                  left: 16,
+                  right: 16,
                   child: _buildNotificationBar(theme),
                 ),
               Positioned(
