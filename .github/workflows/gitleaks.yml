@@ -25,7 +25,7 @@ jobs:
         # FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 escape hatch lets the
         # runner execute it on Node 24 until upstream cuts a v3.
         # Tracking: https://github.com/gitleaks/gitleaks-action/issues
-        uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc # v2.3.9
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
         env:
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
           FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
