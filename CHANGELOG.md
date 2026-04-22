@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.61.0 - 2026-04-22
+#### Features
+- pass preEncodedBase64 from compose through to mail service - (c2f2072) - icd360sevofficial
+
+- - -
+
 ## v2.60.0 - 2026-04-22
 #### Features
 - (**smtp**) use pre-encoded base64 attachments when available - (d6982b6) - icd360sevofficial
