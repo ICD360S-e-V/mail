@@ -474,6 +474,7 @@ class MailService {
     List<dynamic> attachments, {
     int? draftUid,
     void Function(int bytesSent, int totalBytes)? onSendProgress,
+    Map<String, String>? preEncodedBase64,
   }) async {
     // SECURITY: Validate server before connecting
     _validateAccount(account);
@@ -525,12 +526,23 @@ class MailService {
         }
         if (bytes != null) {
           final fileSize = (bytes.length / 1024).round();
-          messageBuilder.addBinary(
-            bytes,
-            MediaType.guessFromFileName(fileName),
-            filename: fileName,
-          );
-          LoggerService.log('SMTP', 'Added attachment: $fileName ($fileSize KB, ${bytes.length} bytes)');
+          final preEncoded = preEncodedBase64?[fileName];
+          if (preEncoded != null) {
+            messageBuilder.addPreEncodedBinary(
+              preEncoded,
+              bytes.length,
+              MediaType.guessFromFileName(fileName),
+              filename: fileName,
+            );
+            LoggerService.log('SMTP', 'Added pre-encoded attachment: $fileName ($fileSize KB)');
+          } else {
+            messageBuilder.addBinary(
+              bytes,
+              MediaType.guessFromFileName(fileName),
+              filename: fileName,
+            );
+            LoggerService.log('SMTP', 'Added attachment: $fileName ($fileSize KB, ${bytes.length} bytes)');
+          }
         } else {
           LoggerService.logWarning('SMTP', 'Attachment $fileName has no bytes and no path!');
         }
