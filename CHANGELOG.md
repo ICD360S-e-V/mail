@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.52.4 - 2026-04-22
+#### Bug Fixes
+- (**security**) sanitize exceptions and debug logs for PII - (76123c8) - icd360sevofficial
+
+- - -
+
 ## v2.52.3 - 2026-04-22
 #### Bug Fixes
 - (**security**) add IPv4 and phone number patterns to PII safety net - (99f2801) - icd360sevofficial
