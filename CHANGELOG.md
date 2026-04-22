@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.64.2 - 2026-04-22
+#### Performance Improvements
+- (**pgp**) replace dart_pg isolate decrypt with native Go PGP - (f523358) - icd360sevofficial
+
+- - -
+
 ## v2.64.1 - 2026-04-22
 #### Performance Improvements
 - (**pgp**) replace compute() dart_pg with native Go encryption - (2834310) - icd360sevofficial
