@@ -1215,7 +1215,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
                             if (isFailed)
                               Text(
                                 att.errorMessage ?? 'Failed',
-                                style: const TextStyle(fontSize: 10, color: Colors.red),
+                                style: TextStyle(fontSize: 10, color: Colors.red),
                               ),
                           ],
                         ),
