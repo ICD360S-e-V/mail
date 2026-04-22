@@ -14,7 +14,6 @@ import 'certificate_service.dart';
 import 'master_vault.dart';
 import 'mtls_client_pool.dart';
 import 'mtls_service.dart';
-import 'pgp_isolate_worker.dart';
 import 'le_issuer_check.dart';
 import 'pgp_sync_service.dart';
 import 'pinned_security_context.dart';
@@ -45,8 +44,10 @@ class PgpKeyService {
   static dynamic get _cachedPrivateKey => _activeEmail != null ? _privateKeys[_activeEmail] : null;
   static dynamic get _cachedPublicKey => _activeEmail != null ? _publicKeys[_activeEmail] : null;
 
-  // Background isolate worker for non-blocking decrypt
-  static PgpIsolateWorker? _worker;
+  // Armored keys for native Go-based decrypt (replaces PgpIsolateWorker)
+  static String? _activeArmoredKey;
+  static String? _activePassphrase;
+  static String? _activeFallbackKey;
 
   // Recipient key cache (RAM only) with 5-minute TTL. Without a TTL
   // an app session that cached the recipient's OLD pubkey before the
@@ -342,50 +343,71 @@ class PgpKeyService {
     _negativeCache.clear();
     _tofuFingerprints.clear();
     _tofuLoaded = false;
-    _worker?.close();
-    _worker = null;
-    LoggerService.log('PGP', 'PGP key cache + worker + TOFU db cleared');
+    _activeArmoredKey = null;
+    _activePassphrase = null;
+    _activeFallbackKey = null;
+    LoggerService.log('PGP', 'PGP key cache + TOFU db cleared');
   }
 
-  // ── Decrypt (via background isolate worker) ───────────────────────
+  // ── Decrypt (via native Go-based PGP) ────────────────────────────
 
-  /// Decrypt a single PGP message. Runs on background isolate.
+  /// Decrypt a single PGP message using native Go PGP engine.
+  /// Handles both SEIPD v1 (CFB+MDC) and v2 (AEAD/OCB) correctly.
   static Future<String> decrypt(String armoredCiphertext) async {
-    if (_worker == null) {
-      throw StateError('PGP worker not started — unlock vault first');
+    if (_activeArmoredKey == null || _activePassphrase == null) {
+      throw StateError('PGP keys not loaded — unlock vault first');
     }
-    final results = await _worker!.decryptBatch([armoredCiphertext]);
-    final plaintext = results.first;
-    if (plaintext == null) throw StateError('Decryption failed');
-    return plaintext;
+    try {
+      final plaintext = await native_pgp.OpenPGP.decrypt(
+        armoredCiphertext,
+        _activeArmoredKey!,
+        _activePassphrase!,
+      );
+      return plaintext;
+    } catch (e) {
+      // Fallback: try v6 key for old pre-migration messages
+      if (_activeFallbackKey != null) {
+        try {
+          return await native_pgp.OpenPGP.decrypt(
+            armoredCiphertext,
+            _activeFallbackKey!,
+            _activePassphrase!,
+          );
+        } catch (_) {}
+      }
+      rethrow;
+    }
   }
 
-  /// Decrypt a batch of PGP messages. One isolate call, zero UI blocking.
+  /// Decrypt a batch of PGP messages. Each decrypted independently.
   static Future<List<String?>> decryptBatch(List<String> ciphertexts) async {
-    if (_worker == null) {
-      throw StateError('PGP worker not started — unlock vault first');
+    if (_activeArmoredKey == null || _activePassphrase == null) {
+      throw StateError('PGP keys not loaded — unlock vault first');
     }
-    return _worker!.decryptBatch(ciphertexts);
+    final results = <String?>[];
+    for (final ct in ciphertexts) {
+      try {
+        results.add(await decrypt(ct));
+      } catch (e) {
+        LoggerService.logWarning('PGP', 'Decrypt failed for message: $e');
+        results.add(null);
+      }
+    }
+    return results;
   }
 
-  /// Start the background decrypt worker with optional v6 fallback key.
+  /// Set the active private key for decrypt operations.
   static Future<void> _startWorker(String armoredKey, String passphrase) async {
-    _worker?.close();
+    _activeArmoredKey = armoredKey;
+    _activePassphrase = passphrase;
     // Load v6 backup key for decrypting old messages (pre-migration)
     final email = _activeEmail ?? '';
-    String? v6Backup;
     try {
-      v6Backup = await MasterVault.instance.read(key: '${_vaultKeyV6Backup}_$email');
+      _activeFallbackKey = await MasterVault.instance.read(key: '${_vaultKeyV6Backup}_$email');
     } catch (e) {
       LoggerService.log('PGP', 'No v6 backup key available (expected for non-migrated accounts)');
     }
-    _worker = await PgpIsolateWorker.spawn(
-      armoredKey: armoredKey,
-      passphrase: passphrase,
-      fallbackArmoredKey: v6Backup,
-    );
-    _worker!.diagCallback = (msg) => LoggerService.log('PGP_WORKER', msg);
-    LoggerService.log('PGP', '✓ Decrypt worker started${v6Backup != null ? " (with v6 fallback)" : ""}');
+    LoggerService.log('PGP', '✓ Native PGP decrypt ready${_activeFallbackKey != null ? " (with v6 fallback)" : ""}');
   }
 
   // ── PGP/MIME Detection + Extraction ──────────────────────────────
