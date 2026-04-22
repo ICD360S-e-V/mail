@@ -975,6 +975,7 @@ class EmailProvider with ChangeNotifier {
     String body,
     List<dynamic> attachments, {
     int? draftUid,
+    void Function(int bytesSent, int totalBytes)? onSendProgress,
   }) async {
     _isLoading = true;
     _error = null;
@@ -984,6 +985,7 @@ class EmailProvider with ChangeNotifier {
       await _mailService.sendEmailWithAttachmentsAsync(
         account, to, cc, bcc, subject, body, attachments,
         draftUid: draftUid,
+        onSendProgress: onSendProgress,
       );
       _error = null;
       LoggerService.log('PROVIDER', '✓ Email sent from ${piiEmail(account.username)} to:${to.split(',').length} cc:${cc.isEmpty ? 0 : cc.split(',').length} bcc:${bcc.isEmpty ? 0 : bcc.split(',').length} attachments:${attachments.length}');
