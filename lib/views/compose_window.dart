@@ -433,27 +433,39 @@ class _ComposeWindowState extends State<ComposeWindow> {
         final totalBytes = headerBytes.length + bytes.length + footerBytes.length;
         request.contentLength = totalBytes;
 
-        // Write header
-        request.add(headerBytes);
+        // Disable internal 8KB output buffer so addStream backpressure
+        // reflects actual socket acceptance, giving real progress.
+        request.bufferOutput = false;
 
-        // Write file bytes in chunks with progress
-        const chunkSize = 16384;
-        int bytesSent = headerBytes.length;
-        for (var offset = 0; offset < bytes.length; offset += chunkSize) {
-          final end = (offset + chunkSize).clamp(0, bytes.length);
-          request.add(bytes.sublist(offset, end));
-          bytesSent += end - offset;
-
-          final elapsedSec = stopwatch.elapsedMilliseconds / 1000.0;
-          final kbps = elapsedSec > 0 ? (bytesSent / 1024) / elapsedSec : 0.0;
-          att.uploadProgress = bytesSent / totalBytes;
-          att.uploadSpeedText = '${kbps.toStringAsFixed(0)} KB/s';
-          if (mounted && offset % (chunkSize * 4) == 0) setState(() {});
+        // Build multipart stream: header + file chunks + footer
+        const chunkSize = 32768;
+        Stream<List<int>> bodyStream() async* {
+          yield headerBytes;
+          for (var offset = 0; offset < bytes.length; offset += chunkSize) {
+            final end = (offset + chunkSize).clamp(0, bytes.length);
+            yield bytes.sublist(offset, end);
+          }
+          yield footerBytes;
         }
 
-        // Write footer
-        request.add(footerBytes);
+        // Track progress via StreamTransformer — fires only when
+        // socket accepts the chunk (backpressure-aware via addStream).
+        int bytesSent = 0;
+        final trackedStream = bodyStream().transform(
+          StreamTransformer<List<int>, List<int>>.fromHandlers(
+            handleData: (data, sink) {
+              bytesSent += data.length;
+              final elapsedSec = stopwatch.elapsedMilliseconds / 1000.0;
+              final kbps = elapsedSec > 0 ? (bytesSent / 1024) / elapsedSec : 0.0;
+              att.uploadProgress = bytesSent / totalBytes;
+              att.uploadSpeedText = '${kbps.toStringAsFixed(0)} KB/s';
+              if (mounted) setState(() {});
+              sink.add(data);
+            },
+          ),
+        );
 
+        await request.addStream(trackedStream);
         final response = await request.close();
         final responseBody = await response.transform(utf8.decoder).join();
         stopwatch.stop();
