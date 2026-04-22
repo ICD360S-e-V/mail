@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.54.0 - 2026-04-22
+#### Features
+- (**smtp**) add writeTextChunked for send progress tracking - (6252ab2) - icd360sevofficial
+
+- - -
+
 ## v2.53.2 - 2026-04-22
 #### Bug Fixes
 - (**ios**) exclude DKImagePickerController to remove deprecation warnings - (36313ee) - icd360sevofficial
