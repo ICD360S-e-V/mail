@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.52.2 - 2026-04-22
+#### Bug Fixes
+- add logging to empty catch block in mail_status_service.dart - (517dc8b) - icd360sevofficial
+
+- - -
+
 ## v2.52.1 - 2026-04-22
 #### Bug Fixes
 - add logging/comments to empty catch blocks in performance_monitor.dart - (94b88d0) - icd360sevofficial
