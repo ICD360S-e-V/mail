@@ -526,11 +526,7 @@ class SmtpClient extends ClientBase {
         final text = next?.text;
         final data = next?.data;
         if (text != null) {
-          if (onSendProgress != null && text.length > 32768) {
-            writeTextChunked(text, onProgress: onSendProgress);
-          } else {
-            writeText(text);
-          }
+          writeText(text);
         } else if (data != null) {
           writeData(data);
         } else if (cmd.isCommandDone(response)) {
