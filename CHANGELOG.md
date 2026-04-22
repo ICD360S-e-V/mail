@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.53.2 - 2026-04-22
+#### Bug Fixes
+- (**ios**) exclude DKImagePickerController to remove deprecation warnings - (36313ee) - icd360sevofficial
+
+- - -
+
 ## v2.53.1 - 2026-04-22
 #### Bug Fixes
 - remove const from TextStyle with non-const Colors.red - (fe88f36) - icd360sevofficial
