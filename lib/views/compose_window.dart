@@ -17,39 +17,28 @@ import '../services/notification_service.dart';
 import '../services/logger_service.dart';
 import '../services/email_history_service.dart';
 import '../services/pgp_key_service.dart';
+import '../services/mtls_service.dart';
+import '../services/le_issuer_check.dart';
+import '../services/pinned_security_context.dart';
 import '../services/secure_mail_service.dart';
 import '../utils/pii_redactor.dart';
 
-enum _AttachStatus { loading, ready, failed }
+enum _AttachStatus { uploading, ready, failed }
 
 class _ComposeAttachment {
   final PlatformFile file;
   _AttachStatus status;
   String? errorMessage;
-  String? encodedBase64;
-  double encodeProgress;
+  String? serverUuid;
+  double uploadProgress;
+  String uploadSpeedText;
 
-  _ComposeAttachment(this.file, {this.status = _AttachStatus.loading, this.encodeProgress = 0.0});
+  _ComposeAttachment(this.file, {this.status = _AttachStatus.uploading, this.uploadProgress = 0.0, this.uploadSpeedText = ''});
 
   bool get isImage {
     final ext = file.extension?.toLowerCase() ?? '';
     return ext == 'jpg' || ext == 'jpeg' || ext == 'png' || ext == 'gif' || ext == 'webp';
   }
-}
-
-/// Base64 encode with line wrapping (MIME 76-char lines).
-/// Runs in isolate via compute() for large files.
-String _base64EncodeForMime(Uint8List bytes) {
-  final raw = base64.encode(bytes);
-  const lineLen = 76;
-  if (raw.length <= lineLen) return raw;
-  final buf = StringBuffer();
-  for (var i = 0; i < raw.length; i += lineLen) {
-    final end = (i + lineLen).clamp(0, raw.length);
-    buf.write(raw.substring(i, end));
-    if (end < raw.length) buf.write('\r\n');
-  }
-  return buf.toString();
 }
 
 /// Compose email window
@@ -284,7 +273,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
 
         // Pre-encode each attachment to base64 in background
         for (final att in newAttachments) {
-          _encodeAttachment(att);
+          _uploadAttachment(att);
         }
 
         LoggerService.log('COMPOSE', 'Added ${validFiles.length} attachments (${totalSizeMB}MB total)');
@@ -392,14 +381,14 @@ class _ComposeWindowState extends State<ComposeWindow> {
     });
 
     for (final att in newAttachments) {
-      _encodeAttachment(att);
+      _uploadAttachment(att);
     }
 
     LoggerService.log('COMPOSE', 'Added ${validFiles.length} scanned document(s) (${totalSizeMB}MB total)');
   }
 
-  /// Encode attachment to base64 in background isolate with progress.
-  Future<void> _encodeAttachment(_ComposeAttachment att) async {
+  /// Upload attachment to server via HTTP with real progress tracking.
+  Future<void> _uploadAttachment(_ComposeAttachment att) async {
     try {
       final bytes = att.file.bytes;
       if (bytes == null) {
@@ -409,26 +398,90 @@ class _ComposeWindowState extends State<ComposeWindow> {
         return;
       }
 
-      att.status = _AttachStatus.loading;
-      att.encodeProgress = 0.0;
+      att.status = _AttachStatus.uploading;
+      att.uploadProgress = 0.0;
+      att.uploadSpeedText = '';
       if (mounted) setState(() {});
 
       final stopwatch = Stopwatch()..start();
-      final encoded = await compute(_base64EncodeForMime, bytes);
-      stopwatch.stop();
 
-      att.encodedBase64 = encoded;
-      att.status = _AttachStatus.ready;
-      att.encodeProgress = 1.0;
+      // Use mTLS HttpClient for authenticated upload
+      final client = MtlsService.createMtlsHttpClient() ??
+          (PinnedSecurityContext.createHttpClient()
+            ..badCertificateCallback = (cert, host, port) {
+              if (host == 'mail.icd360s.de') {
+                return isTrustedLetsEncryptIssuer(cert.issuer);
+              }
+              return false;
+            });
 
-      final sizeMB = (bytes.length / (1024 * 1024)).toStringAsFixed(1);
-      final elapsedMs = stopwatch.elapsedMilliseconds;
-      LoggerService.log('COMPOSE',
-          '✓ Encoded ${att.file.name} ($sizeMB MB) in ${elapsedMs}ms');
+      try {
+        final uri = Uri.parse('https://mail.icd360s.de/api/upload-attachment.php');
+        final request = await client.postUrl(uri);
+
+        // Build multipart body
+        final boundary = 'upload-${DateTime.now().millisecondsSinceEpoch}';
+        request.headers.set('Content-Type', 'multipart/form-data; boundary=$boundary');
+
+        final header = '--$boundary\r\n'
+            'Content-Disposition: form-data; name="file"; filename="${att.file.name}"\r\n'
+            'Content-Type: application/octet-stream\r\n\r\n';
+        final footer = '\r\n--$boundary--\r\n';
+
+        final headerBytes = utf8.encode(header);
+        final footerBytes = utf8.encode(footer);
+        final totalBytes = headerBytes.length + bytes.length + footerBytes.length;
+        request.contentLength = totalBytes;
+
+        // Write header
+        request.add(headerBytes);
+
+        // Write file bytes in chunks with progress
+        const chunkSize = 16384;
+        int bytesSent = headerBytes.length;
+        for (var offset = 0; offset < bytes.length; offset += chunkSize) {
+          final end = (offset + chunkSize).clamp(0, bytes.length);
+          request.add(bytes.sublist(offset, end));
+          bytesSent += end - offset;
+
+          final elapsedSec = stopwatch.elapsedMilliseconds / 1000.0;
+          final kbps = elapsedSec > 0 ? (bytesSent / 1024) / elapsedSec : 0.0;
+          att.uploadProgress = bytesSent / totalBytes;
+          att.uploadSpeedText = '${kbps.toStringAsFixed(0)} KB/s';
+          if (mounted && offset % (chunkSize * 4) == 0) setState(() {});
+        }
+
+        // Write footer
+        request.add(footerBytes);
+
+        final response = await request.close();
+        final responseBody = await response.transform(utf8.decoder).join();
+        stopwatch.stop();
+
+        if (response.statusCode == 200) {
+          final json = jsonDecode(responseBody);
+          att.serverUuid = json['uuid'] as String?;
+          att.status = _AttachStatus.ready;
+          att.uploadProgress = 1.0;
+
+          final sizeMB = (bytes.length / (1024 * 1024)).toStringAsFixed(1);
+          final elapsedSec = stopwatch.elapsedMilliseconds / 1000.0;
+          final avgKbps = elapsedSec > 0 ? (bytes.length / 1024) / elapsedSec : 0.0;
+          att.uploadSpeedText = '${avgKbps.toStringAsFixed(0)} KB/s';
+          LoggerService.log('COMPOSE',
+              '✓ Uploaded ${att.file.name} ($sizeMB MB) in ${elapsedSec.toStringAsFixed(1)}s (${avgKbps.toStringAsFixed(0)} KB/s)');
+        } else {
+          att.status = _AttachStatus.failed;
+          att.errorMessage = 'Upload failed: HTTP ${response.statusCode}';
+          LoggerService.logWarning('COMPOSE', 'Upload failed for ${att.file.name}: HTTP ${response.statusCode} $responseBody');
+        }
+      } finally {
+        client.close();
+      }
     } catch (e) {
       att.status = _AttachStatus.failed;
-      att.errorMessage = 'Encoding failed: $e';
-      LoggerService.logWarning('COMPOSE', 'Failed to encode ${att.file.name}: $e');
+      att.errorMessage = 'Upload failed: $e';
+      LoggerService.logWarning('COMPOSE', 'Upload failed for ${att.file.name}: $e');
     }
     if (mounted) setState(() {});
   }
@@ -777,14 +830,6 @@ class _ComposeWindowState extends State<ComposeWindow> {
       _sendStopwatch.reset();
       _sendStopwatch.start();
 
-      // Collect pre-encoded base64 data to skip re-encoding at send time
-      final preEncoded = <String, String>{};
-      for (final att in _attachments) {
-        if (att.encodedBase64 != null) {
-          preEncoded[att.file.name] = att.encodedBase64!;
-        }
-      }
-
       await emailProvider.sendEmailFromAccountWithAttachments(
         _selectedAccount!,
         _toController.text,
@@ -794,7 +839,6 @@ class _ComposeWindowState extends State<ComposeWindow> {
         _bodyController.text,
         _attachments.map((a) => a.file).toList(),
         draftUid: _lastDraftUid,
-        preEncodedBase64: preEncoded.isNotEmpty ? preEncoded : null,
         onSendProgress: (bytesSent, totalBytes) {
           if (!mounted) return;
           final percent = totalBytes > 0 ? (bytesSent * 100 ~/ totalBytes) : 0;
@@ -1240,7 +1284,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
                 final att = _attachments[index];
                 final file = att.file;
                 final sizeMB = (file.size / (1024 * 1024)).toStringAsFixed(2);
-                final isLoading = att.status == _AttachStatus.loading;
+                final isUploading = att.status == _AttachStatus.uploading;
                 final isFailed = att.status == _AttachStatus.failed;
                 return Container(
                   margin: const EdgeInsets.only(bottom: 4),
@@ -1249,7 +1293,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
                     border: Border.all(
                       color: isFailed
                           ? Colors.red
-                          : isLoading
+                          : isUploading
                               ? Colors.orange
                               : Colors.grey[60],
                     ),
@@ -1280,18 +1324,18 @@ class _ComposeWindowState extends State<ComposeWindow> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              isLoading
-                                  ? '${file.name} ($sizeMB MB) — Preparing...'
+                              isUploading
+                                  ? '${file.name} ($sizeMB MB) — ${(att.uploadProgress * 100).toInt()}% ${att.uploadSpeedText}'
                                   : '${file.name} ($sizeMB MB)',
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(fontSize: 12),
                             ),
-                            if (isLoading)
+                            if (isUploading)
                               Padding(
                                 padding: const EdgeInsets.only(top: 4),
                                 child: SizedBox(
                                   height: 3,
-                                  child: ProgressBar(value: att.encodeProgress * 100),
+                                  child: ProgressBar(value: att.uploadProgress * 100),
                                 ),
                               ),
                             if (isFailed)
@@ -1308,7 +1352,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
                           padding: EdgeInsets.only(right: 4),
                           child: Icon(FluentIcons.check_mark, size: 12, color: Color(0xFF107C10)),
                         ),
-                      if (isLoading)
+                      if (isUploading)
                         const Padding(
                           padding: EdgeInsets.only(right: 4),
                           child: SizedBox(
