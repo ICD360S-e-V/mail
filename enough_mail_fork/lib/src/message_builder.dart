@@ -510,6 +510,42 @@ class PartBuilder {
     return child;
   }
 
+  /// Adds a binary attachment with pre-encoded base64 data.
+  /// Use this when base64 encoding was done ahead of time (e.g. in an
+  /// isolate with progress tracking) to avoid re-encoding at send time.
+  PartBuilder addPreEncodedBinary(
+    String encodedBase64,
+    int originalSize,
+    MediaType mediaType, {
+    ContentDispositionHeader? disposition,
+    String? filename,
+  }) {
+    disposition ??= ContentDispositionHeader.from(
+      ContentDisposition.attachment,
+      filename: filename,
+      size: originalSize,
+    );
+    final child = addPart(disposition: disposition)
+      ..transferEncoding = TransferEncoding.base64
+      ..setContentType(mediaType, name: filename);
+    final info = AttachmentInfo(
+      null,
+      mediaType,
+      filename,
+      originalSize,
+      disposition.disposition,
+      null,
+      child,
+    );
+    _attachments.add(info);
+    child._part.mimeData = TextMimeData(
+      encodedBase64,
+      containsHeader: false,
+    );
+
+    return child;
+  }
+
   /// Adds the message [mimeMessage] as a `message/rfc822` content.
   ///
   /// Optionally  specify the [disposition] which defaults to
