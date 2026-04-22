@@ -46,10 +46,14 @@ class LoggerService {
     _addToBuffer(logMessage);
   }
 
-  /// Log error with optional exception details
+  /// Log error with optional exception details.
+  /// Exception toString() is sanitized before entering the buffer
+  /// to prevent PII leaks from library exceptions (e.g. IMAP errors
+  /// that embed email addresses or SQL errors that embed user data).
   static void logError(String category, dynamic error, [StackTrace? stackTrace]) {
     final timestamp = _timeFormat.format(DateTime.now());
-    final errorMessage = '[$timestamp] [ERROR] [$category] $error';
+    final safeError = PiiRedactor.sanitizeException(error);
+    final errorMessage = '[$timestamp] [ERROR] [$category] $safeError';
     developer.log(
       errorMessage,
       name: category,
@@ -70,12 +74,15 @@ class LoggerService {
     _addToBuffer(logMessage);
   }
 
-  /// Log debug message (only in debug mode)
+  /// Log debug message (only in debug mode).
+  /// Still passes through PII sanitization and buffer so debug logs
+  /// uploaded to server don't leak PII.
   static void logDebug(String category, String message) {
     assert(() {
       final timestamp = _timeFormat.format(DateTime.now());
       final logMessage = '[$timestamp] [DEBUG] [$category] $message';
       developer.log(logMessage, name: category);
+      _addToBuffer(logMessage);
       return true;
     }());
   }
