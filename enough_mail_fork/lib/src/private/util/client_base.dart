@@ -334,6 +334,40 @@ abstract class ClientBase {
     _writeFuture = null;
   }
 
+  /// Writes text in chunks with progress callback.
+  /// Used for large SMTP DATA payloads to report send progress.
+  Future writeTextChunked(
+    String text, {
+    void Function(int bytesSent, int totalBytes)? onProgress,
+    int chunkSize = 16384,
+  }) async {
+    final previousWriteFuture = _writeFuture;
+    if (previousWriteFuture != null) {
+      try {
+        await previousWriteFuture;
+      } catch (e, s) {
+        print('Unable to await previous write future: $e $s');
+        _writeFuture = null;
+        rethrow;
+      }
+    }
+    final fullText = '$text\r\n';
+    final bytes = fullText.codeUnits;
+    final totalBytes = bytes.length;
+    int bytesSent = 0;
+
+    for (var offset = 0; offset < totalBytes; offset += chunkSize) {
+      final end = (offset + chunkSize).clamp(0, totalBytes);
+      _socket.add(bytes.sublist(offset, end));
+      final future = _socket.flush();
+      _writeFuture = future;
+      await future;
+      bytesSent = end;
+      onProgress?.call(bytesSent, totalBytes);
+    }
+    _writeFuture = null;
+  }
+
   /// Logs the data from the app-side
   void logApp(dynamic logObject) => log(logObject, initial: initialApp);
 
