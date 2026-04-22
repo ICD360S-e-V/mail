@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.52.6 - 2026-04-22
+#### Performance Improvements
+- stop performance stats from triggering UI rebuilds - (67637bb) - icd360sevofficial
+
+- - -
+
 ## v2.52.5 - 2026-04-22
 #### Bug Fixes
 - (**security**) double-sanitize logs before server upload - (69043ba) - icd360sevofficial
