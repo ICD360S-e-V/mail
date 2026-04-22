@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.63.1 - 2026-04-22
+#### Bug Fixes
+- (**smtp**) revert writeTextChunked in onServerResponse - (1a3aa34) - icd360sevofficial
+
+- - -
+
 ## v2.63.0 - 2026-04-22
 #### Features
 - (**compose**) real HTTP upload with progress bar on attach - (45a917d) - icd360sevofficial
