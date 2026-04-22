@@ -116,14 +116,18 @@ class MtlsClientPool {
     final key = username.toLowerCase();
     final c = _clients.remove(key);
     if (c != null) {
-      try { c.client.close(force: true); } catch (_) {}
+      try { c.client.close(force: true); } catch (_) {
+        // Best-effort cleanup; client may already be closed
+      }
     }
   }
 
   /// Close all clients (called on app lock / logout).
   Future<void> closeAll() async {
     for (final c in _clients.values) {
-      try { c.client.close(force: true); } catch (_) {}
+      try { c.client.close(force: true); } catch (_) {
+        // Best-effort cleanup on shutdown
+      }
     }
     _clients.clear();
   }
