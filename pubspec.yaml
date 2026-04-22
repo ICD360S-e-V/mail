@@ -60,7 +60,7 @@ dependencies:
 
   # File picker
   file_picker: ^11.0.2  # File selection for attachments
-  flutter_widget_from_html_core: ^0.15.2  # Secure HTML email rendering (no WebView)
+  flutter_widget_from_html_core: ^0.17.2  # Secure HTML email rendering (no WebView)
 
   # Printing
   printing: ^5.13.4  # Native print dialog for all platforms including Windows
