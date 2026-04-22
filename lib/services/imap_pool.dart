@@ -183,7 +183,9 @@ class ImapPool {
       futures.add(Future(() async {
         try {
           await entry.value.client.disconnect();
-        } catch (_) {}
+        } catch (_) {
+          // Best-effort cleanup; connection may already be dead
+        }
       }));
     }
     await Future.wait(futures);
