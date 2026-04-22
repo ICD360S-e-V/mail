@@ -1174,8 +1174,6 @@ class _MainWindowState extends State<MainWindow> {
     final items = <NavigationPaneItem>[];
     final theme = FluentTheme.of(context);
 
-    LoggerService.log('UI_BUILD', 'Building navigation pane. Accounts: ${emailProvider.accounts.length}');
-
     final activeAccount = emailProvider.currentAccount;
     // Fluent UI NavigationView crashes with RangeError on empty items list
     // (body.dart accesses index 0). Always provide a placeholder PaneItem
