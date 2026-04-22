@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.64.4 - 2026-04-22
+#### Bug Fixes
+- (**compose**) stop auto-save draft when Send is pressed - (a262960) - icd360sevofficial
+
+- - -
+
 ## v2.64.3 - 2026-04-22
 #### Bug Fixes
 - (**ui**) move notification bar from top to bottom - (d649ecd) - icd360sevofficial
