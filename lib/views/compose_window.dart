@@ -122,6 +122,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
 
   bool _isSending = false;
   String _sendingStatus = '';
+  final Stopwatch _sendStopwatch = Stopwatch();
 
   /// Show picker to choose attachment source (file vs camera).
   /// Follows Gmail/Outlook/WinUI3 conventions per platform:
@@ -716,6 +717,8 @@ class _ComposeWindowState extends State<ComposeWindow> {
       // Send using selected account with attachments.
       // Pass _lastDraftUid so the just-sent draft can be deleted by UID
       // (avoids the previous SUBJECT search, which was vulnerable to IMAP injection).
+      _sendStopwatch.reset();
+      _sendStopwatch.start();
       await emailProvider.sendEmailFromAccountWithAttachments(
         _selectedAccount!,
         _toController.text,
@@ -725,7 +728,17 @@ class _ComposeWindowState extends State<ComposeWindow> {
         _bodyController.text,
         _attachments.map((a) => a.file).toList(),
         draftUid: _lastDraftUid,
+        onSendProgress: (bytesSent, totalBytes) {
+          if (!mounted) return;
+          final percent = totalBytes > 0 ? (bytesSent * 100 ~/ totalBytes) : 0;
+          final elapsedSec = _sendStopwatch.elapsedMilliseconds / 1000.0;
+          final kbps = elapsedSec > 0 ? (bytesSent / 1024) / elapsedSec : 0.0;
+          setState(() {
+            _sendingStatus = '${l10n.buttonSending} $percent% (${kbps.toStringAsFixed(0)} KB/s)';
+          });
+        },
       );
+      _sendStopwatch.stop();
 
       if (mounted) {
         final msg = recipients.length > 1
