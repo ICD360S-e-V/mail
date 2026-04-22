@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.52.5 - 2026-04-22
+#### Bug Fixes
+- (**security**) double-sanitize logs before server upload - (69043ba) - icd360sevofficial
+
+- - -
+
 ## v2.52.4 - 2026-04-22
 #### Bug Fixes
 - (**security**) sanitize exceptions and debug logs for PII - (76123c8) - icd360sevofficial
