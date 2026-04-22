@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.52.1 - 2026-04-22
+#### Bug Fixes
+- add logging/comments to empty catch blocks in performance_monitor.dart - (94b88d0) - icd360sevofficial
+- add logging/comments to empty catch blocks in connection_monitor.dart - (c22f330) - icd360sevofficial
+- add logging/comments to empty catch blocks in mtls_client_pool.dart - (9190bf9) - icd360sevofficial
+- add logging/comments to empty catch blocks in imap_pool.dart - (4d07d34) - icd360sevofficial
+- add logging/comments to empty catch blocks in pgp_key_service.dart - (d4f66d2) - icd360sevofficial
+
+- - -
+
 ## v2.52.0 - 2026-04-20
 #### Features
 - (**pgp**) persistent TOFU fingerprint database with internal/external trust model - (01bc7ba) - icd360sevofficial
