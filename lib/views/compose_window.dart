@@ -681,6 +681,11 @@ class _ComposeWindowState extends State<ComposeWindow> {
     // Claim the flag synchronously, before any await, so the next tap
     // sees isSending=true even if our UI hasn't rebuilt yet.
     _isSending = true;
+    // Stop auto-save draft — it conflicts with the send pipeline
+    // (both use IMAP connections, and the 36MB APPEND to Sent folder
+    // races with the 5-second draft save cycle).
+    _autoSaveTimer?.cancel();
+    _autoSaveTimer = null;
     if (mounted) setState(() {});
 
     if (_selectedAccount == null) {
