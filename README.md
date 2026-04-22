@@ -29,60 +29,61 @@ ICD360S Mail is a security-first email client built for [ICD360S e.V.](https://i
 
 ### Encryption
 
-| | Feature | Details |
-|---|---|---|
-| | **E2EE Internal Mail** | All emails between `@icd360s.de` addresses are automatically encrypted end-to-end using OpenPGP (PGP/MIME, RFC 3156). The server only sees `encrypted.asc` — body text and attachments are invisible to the server, admin, or anyone without the recipient's private key. |
-| | **OpenPGP Keys** | Ed25519 (signing) + X25519/ECDH (encryption), v4 key packets. Keys are generated on device, stored in an Argon2id-protected vault, and synced between devices via encrypted blobs. |
-| | **PGP/MIME Attachments** | Attachments are encrypted inside the PGP payload alongside the message body (RFC 3156 compliant). The outer message contains only the PGP wrapper — no metadata about attachment names or types leaks to the server. |
-| | **Automatic Key Management** | Keys are generated on first login, uploaded to the server for recipient discovery, and synced across devices. TOFU (Trust on First Use) warns if a recipient's key changes unexpectedly. |
-| | **Zero-Access at Rest** | Incoming mail encrypted with recipient's PGP key on the server before storage. |
-| | **Password-Protected Email** | Send encrypted email to anyone (external). Recipient opens a secure link, enters password, reads in browser. AES-256-GCM + PBKDF2, 100% client-side decryption. |
-| | **WKD Key Discovery** | External clients (Thunderbird) auto-discover your public key via Web Key Directory. |
+| Feature | Details |
+|---|---|
+| **E2EE Internal Mail** | All emails between `@icd360s.de` addresses are automatically encrypted end-to-end using OpenPGP (PGP/MIME, RFC 3156). The server only sees an encrypted blob — body text and attachments are invisible to anyone without the recipient's private key. |
+| **PGP/MIME Attachments** | Attachments are encrypted inside the PGP payload alongside the message body. No metadata about attachment names or types leaks to the server. |
+| **Automatic Key Management** | Keys are generated on device, stored in an encrypted vault, and synced between devices. Persistent key pinning warns if a recipient's key changes unexpectedly. |
+| **Zero-Access at Rest** | Incoming mail is encrypted on the server before storage. Even the server administrator cannot read stored messages. |
+| **Password-Protected Email** | Send encrypted email to anyone externally. Recipient opens a secure link, enters password, reads in browser. 100% client-side decryption. |
+| **Key Discovery** | External clients can auto-discover your public key via Web Key Directory (WKD). |
 
 ### Authentication
 
-| | Feature | Details |
-|---|---|---|
-| | **Mutual TLS** | Per-user client certificates. No passwords on the wire. |
-| | **Device Approval** | Admin-controlled device registration. Single-device enforcement. |
-| | **Remote Revocation** | Admin revokes a device — app auto-wipes credentials and locks instantly. |
-| | **PIN Unlock** | 6-digit PIN with randomized keypad layout. Defeats shoulder surfing, smudge attacks, thermal imaging. |
+| Feature | Details |
+|---|---|
+| **Mutual TLS** | Per-user client certificates. No passwords on the wire. |
+| **Device Approval** | Admin-controlled device registration with single-device enforcement. |
+| **Remote Revocation** | Admin revokes a device — app auto-wipes credentials and locks instantly. |
+| **PIN Unlock** | 6-digit PIN with randomized keypad layout. Defeats shoulder surfing and smudge attacks. |
 
 ### Protection
 
-| | Feature | Details |
-|---|---|---|
-| | **ClamAV Scanning** | Server-side antivirus on all attachments. Real-time UI: pending, scanning, clean, infected. |
-| | **Threat Intelligence** | DMARC, DKIM, SPF validation. DNS blacklist checks. Sender reputation scoring. |
-| | **Phishing Detection** | Safe Browsing hash prefix database with ECDSA signature verification. |
-| | **CSS Sanitizer** | Blocks `url()`, `var()`, `expression()` tracking in HTML emails. No WebView. |
+| Feature | Details |
+|---|---|
+| **Virus Scanning** | Server-side antivirus scanning on all attachments with real-time status in the app. |
+| **Multi-Layer Spam Filtering** | Inbound mail passes through reputation checks, DNSBL, Bayesian filtering, and phishing detection. |
+| **Threat Intelligence** | DMARC, DKIM, SPF validation. DNS blacklist checks. Sender reputation scoring. |
+| **Phishing Detection** | Offline threat database with cryptographic signature verification. |
+| **HTML Sanitizer** | Allowlist-based HTML renderer blocks tracking pixels, scripts, and CSS exploits. No WebView. |
 
 ### Privacy
 
-| | Feature | Details |
-|---|---|---|
-| | **RAM-Only Cache** | Emails exist only in process memory. Zero disk. Wiped on lock. |
-| | **DNS-over-HTTPS** | Quad9 (RFC 8484 wireformat) + Cloudflare fallback. No cleartext DNS. |
-| | **Notification Privacy** | Configurable: minimal / sender only / full content on lock screen. |
-| | **No Telemetry** | Zero analytics. Zero tracking. Zero CDN dependencies. |
+| Feature | Details |
+|---|---|
+| **RAM-Only Cache** | Emails exist only in process memory. Zero disk persistence. Wiped on lock. |
+| **DNS-over-HTTPS** | All DNS queries are encrypted. No cleartext DNS leaves the device. |
+| **PII-Safe Logging** | All diagnostic logs pass through automatic PII redaction before storage or upload. Email addresses, IPs, and subjects are sanitized. |
+| **Notification Privacy** | Configurable lock screen notifications: minimal, sender only, or full content. |
+| **No Telemetry** | Zero analytics. Zero tracking. Zero CDN dependencies. |
 
 ---
 
 ## Internal E2EE: What the Server Sees
 
-When a member sends an email to another `@icd360s.de` address, the message is encrypted **on the sender's device** before it leaves. The server handles delivery but cannot read the content.
+When a member sends an email to another `@icd360s.de` address, the message is encrypted **on the sender's device** before it leaves.
 
-| | Visible to Server | Encrypted (E2EE) |
-|---|---|---|
-| | Sender address | Message body |
-| | Recipient address | Attachments |
-| | Subject line | Attachment names and types |
-| | Date and time | Inner MIME structure |
-| | Message size | Everything inside `encrypted.asc` |
+| Visible to Server | Encrypted (E2EE) |
+|---|---|
+| Sender address | Message body |
+| Recipient address | Attachments |
+| Subject line | Attachment names and types |
+| Date and time | Inner MIME structure |
+| Message size | Everything inside the encrypted payload |
 
-The server sees only the SMTP envelope (like a postal envelope — sender, recipient, date) and a single `encrypted.asc` blob. Even a compromised server or malicious admin cannot decrypt the message content — only the recipient's device holds the private key.
+The server sees only the SMTP envelope and a single encrypted blob. Even a compromised server or malicious admin cannot decrypt the message content — only the recipient's device holds the private key.
 
-> **Note:** Subject lines are currently visible in the outer headers (standard PGP/MIME behavior). Protected Headers for encrypted subjects may be added in a future version, following the approach used by Proton Mail and Thunderbird.
+> **Note:** Subject lines are currently visible in the outer headers (standard PGP/MIME behavior). Protected headers for encrypted subjects may be added in a future version.
 
 ---
 
@@ -92,12 +93,10 @@ The server sees only the SMTP envelope (like a postal envelope — sender, recip
                         ┌─────────────────────────┐
                         │     ICD360S Mail App     │
                         │                         │
-                        │  Master Vault (Argon2id) │
-                        │  PGP Keys (Ed25519)     │
-                        │  PIN (Randomized Keypad) │
+                        │  Encrypted Key Vault     │
+                        │  OpenPGP (RFC 9580)      │
                         │  RAM-Only Email Cache    │
-                        │  Threat Intelligence     │
-                        │  ClamAV Scan UI         │
+                        │  Threat Analysis Engine  │
                         └────────────┬────────────┘
                                      │
                               mTLS + DoH
@@ -105,12 +104,11 @@ The server sees only the SMTP envelope (like a postal envelope — sender, recip
                         ┌────────────┴────────────┐
                         │    mail.icd360s.de       │
                         │                         │
-                        │  HAProxy (mTLS frontend) │
-                        │  Dovecot (SASL EXTERNAL) │
-                        │  Postfix + rspamd        │
-                        │  PGP SMTP Proxy          │
-                        │  ClamAV + Valkey         │
-                        │  WKD + Secure Reader     │
+                        │  mTLS Gateway            │
+                        │  IMAP + SMTP Services    │
+                        │  Spam & Virus Filtering  │
+                        │  Zero-Access Encryption  │
+                        │  Key Directory (WKD)     │
                         └─────────────────────────┘
 ```
 
@@ -118,7 +116,7 @@ The server sees only the SMTP envelope (like a postal envelope — sender, recip
 
 ## Download
 
-> All downloads are served over HTTPS from `mail.icd360s.de` with ECDSA-signed version verification.
+> All downloads are served over HTTPS with cryptographically signed version verification.
 
 ### Desktop
 
@@ -127,7 +125,7 @@ The server sees only the SMTP envelope (like a postal envelope — sender, recip
 <td align="center" width="200">
 <br/>
 <a href="https://mail.icd360s.de/downloads/mail/windows/icd360s-mail-setup.exe"><strong>Windows</strong></a><br/>
-<sub>Inno Setup Installer (.exe)</sub><br/><br/>
+<sub>Installer (.exe)</sub><br/><br/>
 <a href="https://mail.icd360s.de/downloads/mail/windows/icd360s-mail-setup.exe">
 <img src="https://img.shields.io/badge/Download-Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Windows"/>
 </a><br/><br/>
@@ -136,7 +134,7 @@ The server sees only the SMTP envelope (like a postal envelope — sender, recip
 <td align="center" width="200">
 <br/>
 <a href="https://mail.icd360s.de/downloads/mail/macos/icd360s-mail.dmg"><strong>macOS</strong></a><br/>
-<sub>DMG (Ad-hoc + Hardened Runtime)</sub><br/><br/>
+<sub>DMG (Hardened Runtime)</sub><br/><br/>
 <a href="https://mail.icd360s.de/downloads/mail/macos/icd360s-mail.dmg">
 <img src="https://img.shields.io/badge/Download-macOS-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS"/>
 </a><br/><br/>
@@ -191,7 +189,7 @@ The server sees only the SMTP envelope (like a postal envelope — sender, recip
 <td align="center" width="250">
 <br/>
 <strong>iOS</strong><br/>
-<sub>IPA (Ad-hoc sideload)</sub><br/><br/>
+<sub>IPA (Sideload)</sub><br/><br/>
 <a href="https://mail.icd360s.de/downloads/mail/ios/icd360s-mail.ipa">
 <img src="https://img.shields.io/badge/Download-iOS-000000?style=for-the-badge&logo=apple&logoColor=white" alt="iOS"/>
 </a><br/><br/>
@@ -213,20 +211,6 @@ The server sees only the SMTP envelope (like a postal envelope — sender, recip
 | Google Play AAB | — | [Download AAB](https://mail.icd360s.de/downloads/mail/android/googleplay/icd360s-mail.aab) |
 
 </details>
-
----
-
-## Security Audit
-
-The codebase has been through **3 comprehensive security review rounds** with **39 issues identified and fixed**, including:
-
-- Critical certificate validation bypass
-- CSS tracking pixel prevention (Proton + Tuta pattern)
-- Password hashing upgrade (PBKDF2 to Argon2id)
-- DNS poisoning prevention via DoH
-- PGP/MIME RFC 3156 compliance
-- BCC privacy in encrypted mail
-- TOFU key substitution detection
 
 ---
 
@@ -263,9 +247,15 @@ flutter build apk --release
 
 ---
 
+## Security
+
+Please report security vulnerabilities responsibly. See [SECURITY.md](SECURITY.md) for our disclosure policy and PGP key.
+
+---
+
 ## Versioning
 
-Automated with [cocogitto](https://github.com/cocogitto/cocogitto) using [Conventional Commits](https://www.conventionalcommits.org/):
+Automated with [Conventional Commits](https://www.conventionalcommits.org/):
 
 ```
 fix:      → patch    (2.39.0 → 2.39.1)
@@ -278,38 +268,26 @@ Every push to `main` with a releasable commit automatically bumps the version, c
 
 ---
 
-## Tech Stack
-
-| Layer | Technology |
-|:---|:---|
-| Framework | Flutter (Dart) |
-| UI | Microsoft Fluent Design (`fluent_ui`) |
-| Email | `enough_mail` (custom fork with SASL EXTERNAL) |
-| Encryption | `dart_pg` (OpenPGP RFC 9580), `cryptography` (Argon2id, HKDF), `pointycastle` (AES-GCM, PBKDF2) |
-| Server | AlmaLinux 10, Dovecot, Postfix, HAProxy, nginx, rspamd, ClamAV, Valkey, MariaDB |
-
----
-
 ## About ICD360S e.V.
 
 [ICD360S e.V.](https://icd360s.de) is a registered German nonprofit (*eingetragener Verein*) based in Neu-Ulm, Bavaria.
 
 **Registration:** Amtsgericht Memmingen, VR 201335
 
-This email client is designed for **professional communication** — both within the association and with external institutions, organizations, and individuals. Members use their `@icd360s.de` address to communicate securely with government agencies, partners, legal contacts, and each other.
+This email client is designed for **professional communication** — both within the association and with external institutions, organizations, and individuals.
 
 ### Membership Benefits
 
 Every active member receives a free, secure email account:
 
-| | Benefit |
-|---|---|
-| | **Unlimited** incoming emails |
-| | **500 MB** mailbox storage per account |
-| | **10 emails/day** sending limit (3 per hour) |
-| | **End-to-end encrypted** communication with all members |
-| | **Cross-platform** access — Windows, macOS, Linux, Android, iOS |
-| | **Professional @icd360s.de** email address |
+| Benefit |
+|---|
+| **Unlimited** incoming emails |
+| **500 MB** mailbox storage per account |
+| **10 emails/day** sending limit (3 per hour) |
+| **End-to-end encrypted** communication with all members |
+| **Cross-platform** access — Windows, macOS, Linux, Android, iOS |
+| **Professional @icd360s.de** email address |
 
 ### How to Get Access
 
@@ -322,7 +300,7 @@ The service is **free for all active members**. When a membership ends, the admi
 
 > **Important:** The live service at `mail.icd360s.de` is available **exclusively to members** of ICD360S e.V. Public access is not offered. This repository contains the open-source code — the operational service is private.
 
-> This service is provided in compliance with German nonprofit law (BGB §§21-79, AO §§51-68) and GDPR/DSGVO. Running a member email service is a [routine practice](https://www.ccc.de) among German nonprofits. No TKG telecommunications registration is required for internal member services.
+> This service is provided in compliance with German nonprofit law (BGB §§21-79, AO §§51-68) and GDPR/DSGVO.
 
 ---
 
