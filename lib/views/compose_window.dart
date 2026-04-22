@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart' show showModalBottomSheet;
 import 'package:file_picker/file_picker.dart';
 import 'package:cunning_document_scanner/cunning_document_scanner.dart';
@@ -24,13 +26,30 @@ class _ComposeAttachment {
   final PlatformFile file;
   _AttachStatus status;
   String? errorMessage;
+  String? encodedBase64;
+  double encodeProgress;
 
-  _ComposeAttachment(this.file, {this.status = _AttachStatus.loading});
+  _ComposeAttachment(this.file, {this.status = _AttachStatus.loading, this.encodeProgress = 0.0});
 
   bool get isImage {
     final ext = file.extension?.toLowerCase() ?? '';
     return ext == 'jpg' || ext == 'jpeg' || ext == 'png' || ext == 'gif' || ext == 'webp';
   }
+}
+
+/// Base64 encode with line wrapping (MIME 76-char lines).
+/// Runs in isolate via compute() for large files.
+String _base64EncodeForMime(Uint8List bytes) {
+  final raw = base64.encode(bytes);
+  const lineLen = 76;
+  if (raw.length <= lineLen) return raw;
+  final buf = StringBuffer();
+  for (var i = 0; i < raw.length; i += lineLen) {
+    final end = (i + lineLen).clamp(0, raw.length);
+    buf.write(raw.substring(i, end));
+    if (end < raw.length) buf.write('\r\n');
+  }
+  return buf.toString();
 }
 
 /// Compose email window
@@ -257,17 +276,16 @@ class _ComposeWindowState extends State<ComposeWindow> {
           return;
         }
 
-        // Add files with loading status, then mark ready
+        // Add files with loading status — encoding starts immediately
         final newAttachments = validFiles.map((f) => _ComposeAttachment(f)).toList();
         setState(() {
           _attachments.addAll(newAttachments);
         });
 
-        // Mark each as ready (bytes already loaded)
+        // Pre-encode each attachment to base64 in background
         for (final att in newAttachments) {
-          att.status = _AttachStatus.ready;
+          _encodeAttachment(att);
         }
-        if (mounted) setState(() {});
 
         LoggerService.log('COMPOSE', 'Added ${validFiles.length} attachments (${totalSizeMB}MB total)');
       }
@@ -368,12 +386,51 @@ class _ComposeWindowState extends State<ComposeWindow> {
       return;
     }
 
-    final newAttachments = validFiles.map((f) => _ComposeAttachment(f, status: _AttachStatus.ready)).toList();
+    final newAttachments = validFiles.map((f) => _ComposeAttachment(f)).toList();
     setState(() {
       _attachments.addAll(newAttachments);
     });
 
+    for (final att in newAttachments) {
+      _encodeAttachment(att);
+    }
+
     LoggerService.log('COMPOSE', 'Added ${validFiles.length} scanned document(s) (${totalSizeMB}MB total)');
+  }
+
+  /// Encode attachment to base64 in background isolate with progress.
+  Future<void> _encodeAttachment(_ComposeAttachment att) async {
+    try {
+      final bytes = att.file.bytes;
+      if (bytes == null) {
+        att.status = _AttachStatus.failed;
+        att.errorMessage = 'No file data';
+        if (mounted) setState(() {});
+        return;
+      }
+
+      att.status = _AttachStatus.loading;
+      att.encodeProgress = 0.0;
+      if (mounted) setState(() {});
+
+      final stopwatch = Stopwatch()..start();
+      final encoded = await compute(_base64EncodeForMime, bytes);
+      stopwatch.stop();
+
+      att.encodedBase64 = encoded;
+      att.status = _AttachStatus.ready;
+      att.encodeProgress = 1.0;
+
+      final sizeMB = (bytes.length / (1024 * 1024)).toStringAsFixed(1);
+      final elapsedMs = stopwatch.elapsedMilliseconds;
+      LoggerService.log('COMPOSE',
+          '✓ Encoded ${att.file.name} ($sizeMB MB) in ${elapsedMs}ms');
+    } catch (e) {
+      att.status = _AttachStatus.failed;
+      att.errorMessage = 'Encoding failed: $e';
+      LoggerService.logWarning('COMPOSE', 'Failed to encode ${att.file.name}: $e');
+    }
+    if (mounted) setState(() {});
   }
 
   /// Remove attachment
@@ -719,6 +776,15 @@ class _ComposeWindowState extends State<ComposeWindow> {
       // (avoids the previous SUBJECT search, which was vulnerable to IMAP injection).
       _sendStopwatch.reset();
       _sendStopwatch.start();
+
+      // Collect pre-encoded base64 data to skip re-encoding at send time
+      final preEncoded = <String, String>{};
+      for (final att in _attachments) {
+        if (att.encodedBase64 != null) {
+          preEncoded[att.file.name] = att.encodedBase64!;
+        }
+      }
+
       await emailProvider.sendEmailFromAccountWithAttachments(
         _selectedAccount!,
         _toController.text,
@@ -728,6 +794,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
         _bodyController.text,
         _attachments.map((a) => a.file).toList(),
         draftUid: _lastDraftUid,
+        preEncodedBase64: preEncoded.isNotEmpty ? preEncoded : null,
         onSendProgress: (bytesSent, totalBytes) {
           if (!mounted) return;
           final percent = totalBytes > 0 ? (bytesSent * 100 ~/ totalBytes) : 0;
@@ -1213,16 +1280,18 @@ class _ComposeWindowState extends State<ComposeWindow> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              '${file.name} ($sizeMB MB)',
+                              isLoading
+                                  ? '${file.name} ($sizeMB MB) — Preparing...'
+                                  : '${file.name} ($sizeMB MB)',
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(fontSize: 12),
                             ),
                             if (isLoading)
-                              const Padding(
-                                padding: EdgeInsets.only(top: 4),
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
                                 child: SizedBox(
-                                  height: 2,
-                                  child: ProgressBar(),
+                                  height: 3,
+                                  child: ProgressBar(value: att.encodeProgress * 100),
                                 ),
                               ),
                             if (isFailed)
