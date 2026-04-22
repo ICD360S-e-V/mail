@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:enough_mail/enough_mail.dart';
 import '../models/models.dart';
@@ -726,14 +727,13 @@ class MailService {
         LoggerService.log('EMAIL-HISTORY', '✓ Recipients saved to history');
       });
 
-      // Save to Sent folder (awaited — losing the Sent copy is worse than
-      // a few extra seconds of spinner). Previous fire-and-forget silently
-      // swallowed errors, leaving Sent folder empty.
-      try {
-        await _saveToSentFolder(account, mimeMessage, subject, draftUid: draftUid);
-      } catch (sentEx) {
+      // Save to Sent folder in background — don't block the UI.
+      // For large messages (36MB+), IMAP APPEND takes 1-2 minutes on
+      // mobile networks. The email is already delivered via SMTP; the
+      // Sent folder copy is best-effort and should not block the user.
+      unawaited(_saveToSentFolder(account, mimeMessage, subject, draftUid: draftUid).catchError((sentEx) {
         LoggerService.logWarning('SMTP', '⚠ Email sent but could not save to Sent folder: $sentEx');
-      }
+      }));
     } catch (ex, stackTrace) {
       // Ensure SMTP client is disconnected on error
       try { await smtpClient?.disconnect(); } catch (_) {}
@@ -822,12 +822,10 @@ class MailService {
         LoggerService.log('EMAIL-HISTORY', '✓ Recipients saved to history');
       });
 
-      // Save to Sent folder (awaited)
-      try {
-        await _saveToSentFolder(account, mimeMessage, subject, draftUid: draftUid);
-      } catch (sentEx) {
+      // Save to Sent folder in background — don't block the UI
+      unawaited(_saveToSentFolder(account, mimeMessage, subject, draftUid: draftUid).catchError((sentEx) {
         LoggerService.logWarning('SMTP', '⚠ Email sent but could not save to Sent folder: $sentEx');
-      }
+      }));
     } catch (ex, stackTrace) {
       LoggerService.logError('SMTP', ex, stackTrace);
       rethrow;
