@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.57.0 - 2026-04-22
+#### Features
+- pass onSendProgress callback from compose to SMTP client - (80d00e7) - icd360sevofficial
+
+- - -
+
 ## v2.56.0 - 2026-04-22
 #### Features
 - (**smtp**) pass onSendProgress callback through send pipeline - (c0050ba) - icd360sevofficial
