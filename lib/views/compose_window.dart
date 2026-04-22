@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' show showModalBottomSheet;
 import 'package:file_picker/file_picker.dart';
@@ -16,6 +17,21 @@ import '../services/email_history_service.dart';
 import '../services/pgp_key_service.dart';
 import '../services/secure_mail_service.dart';
 import '../utils/pii_redactor.dart';
+
+enum _AttachStatus { loading, ready, failed }
+
+class _ComposeAttachment {
+  final PlatformFile file;
+  _AttachStatus status;
+  String? errorMessage;
+
+  _ComposeAttachment(this.file, {this.status = _AttachStatus.loading});
+
+  bool get isImage {
+    final ext = file.extension?.toLowerCase() ?? '';
+    return ext == 'jpg' || ext == 'jpeg' || ext == 'png' || ext == 'gif' || ext == 'webp';
+  }
+}
 
 /// Compose email window
 class ComposeWindow extends StatefulWidget {
@@ -44,7 +60,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
   int? _lastDraftUid;
 
   // Attachments
-  final List<PlatformFile> _attachments = [];
+  final List<_ComposeAttachment> _attachments = [];
   final FlyoutController _attachFlyout = FlyoutController();
   static const int maxAttachments = 20;
   static const int maxTotalSizeMB = 25; // 25MB raw limit
@@ -229,7 +245,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
         }
 
         // Calculate total size
-        int totalSize = _attachments.fold(0, (sum, file) => sum + file.size);
+        int totalSize = _attachments.fold(0, (sum, a) => sum + a.file.size);
         int newSize = validFiles.fold(0, (sum, file) => sum + file.size);
         int totalSizeMB = ((totalSize + newSize) / (1024 * 1024)).round();
 
@@ -240,9 +256,17 @@ class _ComposeWindowState extends State<ComposeWindow> {
           return;
         }
 
+        // Add files with loading status, then mark ready
+        final newAttachments = validFiles.map((f) => _ComposeAttachment(f)).toList();
         setState(() {
-          _attachments.addAll(validFiles);
+          _attachments.addAll(newAttachments);
         });
+
+        // Mark each as ready (bytes already loaded)
+        for (final att in newAttachments) {
+          att.status = _AttachStatus.ready;
+        }
+        if (mounted) setState(() {});
 
         LoggerService.log('COMPOSE', 'Added ${validFiles.length} attachments (${totalSizeMB}MB total)');
       }
@@ -332,7 +356,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
     }
 
     // Calculate total size
-    int totalSize = _attachments.fold(0, (sum, file) => sum + file.size);
+    int totalSize = _attachments.fold(0, (sum, a) => sum + a.file.size);
     int newSize = validFiles.fold(0, (sum, file) => sum + file.size);
     int totalSizeMB = ((totalSize + newSize) / (1024 * 1024)).round();
 
@@ -343,8 +367,9 @@ class _ComposeWindowState extends State<ComposeWindow> {
       return;
     }
 
+    final newAttachments = validFiles.map((f) => _ComposeAttachment(f, status: _AttachStatus.ready)).toList();
     setState(() {
-      _attachments.addAll(validFiles);
+      _attachments.addAll(newAttachments);
     });
 
     LoggerService.log('COMPOSE', 'Added ${validFiles.length} scanned document(s) (${totalSizeMB}MB total)');
@@ -353,16 +378,20 @@ class _ComposeWindowState extends State<ComposeWindow> {
   /// Remove attachment
   void _removeAttachment(int index) {
     setState(() {
-      final file = _attachments.removeAt(index);
-      LoggerService.log('COMPOSE', 'Removed attachment: ${file.name}');
+      final att = _attachments.removeAt(index);
+      LoggerService.log('COMPOSE', 'Removed attachment: ${att.file.name}');
     });
   }
 
   /// Get total attachments size in MB
   int get _totalAttachmentsSizeMB {
-    int totalBytes = _attachments.fold(0, (sum, file) => sum + file.size);
+    int totalBytes = _attachments.fold(0, (sum, a) => sum + a.file.size);
     return (totalBytes / (1024 * 1024)).round();
   }
+
+  /// Check if all attachments are ready to send
+  bool get _allAttachmentsReady =>
+      _attachments.every((a) => a.status == _AttachStatus.ready);
 
   /// Check target server max message size
   Future<void> _checkTargetServerSize(String email) async {
@@ -622,10 +651,17 @@ class _ComposeWindowState extends State<ComposeWindow> {
       );
     }
 
+    // Verify all attachments are ready
+    if (!_allAttachmentsReady) {
+      resetSending();
+      NotificationService.showErrorToast(l10n.errorTitle, 'Attachments are still being prepared. Please wait.');
+      return;
+    }
+
     // Calculate total size for progress display
     int totalSizeBytes = _bodyController.text.length;
     for (final att in _attachments) {
-      totalSizeBytes += att.size;
+      totalSizeBytes += att.file.size;
     }
     final totalSizeMB = (totalSizeBytes / (1024 * 1024)).toStringAsFixed(1);
 
@@ -687,7 +723,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
         _bccController.text,
         _subjectController.text,
         _bodyController.text,
-        _attachments,
+        _attachments.map((a) => a.file).toList(),
         draftUid: _lastDraftUid,
       );
 
@@ -724,7 +760,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
         _subjectController.text,
         _bodyController.text,
         account: _selectedAccount,
-        attachments: _attachments,
+        attachments: _attachments.map((a) => a.file).toList(),
         previousDraftUid: _lastDraftUid,
       );
       _lastDraftUid = uid ?? _lastDraftUid;
@@ -1121,26 +1157,84 @@ class _ComposeWindowState extends State<ComposeWindow> {
             if (_attachments.isNotEmpty) ...[
               const SizedBox(height: 8),
               ...List.generate(_attachments.length, (index) {
-                final file = _attachments[index];
+                final att = _attachments[index];
+                final file = att.file;
                 final sizeMB = (file.size / (1024 * 1024)).toStringAsFixed(2);
+                final isLoading = att.status == _AttachStatus.loading;
+                final isFailed = att.status == _AttachStatus.failed;
                 return Container(
                   margin: const EdgeInsets.only(bottom: 4),
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey[60]),
+                    border: Border.all(
+                      color: isFailed
+                          ? Colors.red
+                          : isLoading
+                              ? Colors.orange
+                              : Colors.grey[60],
+                    ),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Row(
                     children: [
-                      Icon(_getFileIcon(file.extension ?? ''), size: 16),
+                      // Thumbnail for images, icon for others
+                      if (att.isImage && file.bytes != null)
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: Image.memory(
+                            file.bytes!,
+                            width: 40,
+                            height: 40,
+                            fit: BoxFit.cover,
+                            cacheWidth: 80,
+                            errorBuilder: (_, __, ___) =>
+                                Icon(_getFileIcon(file.extension ?? ''), size: 16),
+                          ),
+                        )
+                      else
+                        Icon(_getFileIcon(file.extension ?? ''), size: 16),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(
-                          '${file.name} ($sizeMB MB)',
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${file.name} ($sizeMB MB)',
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                            if (isLoading)
+                              const Padding(
+                                padding: EdgeInsets.only(top: 4),
+                                child: SizedBox(
+                                  height: 2,
+                                  child: ProgressBar(),
+                                ),
+                              ),
+                            if (isFailed)
+                              Text(
+                                att.errorMessage ?? 'Failed',
+                                style: const TextStyle(fontSize: 10, color: Colors.red),
+                              ),
+                          ],
                         ),
                       ),
+                      // Status indicator
+                      if (att.status == _AttachStatus.ready)
+                        const Padding(
+                          padding: EdgeInsets.only(right: 4),
+                          child: Icon(FluentIcons.check_mark, size: 12, color: Color(0xFF107C10)),
+                        ),
+                      if (isLoading)
+                        const Padding(
+                          padding: EdgeInsets.only(right: 4),
+                          child: SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: ProgressRing(strokeWidth: 2),
+                          ),
+                        ),
                       IconButton(
                         icon: const Icon(FluentIcons.cancel, size: 14),
                         onPressed: _isSending ? null : () => _removeAttachment(index),
