@@ -473,6 +473,7 @@ class MailService {
     String body,
     List<dynamic> attachments, {
     int? draftUid,
+    void Function(int bytesSent, int totalBytes)? onSendProgress,
   }) async {
     // SECURITY: Validate server before connecting
     _validateAccount(account);
@@ -679,6 +680,10 @@ class MailService {
       }
 
       LoggerService.log('SMTP', 'Sending message with ${attachments.length} attachments to ${recipients.length} TO, ${ccRecipients.length} CC, ${bccRecipients.length} BCC...');
+
+      // Wire up progress callback for UI feedback
+      smtpClient.onSendProgress = onSendProgress;
+
       // When encrypted, PGP/MIME outer message has no BCC header —
       // pass all recipients explicitly so RCPT TO includes BCC.
       final SmtpResponse response;
