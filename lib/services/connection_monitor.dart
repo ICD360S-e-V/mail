@@ -25,13 +25,13 @@ class ConnectionMonitor {
         color: 'Orange',
         status: 'TIMEOUT',
       );
-    } catch (_) {
+    } catch (e) {
       return PortStatus(
         port: port,
         protocol: protocol,
         isConnected: false,
         color: 'Red',
-        status: 'CLOSED',
+        status: 'CLOSED ($e)',
       );
     }
   }
