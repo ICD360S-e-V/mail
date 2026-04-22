@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.64.0 - 2026-04-22
+#### Features
+- (**deps**) add openpgp ^3.10.7 for native PGP encryption - (992f4ea) - icd360sevofficial
+
+- - -
+
 ## v2.63.2 - 2026-04-22
 #### Bug Fixes
 - (**compose**) real upload progress via addStream backpressure - (0bc68d4) - icd360sevofficial
