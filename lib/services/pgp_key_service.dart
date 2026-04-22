@@ -375,7 +375,9 @@ class PgpKeyService {
     String? v6Backup;
     try {
       v6Backup = await MasterVault.instance.read(key: '${_vaultKeyV6Backup}_$email');
-    } catch (_) {}
+    } catch (e) {
+      LoggerService.log('PGP', 'No v6 backup key available (expected for non-migrated accounts)');
+    }
     _worker = await PgpIsolateWorker.spawn(
       armoredKey: armoredKey,
       passphrase: passphrase,
