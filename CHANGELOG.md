@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.53.0 - 2026-04-22
+#### Features
+- (**compose**) attachment progress indicators and image thumbnails - (b5fffc2) - icd360sevofficial
+
+- - -
+
 ## v2.52.7 - 2026-04-22
 #### Performance Improvements
 - remove log statement from navigation pane build() - (9887b8d) - icd360sevofficial
