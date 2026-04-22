@@ -131,7 +131,9 @@ class PerformanceMonitor {
           }
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      LoggerService.log('PERF', 'Failed to read /proc/$pid/status: $e');
+    }
 
     // CPU via single ps call
     final result = await Process.run('ps', [
