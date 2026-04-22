@@ -2,7 +2,7 @@
   <img src="assets/logo.png" width="140" alt="ICD360S Mail">
   <h1>ICD360S Mail</h1>
   <p><strong>Secure, end-to-end encrypted email client</strong></p>
-  <p>Built with Flutter for Windows, macOS, Linux, Android & iOS</p>
+  <p>Your emails are encrypted so only you and your recipient can read them.</p>
 
   <br/>
 
@@ -32,8 +32,9 @@ ICD360S Mail is a security-first email client built for [ICD360S e.V.](https://i
 | Feature | Details |
 |---|---|
 | **E2EE Internal Mail** | All emails between `@icd360s.de` addresses are automatically encrypted end-to-end using OpenPGP (PGP/MIME, RFC 3156). The server only sees an encrypted blob — body text and attachments are invisible to anyone without the recipient's private key. |
+| **Native PGP Engine** | Encryption powered by a native Go-based OpenPGP engine for fast, reliable processing. A 27 MB message encrypts in under 1 second, even on mobile devices. |
 | **PGP/MIME Attachments** | Attachments are encrypted inside the PGP payload alongside the message body. No metadata about attachment names or types leaks to the server. |
-| **Automatic Key Management** | Keys are generated on device, stored in an encrypted vault, and synced between devices. Persistent key pinning warns if a recipient's key changes unexpectedly. |
+| **Automatic Key Management** | Keys are generated on device, stored in an encrypted vault, and synced between devices. Persistent key pinning (TOFU) warns if a recipient's key changes unexpectedly, with separate trust models for internal and external contacts. |
 | **Zero-Access at Rest** | Incoming mail is encrypted on the server before storage. Even the server administrator cannot read stored messages. |
 | **Password-Protected Email** | Send encrypted email to anyone externally. Recipient opens a secure link, enters password, reads in browser. 100% client-side decryption. |
 | **Key Discovery** | External clients can auto-discover your public key via Web Key Directory (WKD). |
@@ -51,7 +52,7 @@ ICD360S Mail is a security-first email client built for [ICD360S e.V.](https://i
 
 | Feature | Details |
 |---|---|
-| **Virus Scanning** | Server-side antivirus scanning on all attachments with real-time status in the app. |
+| **Virus Scanning** | Dual-layer: server-side scanning on all inbound mail, plus on-demand scanning of individual attachments from the app with real-time status. |
 | **Multi-Layer Spam Filtering** | Inbound mail passes through reputation checks, DNSBL, Bayesian filtering, and phishing detection. |
 | **Threat Intelligence** | DMARC, DKIM, SPF validation. DNS blacklist checks. Sender reputation scoring. |
 | **Phishing Detection** | Offline threat database with cryptographic signature verification. |
@@ -63,9 +64,18 @@ ICD360S Mail is a security-first email client built for [ICD360S e.V.](https://i
 |---|---|
 | **RAM-Only Cache** | Emails exist only in process memory. Zero disk persistence. Wiped on lock. |
 | **DNS-over-HTTPS** | All DNS queries are encrypted. No cleartext DNS leaves the device. |
-| **PII-Safe Logging** | All diagnostic logs pass through automatic PII redaction before storage or upload. Email addresses, IPs, and subjects are sanitized. |
+| **PII-Safe Logging** | All diagnostic logs pass through automatic PII redaction. Email addresses, IPs, phone numbers, and subjects are sanitized before storage or upload. |
 | **Notification Privacy** | Configurable lock screen notifications: minimal, sender only, or full content. |
 | **No Telemetry** | Zero analytics. Zero tracking. Zero CDN dependencies. |
+
+### Compose & Send
+
+| Feature | Details |
+|---|---|
+| **Real-Time Upload Progress** | Attachments upload to the server immediately when attached, with a visible progress bar showing speed in KB/s. |
+| **Image Thumbnails** | Photo attachments show inline previews in the compose window. |
+| **Smart Draft Auto-Save** | Drafts save automatically every 5 seconds. Auto-save pauses during send to prevent conflicts. |
+| **Background Sent Folder** | After send, the Sent folder copy saves silently in the background — no waiting. |
 
 ---
 
@@ -84,6 +94,20 @@ When a member sends an email to another `@icd360s.de` address, the message is en
 The server sees only the SMTP envelope and a single encrypted blob. Even a compromised server or malicious admin cannot decrypt the message content — only the recipient's device holds the private key.
 
 > **Note:** Subject lines are currently visible in the outer headers (standard PGP/MIME behavior). Protected headers for encrypted subjects may be added in a future version.
+
+---
+
+## Cryptography
+
+| Component | Standard |
+|---|---|
+| Signing keys | Ed25519 (EdDSA) |
+| Encryption keys | X25519 / ECDH (Curve25519) |
+| Message encryption | OpenPGP (RFC 9580, PGP/MIME RFC 3156) |
+| Vault encryption | AES-256-GCM with Argon2id key derivation |
+| Key sync | AES-256-GCM with HKDF-SHA256 |
+| Password-protected mail | AES-256-GCM with PBKDF2 (client-side) |
+| TLS | Mutual TLS with per-user client certificates |
 
 ---
 
@@ -249,7 +273,7 @@ flutter build apk --release
 
 ## Security
 
-Please report security vulnerabilities responsibly. See [SECURITY.md](SECURITY.md) for our disclosure policy and PGP key.
+Please report security vulnerabilities responsibly. See [SECURITY.md](SECURITY.md) for our disclosure policy.
 
 ---
 
