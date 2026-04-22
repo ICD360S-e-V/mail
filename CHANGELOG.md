@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.60.0 - 2026-04-22
+#### Features
+- (**smtp**) use pre-encoded base64 attachments when available - (d6982b6) - icd360sevofficial
+
+- - -
+
 ## v2.59.0 - 2026-04-22
 #### Features
 - (**mime**) addPreEncodedBinary for pre-encoded attachments - (ccffe3e) - icd360sevofficial
