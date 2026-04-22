@@ -200,10 +200,13 @@ class EmailProvider with ChangeNotifier {
     }
   }
 
-  /// Update performance stats (CPU/RAM) - async to avoid blocking UI
+  /// Update performance stats (CPU/RAM) - async to avoid blocking UI.
+  /// Does NOT call notifyListeners() — performanceStats is only used
+  /// by log uploads, not by any widget. Calling notifyListeners() here
+  /// caused full widget tree rebuilds every 10 seconds for no visible
+  /// UI change.
   Future<void> updatePerformanceStats() async {
     _performanceStats = await _performanceMonitor.getFormattedStats();
-    if (!_disposed) notifyListeners();
   }
 
   /// Check port connections and log diagnostics for server-side analysis
