@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.53.1 - 2026-04-22
+#### Bug Fixes
+- remove const from TextStyle with non-const Colors.red - (fe88f36) - icd360sevofficial
+
+- - -
+
 ## v2.53.0 - 2026-04-22
 #### Features
 - (**compose**) attachment progress indicators and image thumbnails - (b5fffc2) - icd360sevofficial
