@@ -134,6 +134,12 @@ class PiiRedactor {
 
   static final _urlPattern = RegExp(r'https?://[^\s\]>)"]+');
 
+  static final _ipv4Pattern =
+      RegExp(r'\b(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}\b');
+
+  static final _phonePattern =
+      RegExp(r'(\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4}');
+
   /// Run the regex safety net on a fully-formed log string.
   /// Catches PII that leaked through unstructured interpolation.
   static String sanitize(String text) {
@@ -149,6 +155,29 @@ class PiiRedactor {
       return _redactUrl(match.group(0)!);
     });
 
+    // Redact IPv4 addresses (keep first two octets for diagnostics)
+    result = result.replaceAllMapped(_ipv4Pattern, (match) {
+      final o1 = int.tryParse(match.group(1) ?? '') ?? 0;
+      final o2 = int.tryParse(match.group(2) ?? '') ?? 0;
+      if (o1 > 255 || o2 > 255) return match.group(0)!;
+      // Skip localhost and common non-PII ranges
+      if (match.group(0) == '127.0.0.1') return match.group(0)!;
+      return '${match.group(1)}.${match.group(2)}.x.x';
+    });
+
+    // Redact phone numbers
+    result = result.replaceAllMapped(_phonePattern, (match) {
+      final raw = match.group(0)!;
+      final digits = raw.replaceAll(RegExp(r'[^\d]'), '');
+      if (digits.length < 7) return raw;
+      return '****${digits.substring(digits.length - 4)}';
+    });
+
     return result;
+  }
+
+  /// Sanitize an exception's toString() output.
+  static String sanitizeException(Object error) {
+    return sanitize(error.toString());
   }
 }
