@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.59.0 - 2026-04-22
+#### Features
+- (**mime**) addPreEncodedBinary for pre-encoded attachments - (ccffe3e) - icd360sevofficial
+
+- - -
+
 ## v2.58.0 - 2026-04-22
 #### Features
 - (**compose**) show real-time upload speed during email send - (7970de5) - icd360sevofficial
