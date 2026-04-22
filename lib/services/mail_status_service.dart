@@ -104,7 +104,8 @@ class MailStatusService {
         try {
           client = await MtlsClientPool.instance.get(senderUsername);
           poolOwned = true;
-        } catch (_) {
+        } catch (e) {
+          LoggerService.log('MAIL_STATUS', 'mTLS pool unavailable, using fallback: $e');
           client = MtlsService.createMtlsHttpClient() ??
               (PinnedSecurityContext.createHttpClient()
                 ..badCertificateCallback = (cert, host, port) {
