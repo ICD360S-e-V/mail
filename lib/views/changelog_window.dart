@@ -45,7 +45,10 @@ class _ChangelogWindowState extends State<ChangelogWindow> {
       ),
       title: Row(
         children: [
-          const Icon(FluentIcons.info, size: 24),
+          const Tooltip(
+            message: 'Changelog',
+            child: Icon(FluentIcons.info, size: 24),
+          ),
           const SizedBox(width: 12),
           Text(l10n.changelogDialogTitle),
         ],
