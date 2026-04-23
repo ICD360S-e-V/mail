@@ -185,7 +185,10 @@ class _ConfirmPhraseDialogState extends State<_ConfirmPhraseDialog> {
     return ContentDialog(
       title: Row(
         children: [
-          Icon(FluentIcons.warning, color: Colors.red, size: 24),
+          Tooltip(
+            message: 'Warning',
+            child: Icon(FluentIcons.warning, color: Colors.red, size: 24),
+          ),
           const SizedBox(width: 8),
           const Text('Factory Reset'),
         ],
