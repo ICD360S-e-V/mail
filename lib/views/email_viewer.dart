@@ -245,10 +245,13 @@ class _EmailViewerState extends State<EmailViewer> {
       builder: (ctx) => ContentDialog(
         title: Row(
           children: [
-            Icon(
-              isDangerous ? FluentIcons.warning : FluentIcons.open_in_new_window,
-              size: 20,
-              color: isDangerous ? Colors.red : theme.accentColor,
+            Semantics(
+              excludeSemantics: true,
+              child: Icon(
+                isDangerous ? FluentIcons.warning : FluentIcons.open_in_new_window,
+                size: 20,
+                color: isDangerous ? Colors.red : theme.accentColor,
+              ),
             ),
             const SizedBox(width: 8),
             Text(isDangerous
@@ -313,14 +316,17 @@ class _EmailViewerState extends State<EmailViewer> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
-                          w.severity == WarningSeverity.critical || w.severity == WarningSeverity.high
-                              ? FluentIcons.warning
-                              : FluentIcons.info,
-                          size: 14,
-                          color: w.severity == WarningSeverity.critical || w.severity == WarningSeverity.high
-                              ? Colors.red
-                              : Colors.orange,
+                        Semantics(
+                          excludeSemantics: true,
+                          child: Icon(
+                            w.severity == WarningSeverity.critical || w.severity == WarningSeverity.high
+                                ? FluentIcons.warning
+                                : FluentIcons.info,
+                            size: 14,
+                            color: w.severity == WarningSeverity.critical || w.severity == WarningSeverity.high
+                                ? Colors.red
+                                : Colors.orange,
+                          ),
                         ),
                         const SizedBox(width: 6),
                         Expanded(child: Text(w.message,
@@ -457,8 +463,11 @@ class _EmailViewerState extends State<EmailViewer> {
             padding: const EdgeInsets.only(bottom: 8),
             child: Row(
               children: [
-                Icon(FluentIcons.shield_alert,
-                    size: 14, color: theme.accentColor),
+                Semantics(
+                  excludeSemantics: true,
+                  child: Icon(FluentIcons.shield_alert,
+                      size: 14, color: theme.accentColor),
+                ),
                 const SizedBox(width: 6),
                 Flexible(
                   child: Text(
@@ -996,7 +1005,10 @@ ${email.attachments.isNotEmpty ? '\nAttachments (${email.attachments.length}): $
       builder: (ctx) => ContentDialog(
         title: Row(
           children: [
-            Icon(FluentIcons.warning, color: Colors.orange, size: 24),
+            Semantics(
+              excludeSemantics: true,
+              child: Icon(FluentIcons.warning, color: Colors.orange, size: 24),
+            ),
             const SizedBox(width: 8),
             const Text('Scanner unavailable'),
           ],
@@ -1057,7 +1069,10 @@ ${email.attachments.isNotEmpty ? '\nAttachments (${email.attachments.length}): $
       builder: (ctx) => ContentDialog(
         title: Row(
           children: [
-            Icon(FluentIcons.warning, color: Colors.orange, size: 24),
+            Semantics(
+              excludeSemantics: true,
+              child: Icon(FluentIcons.warning, color: Colors.orange, size: 24),
+            ),
             const SizedBox(width: 8),
             const Text('Potentially dangerous file'),
           ],
