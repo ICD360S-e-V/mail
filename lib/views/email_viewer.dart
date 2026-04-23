@@ -604,7 +604,7 @@ class _EmailViewerState extends State<EmailViewer> {
               ),
             );
           },
-        ),
+        )),
 
         // Forward button (icon only)
         Tooltip(message: 'Forward', child: IconButton(
@@ -642,7 +642,7 @@ $plainBody
               ),
             );
           },
-        ),
+        )),
 
         // Print button (icon only) - cross-platform via printing package
         Tooltip(message: 'Print', child: IconButton(
@@ -685,7 +685,7 @@ ${email.attachments.isNotEmpty ? '\nAttachments (${email.attachments.length}): $
               NotificationService.showErrorToast(l10nPrint.errorPrint, ex.toString());
             }
           },
-        ),
+        )),
 
         // Copy entire email button (icon only)
         Tooltip(message: 'Copy', child: IconButton(
@@ -719,7 +719,7 @@ ${email.attachments.isNotEmpty ? '\nAttachments (${email.attachments.length}): $
               NotificationService.showErrorToast(l10nCopy.errorCopy, ex.toString());
             }
           },
-        ),
+        )),
 
         // Delete button (icon only)
         Tooltip(message: 'Delete', child: IconButton(
@@ -731,7 +731,7 @@ ${email.attachments.isNotEmpty ? '\nAttachments (${email.attachments.length}): $
             await emailProvider.deleteEmail(email);
             NotificationService.showSuccessToast(l10nDelete.successDeleted, l10nDelete.successEmailMovedToTrash);
           },
-        ),
+        )),
 
         // Mark as spam button (icon only)
         Tooltip(message: 'Mark as spam', child: IconButton(
@@ -743,7 +743,7 @@ ${email.attachments.isNotEmpty ? '\nAttachments (${email.attachments.length}): $
             await emailProvider.markAsSpam(email);
             NotificationService.showSuccessToast(l10nSpam.successSpam, l10nSpam.successEmailMarkedAsSpam);
           },
-        ),
+        )),
 
         // Close button (filled, icon only)
         FilledButton(
@@ -932,7 +932,7 @@ ${email.attachments.isNotEmpty ? '\nAttachments (${email.attachments.length}): $
                       l10nView.errorView, ex.toString());
                 }
               },
-            ),
+            )),
           // Download button — blocked for infected, warning for error
           if (canDownload)
             Tooltip(message: 'Download attachment', child: IconButton(
@@ -976,7 +976,7 @@ ${email.attachments.isNotEmpty ? '\nAttachments (${email.attachments.length}): $
                       l10nDl.errorDownload, ex.toString());
                 }
               },
-            ),
+            )),
           // Blocked indicator for infected files
           if (attachment.isBlocked)
             Tooltip(
