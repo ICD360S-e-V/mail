@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.66.0 - 2026-04-23
+#### Features
+- (**health**) add DMARC health check with policy validation - (f2165b7) - icd360sevofficial
+
+- - -
+
 ## v2.65.0 - 2026-04-23
 #### Features
 - (**dns**) add DMARC record lookup via DoH - (e48a14d) - icd360sevofficial
