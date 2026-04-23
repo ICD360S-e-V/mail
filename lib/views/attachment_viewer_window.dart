@@ -130,7 +130,7 @@ class _AttachmentViewerWindowState extends State<AttachmentViewerWindow> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Semantics(
+              Semantics(
                 label: 'Error',
                 child: Icon(FluentIcons.error, size: 48, color: Colors.errorPrimaryColor),
               ),
