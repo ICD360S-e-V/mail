@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.75.0 - 2026-04-23
+#### Features
+- (**ui**) swipe left to delete email in list - (bc7b9b5) - icd360sevofficial
+
+- - -
+
 ## v2.74.0 - 2026-04-23
 #### Features
 - (**ui**) show MTA-STS and TLS-RPT in Email Health dashboard - (d921419) - icd360sevofficial
