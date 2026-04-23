@@ -1426,7 +1426,8 @@ class _MainWindowState extends State<MainWindow> {
                                 await emailProvider.removeAccount(acc);
                                 if (ctx.mounted) Navigator.of(ctx).pop();
                               }
-                            },
+                              },
+                            ),
                           ),
                         ],
                       ),
