@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.76.4 - 2026-04-23
+#### Bug Fixes
+- replace FluentIcons.accessibility with FluentIcons.people - (d4f9202) - icd360sevofficial
+
+- - -
+
 ## v2.76.3 - 2026-04-23
 #### Bug Fixes
 - remove highContrastTheme — not supported by FluentApp - (f52bc2f) - icd360sevofficial
