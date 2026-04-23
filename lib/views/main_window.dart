@@ -1665,15 +1665,18 @@ class _MainWindowState extends State<MainWindow> {
                         ],
                         const Spacer(),
                         _buildDeliveryStatusIcon(email, theme),
-                        IconButton(
-                          icon: Icon(FluentIcons.delete, size: 14, color: Colors.red),
-                          onPressed: () {
-                            final emailProvider = Provider.of<EmailProvider>(context, listen: false);
-                            emailProvider.deleteEmail(email);
-                            if (_selectedEmail?.messageId == email.messageId) {
-                              setState(() => _selectedEmail = null);
-                            }
-                          },
+                        Tooltip(
+                          message: 'Delete',
+                          child: IconButton(
+                            icon: Icon(FluentIcons.delete, size: 14, color: Colors.red),
+                            onPressed: () {
+                              final emailProvider = Provider.of<EmailProvider>(context, listen: false);
+                              emailProvider.deleteEmail(email);
+                              if (_selectedEmail?.messageId == email.messageId) {
+                                setState(() => _selectedEmail = null);
+                              }
+                            },
+                          ),
                         ),
                       ],
                     ),
@@ -1779,15 +1782,18 @@ class _MainWindowState extends State<MainWindow> {
 
                   // Delete button — always visible in all folders
                   const SizedBox(width: 8),
-                  IconButton(
-                    icon: Icon(FluentIcons.delete, size: 16, color: Colors.red),
-                    onPressed: () {
-                      final emailProvider = Provider.of<EmailProvider>(context, listen: false);
-                      emailProvider.deleteEmail(email);
-                      if (_selectedEmail?.messageId == email.messageId) {
-                        setState(() => _selectedEmail = null);
-                      }
-                    },
+                  Tooltip(
+                    message: 'Delete',
+                    child: IconButton(
+                      icon: Icon(FluentIcons.delete, size: 16, color: Colors.red),
+                      onPressed: () {
+                        final emailProvider = Provider.of<EmailProvider>(context, listen: false);
+                        emailProvider.deleteEmail(email);
+                        if (_selectedEmail?.messageId == email.messageId) {
+                          setState(() => _selectedEmail = null);
+                        }
+                      },
+                    ),
                   ),
                 ],
               );
