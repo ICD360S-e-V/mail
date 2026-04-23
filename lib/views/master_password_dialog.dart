@@ -341,7 +341,10 @@ class _MasterPasswordDialogState extends State<MasterPasswordDialog> {
           return ContentDialog(
             title: Row(
               children: [
-                Icon(FluentIcons.warning, color: Colors.red, size: 24),
+                Semantics(
+                  excludeSemantics: true,
+                  child: Icon(FluentIcons.warning, color: Colors.red, size: 24),
+                ),
                 const SizedBox(width: 8),
                 const Text('Factory Reset'),
               ],
