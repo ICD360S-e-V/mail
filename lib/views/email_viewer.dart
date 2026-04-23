@@ -578,7 +578,7 @@ class _EmailViewerState extends State<EmailViewer> {
       ),
       actions: [
         // Reply button (icon only)
-        IconButton(
+        Tooltip(message: 'Reply', child: IconButton(
           icon: const Icon(FluentIcons.reply, size: 20),
           onPressed: () async {
             LoggerService.log('EMAIL_VIEWER', 'Reply button clicked');
@@ -598,7 +598,7 @@ class _EmailViewerState extends State<EmailViewer> {
         ),
 
         // Forward button (icon only)
-        IconButton(
+        Tooltip(message: 'Forward', child: IconButton(
           icon: const Icon(FluentIcons.forward, size: 20),
           onPressed: () async {
             LoggerService.log('EMAIL_VIEWER', 'Forward button clicked');
@@ -636,7 +636,7 @@ $plainBody
         ),
 
         // Print button (icon only) - cross-platform via printing package
-        IconButton(
+        Tooltip(message: 'Print', child: IconButton(
           icon: const Icon(FluentIcons.print, size: 20),
           onPressed: () async {
             LoggerService.log('EMAIL_VIEWER', 'Print button clicked');
@@ -679,7 +679,7 @@ ${email.attachments.isNotEmpty ? '\nAttachments (${email.attachments.length}): $
         ),
 
         // Copy entire email button (icon only)
-        IconButton(
+        Tooltip(message: 'Copy', child: IconButton(
           icon: const Icon(FluentIcons.copy, size: 20),
           onPressed: () async {
             LoggerService.log('EMAIL_VIEWER', 'Copy email button clicked');
@@ -713,7 +713,7 @@ ${email.attachments.isNotEmpty ? '\nAttachments (${email.attachments.length}): $
         ),
 
         // Delete button (icon only)
-        IconButton(
+        Tooltip(message: 'Delete', child: IconButton(
           icon: const Icon(FluentIcons.delete, size: 20),
           onPressed: () async {
             LoggerService.log('EMAIL_VIEWER', 'Delete button clicked');
@@ -725,7 +725,7 @@ ${email.attachments.isNotEmpty ? '\nAttachments (${email.attachments.length}): $
         ),
 
         // Mark as spam button (icon only)
-        IconButton(
+        Tooltip(message: 'Mark as spam', child: IconButton(
           icon: const Icon(FluentIcons.blocked2, size: 20),
           onPressed: () async {
             LoggerService.log('EMAIL_VIEWER', 'Spam button clicked');
@@ -900,7 +900,7 @@ ${email.attachments.isNotEmpty ? '\nAttachments (${email.attachments.length}): $
           ),
           // View button — only when scan passed and viewable type
           if (canView && _canViewAttachment(attachment.fileName))
-            IconButton(
+            Tooltip(message: 'View attachment', child: IconButton(
               icon: const Icon(FluentIcons.view, size: 16),
               onPressed: () async {
                 try {
@@ -926,7 +926,7 @@ ${email.attachments.isNotEmpty ? '\nAttachments (${email.attachments.length}): $
             ),
           // Download button — blocked for infected, warning for error
           if (canDownload)
-            IconButton(
+            Tooltip(message: 'Download attachment', child: IconButton(
               icon: const Icon(FluentIcons.download, size: 16),
               onPressed: () async {
                 try {
