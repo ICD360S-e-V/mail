@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.75.8 - 2026-04-23
+#### Bug Fixes
+- (**a11y**) wrap remaining bare Icons with Semantics in main_window.dart - (0f60b17) - icd360sevofficial
+- (**a11y**) wrap remaining bare Icons with Semantics in safe_html_renderer.dart - (503e146) - icd360sevofficial
+- (**a11y**) wrap remaining bare Icons with Semantics in compose_window.dart - (626b924) - icd360sevofficial
+- (**a11y**) wrap remaining bare Icons with Semantics in awaiting_approval_view.dart - (422d077) - icd360sevofficial
+- (**a11y**) wrap remaining bare Icons with Semantics in changelog_window.dart - (e1c8a16) - icd360sevofficial
+- (**a11y**) wrap remaining bare Icons with Semantics in first_run_consent_dialog.dart - (c2c5aba) - icd360sevofficial
+- (**a11y**) wrap remaining bare Icons with Semantics in factory_reset_dialog.dart - (4b9129f) - icd360sevofficial
+- (**a11y**) wrap remaining bare Icons with Semantics in attachment_viewer_window.dart - (e330996) - icd360sevofficial
+- (**a11y**) wrap remaining bare Icons with Semantics in server_info.dart - (b3659de) - icd360sevofficial
+
+- - -
+
 ## v2.75.7 - 2026-04-23
 #### Bug Fixes
 - (**a11y**) wrap remaining bare Icons with Semantics in security_health_view.dart - (72070d0) - icd360sevofficial
