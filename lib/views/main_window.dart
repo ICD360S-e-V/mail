@@ -270,7 +270,7 @@ class _MainWindowState extends State<MainWindow> {
         return ContentDialog(
           title: Row(
             children: [
-              const Icon(FluentIcons.lock, size: 20),
+              const ExcludeSemantics(child: Icon(FluentIcons.lock, size: 20)),
               const SizedBox(width: 8),
               Text(l10n.mainWindowDialogLockedTitle),
             ],
@@ -616,7 +616,10 @@ class _MainWindowState extends State<MainWindow> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(FluentIcons.lock, size: 64),
+              const Semantics(
+                label: 'App locked',
+                child: Icon(FluentIcons.lock, size: 64),
+              ),
               const SizedBox(height: 16),
               Text(l10n.mainWindowLockedTitle, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
@@ -1284,22 +1287,27 @@ class _MainWindowState extends State<MainWindow> {
                 final isActive = acc.username == emailProvider.currentAccount?.username;
                 Color statusColor;
                 IconData statusIcon;
+                String statusLabel;
                 switch (acc.connectionStatus) {
                   case AccountConnectionStatus.connected:
                     statusColor = Colors.green;
                     statusIcon = FluentIcons.accept_medium;
+                    statusLabel = 'Connected';
                     break;
                   case AccountConnectionStatus.authError:
                     statusColor = Colors.red;
                     statusIcon = FluentIcons.error_badge;
+                    statusLabel = 'Authentication error';
                     break;
                   case AccountConnectionStatus.networkError:
                     statusColor = Colors.orange;
                     statusIcon = FluentIcons.warning;
+                    statusLabel = 'Network error';
                     break;
                   case AccountConnectionStatus.unknown:
                     statusColor = Colors.grey;
                     statusIcon = FluentIcons.contact;
+                    statusLabel = 'Unknown status';
                     break;
                 }
                 return HoverButton(
@@ -1328,7 +1336,10 @@ class _MainWindowState extends State<MainWindow> {
                       ),
                       child: Row(
                         children: [
-                          Icon(statusIcon, color: statusColor, size: 18),
+                          Semantics(
+                            label: statusLabel,
+                            child: Icon(statusIcon, color: statusColor, size: 18),
+                          ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Column(
@@ -2018,18 +2029,20 @@ class _MainWindowState extends State<MainWindow> {
             ),
             child: Row(
               children: [
-                Icon(
-                  emailProvider.error != null
-                      ? FluentIcons.error
-                      : emailProvider.isLoading
-                          ? FluentIcons.sync
-                          : FluentIcons.check_mark,
-                  size: 14,
-                  color: emailProvider.error != null
-                      ? Colors.red
-                      : emailProvider.isLoading
-                          ? Colors.orange
-                          : Colors.green,
+                ExcludeSemantics(
+                  child: Icon(
+                    emailProvider.error != null
+                        ? FluentIcons.error
+                        : emailProvider.isLoading
+                            ? FluentIcons.sync
+                            : FluentIcons.check_mark,
+                    size: 14,
+                    color: emailProvider.error != null
+                        ? Colors.red
+                        : emailProvider.isLoading
+                            ? Colors.orange
+                            : Colors.green,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
