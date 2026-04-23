@@ -1378,9 +1378,12 @@ class _ComposeWindowState extends State<ComposeWindow> {
                             child: ProgressRing(strokeWidth: 2),
                           ),
                         ),
-                      IconButton(
-                        icon: const Icon(FluentIcons.cancel, size: 14),
-                        onPressed: _isSending ? null : () => _removeAttachment(index),
+                      Tooltip(
+                        message: 'Remove attachment',
+                        child: IconButton(
+                          icon: const Icon(FluentIcons.cancel, size: 14),
+                          onPressed: _isSending ? null : () => _removeAttachment(index),
+                        ),
                       ),
                     ],
                   ),
