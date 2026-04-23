@@ -720,9 +720,12 @@ class _MainWindowState extends State<MainWindow> {
               message: 'Log Viewer',
               child: Padding(
                 padding: const EdgeInsets.only(right: 4.0),
-                child: IconButton(
-                  icon: const Icon(FluentIcons.code, size: 16),
-                  onPressed: _showLogViewer,
+                child: Tooltip(
+                  message: 'View logs',
+                  child: IconButton(
+                    icon: const Icon(FluentIcons.code, size: 16),
+                    onPressed: _showLogViewer,
+                  ),
                 ),
               ),
             ),
@@ -732,9 +735,12 @@ class _MainWindowState extends State<MainWindow> {
               message: 'Security Health',
               child: Padding(
                 padding: const EdgeInsets.only(right: 4.0),
-                child: IconButton(
-                  icon: const Icon(FluentIcons.shield, size: 16),
-                  onPressed: _showSecurityHealth,
+                child: Tooltip(
+                  message: 'Security health',
+                  child: IconButton(
+                    icon: const Icon(FluentIcons.shield, size: 16),
+                    onPressed: _showSecurityHealth,
+                  ),
                 ),
               ),
             ),
@@ -746,16 +752,19 @@ class _MainWindowState extends State<MainWindow> {
                   : 'Check for updates',
               child: Padding(
                 padding: const EdgeInsets.only(right: 4.0),
-                child: IconButton(
-                  icon: _manualUpdateChecking
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: ProgressRing(strokeWidth: 2),
-                        )
-                      : const Icon(FluentIcons.cloud_download, size: 16),
-                  onPressed:
-                      _manualUpdateChecking ? null : _checkForUpdatesManual,
+                child: Tooltip(
+                  message: 'Check for updates',
+                  child: IconButton(
+                    icon: _manualUpdateChecking
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: ProgressRing(strokeWidth: 2),
+                          )
+                        : const Icon(FluentIcons.cloud_download, size: 16),
+                    onPressed:
+                        _manualUpdateChecking ? null : _checkForUpdatesManual,
+                  ),
                 ),
               ),
             ),
@@ -796,12 +805,15 @@ class _MainWindowState extends State<MainWindow> {
             // Settings button — notification privacy + PIN management
             Padding(
               padding: const EdgeInsets.only(right: 8.0),
-              child: IconButton(
-                icon: const Icon(FluentIcons.settings, size: 16),
-                onPressed: () async {
-                  _resetAutoLockTimer();
-                  await _showSettingsDialog(context);
-                },
+              child: Tooltip(
+                message: 'Settings',
+                child: IconButton(
+                  icon: const Icon(FluentIcons.settings, size: 16),
+                  onPressed: () async {
+                    _resetAutoLockTimer();
+                    await _showSettingsDialog(context);
+                  },
+                ),
               ),
             ),
 
@@ -809,35 +821,44 @@ class _MainWindowState extends State<MainWindow> {
             // SECURITY (M6): Only accessible post-login, not on the lock screen.
             Padding(
               padding: const EdgeInsets.only(right: 8.0),
-              child: IconButton(
-                icon: const Icon(FluentIcons.delete, size: 16),
-                onPressed: () async {
-                  LoggerService.log('SECURITY', 'User clicked factory reset button');
+              child: Tooltip(
+                message: 'Factory reset',
+                child: IconButton(
+                  icon: const Icon(FluentIcons.delete, size: 16),
+                  onPressed: () async {
+                    LoggerService.log('SECURITY', 'User clicked factory reset button');
                   _resetAutoLockTimer();
-                  await FactoryResetDialog.show(context);
-                },
+                    await FactoryResetDialog.show(context);
+                  },
+                ),
               ),
             ),
 
             // Add Account Button
             Padding(
               padding: const EdgeInsets.only(right: 8.0),
-              child: IconButton(
-                icon: const Icon(FluentIcons.add, size: 16),
-                onPressed: () => _showAddAccountDialog(context, emailProvider),
+              child: Tooltip(
+                message: 'Add account',
+                child: IconButton(
+                  icon: const Icon(FluentIcons.add, size: 16),
+                  onPressed: () => _showAddAccountDialog(context, emailProvider),
+                ),
               ),
             ),
 
             // Lock Button
             Padding(
               padding: const EdgeInsets.only(right: 8.0),
-              child: IconButton(
-                icon: const Icon(FluentIcons.lock, size: 16),
-                onPressed: () {
-                  LoggerService.log('SECURITY', 'User clicked lock button');
-                  _resetAutoLockTimer();
-                  _lockApp();
-                },
+              child: Tooltip(
+                message: 'Lock app',
+                child: IconButton(
+                  icon: const Icon(FluentIcons.lock, size: 16),
+                  onPressed: () {
+                    LoggerService.log('SECURITY', 'User clicked lock button');
+                    _resetAutoLockTimer();
+                    _lockApp();
+                  },
+                ),
               ),
             ),
 
@@ -1328,10 +1349,12 @@ class _MainWindowState extends State<MainWindow> {
                               ],
                             ),
                           ),
-                          IconButton(
-                            icon: const Icon(FluentIcons.cancel, size: 14),
-                            onPressed: () async {
-                              final l10nDialog = l10nOf(ctx);
+                          Tooltip(
+                            message: 'Remove account',
+                            child: IconButton(
+                              icon: const Icon(FluentIcons.cancel, size: 14),
+                              onPressed: () async {
+                                final l10nDialog = l10nOf(ctx);
                               final confirmed = await showDialog<bool>(
                                 context: ctx,
                                 builder: (c) => ContentDialog(
