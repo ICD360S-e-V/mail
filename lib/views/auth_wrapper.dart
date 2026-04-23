@@ -257,7 +257,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(FluentIcons.lock, size: 64),
+              Semantics(
+                label: 'Locked',
+                child: const Icon(FluentIcons.lock, size: 64),
+              ),
               const SizedBox(height: 16),
               Text(l10n.authWrapperAuthRequired),
               const SizedBox(height: 8),
