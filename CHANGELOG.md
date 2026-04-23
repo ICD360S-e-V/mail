@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.75.9 - 2026-04-23
+#### Bug Fixes
+- (**a11y**) lock screen icon decorative — title text below already says locked - (2905d1d) - icd360sevofficial
+
+- - -
+
 ## v2.75.8 - 2026-04-23
 #### Bug Fixes
 - (**a11y**) wrap remaining bare Icons with Semantics in main_window.dart - (0f60b17) - icd360sevofficial
