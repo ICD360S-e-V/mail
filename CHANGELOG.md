@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.75.7 - 2026-04-23
+#### Bug Fixes
+- (**a11y**) wrap remaining bare Icons with Semantics in security_health_view.dart - (72070d0) - icd360sevofficial
+- (**a11y**) wrap remaining bare Icons with Semantics in master_password_dialog.dart - (65f47d2) - icd360sevofficial
+- (**a11y**) wrap remaining bare Icons with Semantics in add_account_dialog.dart - (4018691) - icd360sevofficial
+- (**a11y**) wrap remaining bare Icons with Semantics in pin_unlock_screen.dart - (4c19f7b) - icd360sevofficial
+- (**a11y**) wrap remaining bare Icons with Semantics in auth_wrapper.dart - (c41b4b1) - icd360sevofficial
+- (**a11y**) wrap remaining bare Icons with Semantics in email_viewer.dart - (d7d6cee) - icd360sevofficial
+
+- - -
+
 ## v2.75.6 - 2026-04-23
 #### Bug Fixes
 - (**a11y**) add tooltips and semantic labels in awaiting_approval_view.dart - (61249c6) - icd360sevofficial
