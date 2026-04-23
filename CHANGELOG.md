@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.73.0 - 2026-04-23
+#### Features
+- (**health**) add MTA-STS and TLS-RPT health checks - (8de451b) - icd360sevofficial
+
+- - -
+
 ## v2.72.0 - 2026-04-23
 #### Features
 - (**dns**) add MTA-STS and TLS-RPT DNS record lookups - (a46afe9) - icd360sevofficial
