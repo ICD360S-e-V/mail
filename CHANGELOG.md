@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.76.6 - 2026-04-23
+#### Bug Fixes
+- remove const from non-const Semantics/ExcludeSemantics in attachment_viewer_window - (b996fdf) - icd360sevofficial
+- remove const from non-const Semantics/ExcludeSemantics in security_health_view - (0fcf82e) - icd360sevofficial
+- remove const from non-const Semantics/ExcludeSemantics in add_account_dialog - (a960c38) - icd360sevofficial
+
+- - -
+
 ## v2.76.5 - 2026-04-23
 #### Bug Fixes
 - remove const from Padding wrapping non-const Semantics - (fd94dee) - icd360sevofficial
