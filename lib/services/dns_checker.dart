@@ -118,6 +118,32 @@ class DnsChecker {
     return null;
   }
 
+  /// Check MTA-STS record for a domain.
+  /// Returns the MTA-STS TXT record or null.
+  static Future<String?> lookupMtaSts(String domain) async {
+    final stsDomain = '_mta-sts.$domain';
+    final records = await lookupTxt(stsDomain);
+    for (final r in records) {
+      if (r.toLowerCase().startsWith('v=stsv1')) {
+        return r;
+      }
+    }
+    return null;
+  }
+
+  /// Check TLS-RPT record for a domain.
+  /// Returns the TLS-RPT TXT record or null.
+  static Future<String?> lookupTlsRpt(String domain) async {
+    final rptDomain = '_smtp._tls.$domain';
+    final records = await lookupTxt(rptDomain);
+    for (final r in records) {
+      if (r.toLowerCase().startsWith('v=tlsrptv1')) {
+        return r;
+      }
+    }
+    return null;
+  }
+
   /// Perform a DoH JSON API query.
   ///
   /// For the primary endpoint (mail.icd360s.de), authenticates via mTLS
