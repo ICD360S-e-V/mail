@@ -193,7 +193,7 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
       ),
       title: Row(
         children: [
-          const Semantics(
+          Semantics(
             excludeSemantics: true,
             child: Icon(FluentIcons.contact, size: 24),
           ),
