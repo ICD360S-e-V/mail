@@ -76,9 +76,11 @@ class _AttachmentViewerWindowState extends State<AttachmentViewerWindow> {
       ),
       title: Row(
         children: [
-          Icon(
-            isPdf ? FluentIcons.document : FluentIcons.photo2,
-            size: 20,
+          ExcludeSemantics(
+            child: Icon(
+              isPdf ? FluentIcons.document : FluentIcons.photo2,
+              size: 20,
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -128,7 +130,10 @@ class _AttachmentViewerWindowState extends State<AttachmentViewerWindow> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(FluentIcons.error, size: 48, color: Colors.errorPrimaryColor),
+              const Semantics(
+                label: 'Error',
+                child: Icon(FluentIcons.error, size: 48, color: Colors.errorPrimaryColor),
+              ),
               const SizedBox(height: 16),
               Text('PDF Error: $_pdfError'),
             ],
