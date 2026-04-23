@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.75.6 - 2026-04-23
+#### Bug Fixes
+- (**a11y**) add tooltips and semantic labels in awaiting_approval_view.dart - (61249c6) - icd360sevofficial
+- (**a11y**) add tooltips and semantic labels in device_revoked_screen.dart - (c9fff6b) - icd360sevofficial
+- (**a11y**) add tooltips and semantic labels in changelog_window.dart - (2c94213) - icd360sevofficial
+- (**a11y**) add tooltips and semantic labels in first_run_consent_dialog.dart - (af8847d) - icd360sevofficial
+- (**a11y**) add tooltips and semantic labels in factory_reset_dialog.dart - (76099f7) - icd360sevofficial
+
+- - -
+
 ## v2.75.5 - 2026-04-23
 #### Bug Fixes
 - (**a11y**) add tooltips/semantic labels in compose_window.dart - (5ff5cfe) - icd360sevofficial
