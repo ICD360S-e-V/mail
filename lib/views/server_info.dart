@@ -282,11 +282,6 @@ class _ServerInfoDialogState extends State<ServerInfoDialog> {
 
   Widget _buildHealthSection(
       FluentThemeData theme, ServerHealthStatus? health) {
-    final lastCheck = health?.lastChecked;
-    final lastCheckText = lastCheck != null
-        ? '${lastCheck.hour.toString().padLeft(2, '0')}:${lastCheck.minute.toString().padLeft(2, '0')} (${DateTime.now().difference(lastCheck).inMinutes} min ago)'
-        : 'Not checked yet';
-
     return _buildCard(
       theme,
       title: 'Email Health',
@@ -302,11 +297,6 @@ class _ServerInfoDialogState extends State<ServerInfoDialog> {
             health?.ipv4Status),
         _buildHealthRow(theme, 'IPv6 Blacklist', FluentIcons.warning,
             health?.ipv6Status),
-        const SizedBox(height: 8),
-        Text(
-          'Last checked: $lastCheckText',
-          style: TextStyle(fontSize: 11, color: theme.inactiveColor),
-        ),
       ],
     );
   }
@@ -318,9 +308,14 @@ class _ServerInfoDialogState extends State<ServerInfoDialog> {
         ? _colorFromString(result!.color, theme)
         : theme.inactiveColor;
     final statusText = hasResult ? result!.status : 'Pending';
+    final checkedAt = result?.checkedAt;
+    final checkedText = checkedAt != null
+        ? '${checkedAt.year}-${checkedAt.month.toString().padLeft(2, '0')}-${checkedAt.day.toString().padLeft(2, '0')} '
+          '${checkedAt.hour.toString().padLeft(2, '0')}:${checkedAt.minute.toString().padLeft(2, '0')}:${checkedAt.second.toString().padLeft(2, '0')}'
+        : '';
 
     return Tooltip(
-      message: result?.message ?? '',
+      message: '${result?.message ?? ''}${checkedText.isNotEmpty ? '\nChecked: $checkedText' : ''}',
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(
@@ -332,6 +327,14 @@ class _ServerInfoDialogState extends State<ServerInfoDialog> {
             Expanded(
               child: Text(label, style: theme.typography.body),
             ),
+            if (checkedText.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Text(
+                  checkedText,
+                  style: TextStyle(fontSize: 10, color: theme.inactiveColor),
+                ),
+              ),
             Text(
               statusText,
               style: theme.typography.body?.copyWith(
