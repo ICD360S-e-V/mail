@@ -616,8 +616,7 @@ class _MainWindowState extends State<MainWindow> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Semantics(
-                label: 'App locked',
+              const ExcludeSemantics(
                 child: Icon(FluentIcons.lock, size: 64),
               ),
               const SizedBox(height: 16),
