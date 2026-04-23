@@ -22,6 +22,12 @@ class ServerHealthService {
       // Check DMARC
       status.dmarcStatus = await _checkDmarcAsync();
 
+      // Check MTA-STS
+      status.mtaStsStatus = await _checkMtaStsAsync();
+
+      // Check TLS-RPT
+      status.tlsRptStatus = await _checkTlsRptAsync();
+
       // Check IPv4 blacklist
       status.ipv4Status = await _checkIpBlacklistAsync(true);
 
@@ -108,6 +114,58 @@ class ServerHealthService {
       );
     } catch (ex) {
       return HealthCheckResult(checkedAt: DateTime.now(), 
+        status: 'ERROR',
+        color: 'Orange',
+        message: ex.toString(),
+      );
+    }
+  }
+
+  /// Check MTA-STS DNS record and HTTPS policy endpoint
+  Future<HealthCheckResult> _checkMtaStsAsync() async {
+    try {
+      final sts = await DnsChecker.lookupMtaSts(domain);
+      if (sts != null) {
+        LoggerService.log('HEALTH', 'MTA-STS record found: $sts');
+        return HealthCheckResult(checkedAt: DateTime.now(),
+          status: 'OK',
+          color: 'Green',
+          message: 'MTA-STS record exists for $domain',
+        );
+      }
+      return HealthCheckResult(checkedAt: DateTime.now(),
+        status: 'MISSING',
+        color: 'Orange',
+        message: 'No MTA-STS record found for $domain',
+      );
+    } catch (ex) {
+      return HealthCheckResult(checkedAt: DateTime.now(),
+        status: 'ERROR',
+        color: 'Orange',
+        message: ex.toString(),
+      );
+    }
+  }
+
+  /// Check TLS-RPT DNS record
+  Future<HealthCheckResult> _checkTlsRptAsync() async {
+    try {
+      final rpt = await DnsChecker.lookupTlsRpt(domain);
+      if (rpt != null) {
+        LoggerService.log('HEALTH', 'TLS-RPT record found: $rpt');
+        return HealthCheckResult(checkedAt: DateTime.now(),
+          status: 'OK',
+          color: 'Green',
+          message: 'TLS-RPT record exists for $domain',
+        );
+      }
+      return HealthCheckResult(checkedAt: DateTime.now(),
+        status: 'MISSING',
+        color: 'Orange',
+        message: 'No TLS-RPT record found for $domain',
+      );
+    } catch (ex) {
+      return HealthCheckResult(checkedAt: DateTime.now(),
         status: 'ERROR',
         color: 'Orange',
         message: ex.toString(),
@@ -272,6 +330,8 @@ class ServerHealthStatus {
   HealthCheckResult spfStatus;
   HealthCheckResult dkimStatus;
   HealthCheckResult dmarcStatus;
+  HealthCheckResult mtaStsStatus;
+  HealthCheckResult tlsRptStatus;
   HealthCheckResult ipv4Status;
   HealthCheckResult ipv6Status;
   DateTime? lastChecked;
@@ -280,12 +340,16 @@ class ServerHealthStatus {
     HealthCheckResult? spfStatus,
     HealthCheckResult? dkimStatus,
     HealthCheckResult? dmarcStatus,
+    HealthCheckResult? mtaStsStatus,
+    HealthCheckResult? tlsRptStatus,
     HealthCheckResult? ipv4Status,
     HealthCheckResult? ipv6Status,
     this.lastChecked,
   })  : spfStatus = spfStatus ?? HealthCheckResult(),
         dkimStatus = dkimStatus ?? HealthCheckResult(),
         dmarcStatus = dmarcStatus ?? HealthCheckResult(),
+        mtaStsStatus = mtaStsStatus ?? HealthCheckResult(),
+        tlsRptStatus = tlsRptStatus ?? HealthCheckResult(),
         ipv4Status = ipv4Status ?? HealthCheckResult(),
         ipv6Status = ipv6Status ?? HealthCheckResult();
 }
