@@ -124,7 +124,7 @@ class _ServerInfoDialogState extends State<ServerInfoDialog> {
       ),
       title: Row(
         children: [
-          const Icon(FluentIcons.server, size: 22),
+          const ExcludeSemantics(child: Icon(FluentIcons.server, size: 22)),
           const SizedBox(width: 10),
           const Text('Server Diagnostics'),
           const Spacer(),
@@ -335,7 +335,7 @@ class _ServerInfoDialogState extends State<ServerInfoDialog> {
               child: _statusDot(dotColor),
             ),
             const SizedBox(width: 8),
-            Icon(icon, size: 14, color: theme.inactiveColor),
+            ExcludeSemantics(child: Icon(icon, size: 14, color: theme.inactiveColor)),
             const SizedBox(width: 6),
             Expanded(
               child: Text(label, style: theme.typography.body),
@@ -385,7 +385,7 @@ class _ServerInfoDialogState extends State<ServerInfoDialog> {
         children: [
           Row(
             children: [
-              Icon(icon, size: 16, color: theme.accentColor),
+              ExcludeSemantics(child: Icon(icon, size: 16, color: theme.accentColor)),
               const SizedBox(width: 8),
               Text(
                 title,
@@ -413,7 +413,7 @@ class _ServerInfoDialogState extends State<ServerInfoDialog> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Icon(icon, size: 14, color: theme.inactiveColor),
+          ExcludeSemantics(child: Icon(icon, size: 14, color: theme.inactiveColor)),
           const SizedBox(width: 8),
           SizedBox(
             width: 90,
