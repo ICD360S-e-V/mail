@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.76.5 - 2026-04-23
+#### Bug Fixes
+- remove const from Padding wrapping non-const Semantics - (fd94dee) - icd360sevofficial
+
+- - -
+
 ## v2.76.4 - 2026-04-23
 #### Bug Fixes
 - replace FluentIcons.accessibility with FluentIcons.people - (d4f9202) - icd360sevofficial
