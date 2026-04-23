@@ -810,14 +810,14 @@ class _MainWindowState extends State<MainWindow> {
               child: Tooltip(
                 message: 'Accessibility',
                 child: IconButton(
-                  icon: const Icon(FluentIcons.accessibility, size: 16),
+                  icon: const Icon(FluentIcons.people, size: 16),
                   onPressed: () {
                     showDialog(
                       context: context,
                       builder: (_) => ContentDialog(
                         title: Row(
                           children: [
-                            const Icon(FluentIcons.accessibility, size: 20),
+                            const Icon(FluentIcons.people, size: 20),
                             const SizedBox(width: 8),
                             const Text('Accessibility'),
                           ],
