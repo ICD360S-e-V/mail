@@ -74,10 +74,9 @@ class _SecurityHealthDialogState extends State<SecurityHealthDialog> {
             : MediaQuery.of(context).size.width * 0.95,
         maxHeight: MediaQuery.of(context).size.height * 0.85,
       ),
-      title: Row(
-        children: const [
-          Semantics(
-            excludeSemantics: true,
+      title: const Row(
+        children: [
+          ExcludeSemantics(
             child: Icon(FluentIcons.shield, size: 22),
           ),
           SizedBox(width: 12),
@@ -95,13 +94,12 @@ class _SecurityHealthDialogState extends State<SecurityHealthDialog> {
             onPressed: _loading ? null : _runChecks,
             child: Row(
               mainAxisSize: MainAxisSize.min,
-              children: const [
-                Semantics(
-                  excludeSemantics: true,
+              children: [
+                const ExcludeSemantics(
                   child: Icon(FluentIcons.refresh, size: 14),
                 ),
-                SizedBox(width: 8),
-                Text('Re-check'),
+                const SizedBox(width: 8),
+                const Text('Re-check'),
               ],
             ),
           ),
