@@ -282,6 +282,11 @@ class _ServerInfoDialogState extends State<ServerInfoDialog> {
 
   Widget _buildHealthSection(
       FluentThemeData theme, ServerHealthStatus? health) {
+    final lastCheck = health?.lastChecked;
+    final lastCheckText = lastCheck != null
+        ? '${lastCheck.hour.toString().padLeft(2, '0')}:${lastCheck.minute.toString().padLeft(2, '0')} (${DateTime.now().difference(lastCheck).inMinutes} min ago)'
+        : 'Not checked yet';
+
     return _buildCard(
       theme,
       title: 'Email Health',
@@ -297,6 +302,11 @@ class _ServerInfoDialogState extends State<ServerInfoDialog> {
             health?.ipv4Status),
         _buildHealthRow(theme, 'IPv6 Blacklist', FluentIcons.warning,
             health?.ipv6Status),
+        const SizedBox(height: 8),
+        Text(
+          'Last checked: $lastCheckText',
+          style: TextStyle(fontSize: 11, color: theme.inactiveColor),
+        ),
       ],
     );
   }
