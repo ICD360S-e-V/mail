@@ -1330,11 +1330,11 @@ class _ComposeWindowState extends State<ComposeWindow> {
                             cacheWidth: 80,
                             semanticLabel: 'Attachment preview',
                             errorBuilder: (_, __, ___) =>
-                                Icon(_getFileIcon(file.extension ?? ''), size: 16),
+                                ExcludeSemantics(child: Icon(_getFileIcon(file.extension ?? ''), size: 16)),
                           ),
                         )
                       else
-                        Icon(_getFileIcon(file.extension ?? ''), size: 16),
+                        ExcludeSemantics(child: Icon(_getFileIcon(file.extension ?? ''), size: 16)),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Column(
@@ -1368,7 +1368,10 @@ class _ComposeWindowState extends State<ComposeWindow> {
                       if (att.status == _AttachStatus.ready)
                         const Padding(
                           padding: EdgeInsets.only(right: 4),
-                          child: Icon(FluentIcons.check_mark, size: 12, color: Color(0xFF107C10)),
+                          child: Semantics(
+                            label: 'Ready',
+                            child: Icon(FluentIcons.check_mark, size: 12, color: Color(0xFF107C10)),
+                          ),
                         ),
                       if (isUploading)
                         const Padding(
