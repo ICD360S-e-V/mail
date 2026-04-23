@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.69.0 - 2026-04-23
+#### Features
+- (**ui**) show last health check timestamp in server info - (5a9c39e) - icd360sevofficial
+
+- - -
+
 ## v2.68.0 - 2026-04-23
 #### Features
 - (**health**) add lastChecked timestamp to health status - (461d7cd) - icd360sevofficial
