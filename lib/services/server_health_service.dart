@@ -19,6 +19,9 @@ class ServerHealthService {
       // Check DKIM
       status.dkimStatus = await _checkDkimAsync();
 
+      // Check DMARC
+      status.dmarcStatus = await _checkDmarcAsync();
+
       // Check IPv4 blacklist
       status.ipv4Status = await _checkIpBlacklistAsync(true);
 
@@ -73,6 +76,34 @@ class ServerHealthService {
         status: 'MISSING',
         color: 'Orange',
         message: 'No DKIM record found for default._domainkey.$domain',
+      );
+    } catch (ex) {
+      return HealthCheckResult(
+        status: 'ERROR',
+        color: 'Orange',
+        message: ex.toString(),
+      );
+    }
+  }
+
+  /// Check DMARC record via DoH
+  Future<HealthCheckResult> _checkDmarcAsync() async {
+    try {
+      final dmarc = await DnsChecker.lookupDmarc(domain);
+      if (dmarc != null) {
+        final policy = RegExp(r'p=(\w+)').firstMatch(dmarc)?.group(1) ?? 'unknown';
+        final isReject = policy.toLowerCase() == 'reject';
+        LoggerService.log('HEALTH', 'DMARC record found: p=$policy');
+        return HealthCheckResult(
+          status: isReject ? 'OK' : 'WARN',
+          color: isReject ? 'Green' : 'Orange',
+          message: 'DMARC p=$policy for $domain',
+        );
+      }
+      return HealthCheckResult(
+        status: 'FAIL',
+        color: 'Red',
+        message: 'No DMARC record found for $domain',
       );
     } catch (ex) {
       return HealthCheckResult(
@@ -239,16 +270,19 @@ class ServerHealthService {
 class ServerHealthStatus {
   HealthCheckResult spfStatus;
   HealthCheckResult dkimStatus;
+  HealthCheckResult dmarcStatus;
   HealthCheckResult ipv4Status;
   HealthCheckResult ipv6Status;
 
   ServerHealthStatus({
     HealthCheckResult? spfStatus,
     HealthCheckResult? dkimStatus,
+    HealthCheckResult? dmarcStatus,
     HealthCheckResult? ipv4Status,
     HealthCheckResult? ipv6Status,
   })  : spfStatus = spfStatus ?? HealthCheckResult(),
         dkimStatus = dkimStatus ?? HealthCheckResult(),
+        dmarcStatus = dmarcStatus ?? HealthCheckResult(),
         ipv4Status = ipv4Status ?? HealthCheckResult(),
         ipv6Status = ipv6Status ?? HealthCheckResult();
 }
