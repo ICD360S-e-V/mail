@@ -105,6 +105,19 @@ class DnsChecker {
     return null;
   }
 
+  /// Check DMARC record for a domain.
+  /// Returns the DMARC record or null.
+  static Future<String?> lookupDmarc(String domain) async {
+    final dmarcDomain = '_dmarc.$domain';
+    final records = await lookupTxt(dmarcDomain);
+    for (final r in records) {
+      if (r.toLowerCase().startsWith('v=dmarc1')) {
+        return r;
+      }
+    }
+    return null;
+  }
+
   /// Perform a DoH JSON API query.
   ///
   /// For the primary endpoint (mail.icd360s.de), authenticates via mTLS
