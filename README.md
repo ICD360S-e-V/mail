@@ -54,7 +54,8 @@ ICD360S Mail is a security-first email client built for [ICD360S e.V.](https://i
 |---|---|
 | **Virus Scanning** | Dual-layer: server-side scanning on all inbound mail, plus on-demand scanning of individual attachments from the app with real-time status. |
 | **Multi-Layer Spam Filtering** | Inbound mail passes through reputation checks, DNSBL, Bayesian filtering, and phishing detection. |
-| **Threat Intelligence** | DMARC, DKIM, SPF validation. DNS blacklist checks. Sender reputation scoring. |
+| **Threat Intelligence** | DMARC (reject policy), DKIM, SPF validation. DNS blacklist checks. Sender reputation scoring. |
+| **Email Health Monitor** | Real-time dashboard showing SPF, DKIM, DMARC, MTA-STS, and TLS-RPT status with per-check timestamps. |
 | **Phishing Detection** | Offline threat database with cryptographic signature verification. |
 | **HTML Sanitizer** | Allowlist-based HTML renderer blocks tracking pixels, scripts, and CSS exploits. No WebView. |
 
@@ -76,6 +77,16 @@ ICD360S Mail is a security-first email client built for [ICD360S e.V.](https://i
 | **Image Thumbnails** | Photo attachments show inline previews in the compose window. |
 | **Smart Draft Auto-Save** | Drafts save automatically every 5 seconds. Auto-save pauses during send to prevent conflicts. |
 | **Background Sent Folder** | After send, the Sent folder copy saves silently in the background — no waiting. |
+| **Swipe to Delete** | Swipe left on any email to delete it instantly. |
+
+### Accessibility
+
+| Feature | Details |
+|---|---|
+| **Screen Reader Support** | All interactive elements have descriptive labels for TalkBack (Android) and VoiceOver (iOS/macOS). |
+| **Keyboard Navigation** | Full keyboard access on desktop platforms. |
+| **Font Scaling** | Respects system font size preferences on all platforms. |
+| **WCAG 2.1 AA** | Designed following WCAG 2.1 Level AA guidelines. See [ACCESSIBILITY.md](ACCESSIBILITY.md) for details. |
 
 ---
 
@@ -274,12 +285,6 @@ flutter build apk --release
 ## Security
 
 Please report security vulnerabilities responsibly. See [SECURITY.md](SECURITY.md) for our disclosure policy.
-
----
-
-## Accessibility
-
-This app is designed following WCAG 2.1 Level AA guidelines. See [ACCESSIBILITY.md](ACCESSIBILITY.md) for details.
 
 ---
 
