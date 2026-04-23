@@ -76,7 +76,10 @@ class _SecurityHealthDialogState extends State<SecurityHealthDialog> {
       ),
       title: Row(
         children: const [
-          Icon(FluentIcons.shield, size: 22),
+          Semantics(
+            excludeSemantics: true,
+            child: Icon(FluentIcons.shield, size: 22),
+          ),
           SizedBox(width: 12),
           Text('Security Health'),
         ],
@@ -93,7 +96,10 @@ class _SecurityHealthDialogState extends State<SecurityHealthDialog> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: const [
-                Icon(FluentIcons.refresh, size: 14),
+                Semantics(
+                  excludeSemantics: true,
+                  child: Icon(FluentIcons.refresh, size: 14),
+                ),
                 SizedBox(width: 8),
                 Text('Re-check'),
               ],
@@ -121,7 +127,10 @@ class _SecurityHealthDialogState extends State<SecurityHealthDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(FluentIcons.error, size: 32, color: Colors.red),
+            Semantics(
+              label: 'Error',
+              child: Icon(FluentIcons.error, size: 32, color: Colors.red),
+            ),
             const SizedBox(height: 12),
             Text('Failed to run security checks'),
             const SizedBox(height: 8),
@@ -169,18 +178,25 @@ class _SecurityHealthDialogState extends State<SecurityHealthDialog> {
             ),
             child: Row(
               children: [
-                Icon(
-                  critCount > 0
-                      ? FluentIcons.shield_alert
+                Semantics(
+                  label: critCount > 0
+                      ? 'Critical security issues'
                       : warnCount > 0
-                          ? FluentIcons.warning
-                          : FluentIcons.shield_solid,
-                  size: 22,
-                  color: critCount > 0
-                      ? Colors.red
-                      : warnCount > 0
-                          ? Colors.orange
-                          : Colors.green,
+                          ? 'Security warnings'
+                          : 'All checks passed',
+                  child: Icon(
+                    critCount > 0
+                        ? FluentIcons.shield_alert
+                        : warnCount > 0
+                            ? FluentIcons.warning
+                            : FluentIcons.shield_solid,
+                    size: 22,
+                    color: critCount > 0
+                        ? Colors.red
+                        : warnCount > 0
+                            ? Colors.orange
+                            : Colors.green,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -224,7 +240,10 @@ class _SecurityHealthDialogState extends State<SecurityHealthDialog> {
         children: [
           Row(
             children: [
-              Icon(icon, size: 18, color: color),
+              Semantics(
+                label: '${check.status.name}',
+                child: Icon(icon, size: 18, color: color),
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -290,8 +309,11 @@ class _SecurityHealthDialogState extends State<SecurityHealthDialog> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(FluentIcons.lightbulb,
-                        size: 14, color: Colors.yellow),
+                    Semantics(
+                      excludeSemantics: true,
+                      child: Icon(FluentIcons.lightbulb,
+                          size: 14, color: Colors.yellow),
+                    ),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
