@@ -41,19 +41,19 @@ class ServerHealthService {
       final spf = await DnsChecker.lookupSpf(domain);
       if (spf != null) {
         LoggerService.log('HEALTH', 'SPF record found for $domain');
-        return HealthCheckResult(
+        return HealthCheckResult(checkedAt: DateTime.now(), 
           status: 'OK',
           color: 'Green',
           message: 'SPF record exists for $domain: $spf',
         );
       }
-      return HealthCheckResult(
+      return HealthCheckResult(checkedAt: DateTime.now(), 
         status: 'MISSING',
         color: 'Orange',
         message: 'No SPF record found for $domain',
       );
     } catch (ex) {
-      return HealthCheckResult(
+      return HealthCheckResult(checkedAt: DateTime.now(), 
         status: 'ERROR',
         color: 'Orange',
         message: ex.toString(),
@@ -67,19 +67,19 @@ class ServerHealthService {
       final dkim = await DnsChecker.lookupDkim(domain);
       if (dkim != null) {
         LoggerService.log('HEALTH', 'DKIM record found for $domain');
-        return HealthCheckResult(
+        return HealthCheckResult(checkedAt: DateTime.now(), 
           status: 'OK',
           color: 'Green',
           message: 'DKIM record exists for default._domainkey.$domain',
         );
       }
-      return HealthCheckResult(
+      return HealthCheckResult(checkedAt: DateTime.now(), 
         status: 'MISSING',
         color: 'Orange',
         message: 'No DKIM record found for default._domainkey.$domain',
       );
     } catch (ex) {
-      return HealthCheckResult(
+      return HealthCheckResult(checkedAt: DateTime.now(), 
         status: 'ERROR',
         color: 'Orange',
         message: ex.toString(),
@@ -95,19 +95,19 @@ class ServerHealthService {
         final policy = RegExp(r'p=(\w+)').firstMatch(dmarc)?.group(1) ?? 'unknown';
         final isReject = policy.toLowerCase() == 'reject';
         LoggerService.log('HEALTH', 'DMARC record found: p=$policy');
-        return HealthCheckResult(
+        return HealthCheckResult(checkedAt: DateTime.now(), 
           status: isReject ? 'OK' : 'WARN',
           color: isReject ? 'Green' : 'Orange',
           message: 'DMARC p=$policy for $domain',
         );
       }
-      return HealthCheckResult(
+      return HealthCheckResult(checkedAt: DateTime.now(), 
         status: 'FAIL',
         color: 'Red',
         message: 'No DMARC record found for $domain',
       );
     } catch (ex) {
-      return HealthCheckResult(
+      return HealthCheckResult(checkedAt: DateTime.now(), 
         status: 'ERROR',
         color: 'Orange',
         message: ex.toString(),
@@ -127,7 +127,7 @@ class ServerHealthService {
           .map((a) => a.address)
           .firstOrNull;
       if (ip == null) {
-        return HealthCheckResult(
+        return HealthCheckResult(checkedAt: DateTime.now(), 
           status: 'ERROR',
           color: 'Orange',
           message: 'No ${isIpv4 ? "IPv4" : "IPv6"} address found for mail.$domain',
@@ -229,13 +229,13 @@ class ServerHealthService {
       LoggerService.log('HEALTH',
           '${isIpv4 ? "IPv4" : "IPv6"} blacklist: $status ($totalChecked providers checked)');
 
-      return HealthCheckResult(
+      return HealthCheckResult(checkedAt: DateTime.now(), 
         status: status,
         color: color,
         message: message,
       );
     } catch (ex) {
-      return HealthCheckResult(
+      return HealthCheckResult(checkedAt: DateTime.now(), 
         status: 'ERROR',
         color: 'Orange',
         message: ex.toString(),
@@ -295,10 +295,12 @@ class HealthCheckResult {
   String status;
   String color;
   String message;
+  DateTime? checkedAt;
 
   HealthCheckResult({
     this.status = '',
     this.color = 'Gray',
     this.message = '',
+    this.checkedAt,
   });
 }
