@@ -1366,11 +1366,11 @@ class _ComposeWindowState extends State<ComposeWindow> {
                       ),
                       // Status indicator
                       if (att.status == _AttachStatus.ready)
-                        const Padding(
-                          padding: EdgeInsets.only(right: 4),
+                        Padding(
+                          padding: const EdgeInsets.only(right: 4),
                           child: Semantics(
                             label: 'Ready',
-                            child: Icon(FluentIcons.check_mark, size: 12, color: Color(0xFF107C10)),
+                            child: const Icon(FluentIcons.check_mark, size: 12, color: Color(0xFF107C10)),
                           ),
                         ),
                       if (isUploading)
