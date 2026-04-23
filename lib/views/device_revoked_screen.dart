@@ -28,10 +28,13 @@ class DeviceRevokedScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
-                FluentIcons.blocked2,
-                size: 64,
-                color: Colors.red,
+              Semantics(
+                label: 'Device revoked',
+                child: Icon(
+                  FluentIcons.blocked2,
+                  size: 64,
+                  color: Colors.red,
+                ),
               ),
               const SizedBox(height: 24),
               Text(
