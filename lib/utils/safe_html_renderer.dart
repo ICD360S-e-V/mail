@@ -405,8 +405,11 @@ class SafeHtmlRenderer extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.image_not_supported_outlined,
-                      size: 16, color: Colors.grey[600]),
+                  Semantics(
+                    label: 'Image blocked',
+                    child: Icon(Icons.image_not_supported_outlined,
+                        size: 16, color: Colors.grey[600]),
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     'Image blocked',
