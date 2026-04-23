@@ -42,7 +42,10 @@ class DnsDetailsWindow extends StatelessWidget {
       ),
       title: Row(
         children: [
-          Icon(FluentIcons.shield, size: 24, color: statusColor),
+          Tooltip(
+            message: 'DNS record status',
+            child: Icon(FluentIcons.shield, size: 24, color: statusColor),
+          ),
           const SizedBox(width: 12),
           Text(l10n.dnsDetailsTitle(recordType)),
         ],
@@ -149,7 +152,10 @@ class DnsDetailsWindow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(FluentIcons.info, size: 16),
+          const Tooltip(
+            message: 'Information',
+            child: Icon(FluentIcons.info, size: 16),
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
