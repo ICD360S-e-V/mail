@@ -305,6 +305,14 @@ class MyApp extends StatelessWidget {
               accentColor: Colors.blue,
               scaffoldBackgroundColor: const Color(0xFF1E1E1E),
             ),
+            highContrastTheme: FluentThemeData(
+              brightness: Brightness.light,
+              accentColor: Colors.blue,
+            ),
+            highContrastDarkTheme: FluentThemeData(
+              brightness: Brightness.dark,
+              accentColor: Colors.blue,
+            ),
 
             // Localization — include FluentLocalizations for Android/custom ROM compatibility
             locale: localeProvider.currentLocale,
