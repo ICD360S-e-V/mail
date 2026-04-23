@@ -1476,7 +1476,21 @@ class _MainWindowState extends State<MainWindow> {
                           itemCount: emailProvider.emails.length,
                           itemBuilder: (context, index) {
                             final email = emailProvider.emails[index];
-                            return _buildEmailListItem(email, theme, emailProvider.currentFolder);
+                            return Dismissible(
+                              key: ValueKey(email.messageId),
+                              direction: DismissDirection.endToStart,
+                              background: Container(
+                                alignment: Alignment.centerRight,
+                                padding: const EdgeInsets.only(right: 24),
+                                color: Colors.red,
+                                child: const Icon(FluentIcons.delete, color: Color(0xFFFFFFFF), size: 24),
+                              ),
+                              confirmDismiss: (direction) async {
+                                emailProvider.deleteEmail(email);
+                                return false;
+                              },
+                              child: _buildEmailListItem(email, theme, emailProvider.currentFolder),
+                            );
                           },
                         );
                       },
