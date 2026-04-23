@@ -217,7 +217,10 @@ class _PinUnlockScreenState extends State<PinUnlockScreen>
             children: [
               const Spacer(flex: 2),
               // Lock icon
-              Icon(FluentIcons.lock, size: 48, color: theme.accentColor),
+              Semantics(
+                label: 'Enter PIN to unlock',
+                child: Icon(FluentIcons.lock, size: 48, color: theme.accentColor),
+              ),
               const SizedBox(height: 16),
               Text(
                 widget.isSetup ? 'Set PIN' : 'Enter PIN',
