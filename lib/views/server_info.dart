@@ -134,9 +134,12 @@ class _ServerInfoDialogState extends State<ServerInfoDialog> {
                   height: 18,
                   child: ProgressRing(strokeWidth: 2.5),
                 )
-              : IconButton(
-                  icon: const Icon(FluentIcons.refresh, size: 16),
-                  onPressed: _refresh,
+              : Tooltip(
+                  message: 'Refresh diagnostics',
+                  child: IconButton(
+                    icon: const Icon(FluentIcons.refresh, size: 16),
+                    onPressed: _refresh,
+                  ),
                 ),
         ],
       ),
@@ -250,7 +253,10 @@ class _ServerInfoDialogState extends State<ServerInfoDialog> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          _statusDot(dotColor),
+          Semantics(
+            label: '$protocol port $port status: $statusText',
+            child: _statusDot(dotColor),
+          ),
           const SizedBox(width: 8),
           SizedBox(
             width: 52,
@@ -324,7 +330,10 @@ class _ServerInfoDialogState extends State<ServerInfoDialog> {
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(
           children: [
-            _statusDot(dotColor),
+            Semantics(
+              label: '$label status: $statusText',
+              child: _statusDot(dotColor),
+            ),
             const SizedBox(width: 8),
             Icon(icon, size: 14, color: theme.inactiveColor),
             const SizedBox(width: 6),
