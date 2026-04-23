@@ -1328,6 +1328,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
                             height: 40,
                             fit: BoxFit.cover,
                             cacheWidth: 80,
+                            semanticLabel: 'Attachment preview',
                             errorBuilder: (_, __, ___) =>
                                 Icon(_getFileIcon(file.extension ?? ''), size: 16),
                           ),
