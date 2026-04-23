@@ -85,7 +85,10 @@ class _FirstRunConsentDialogState extends State<FirstRunConsentDialog> {
                 children: [
                   Row(
                     children: [
-                      const Icon(FluentIcons.update_restore, size: 20),
+                      const Tooltip(
+                        message: 'Auto-update feature',
+                        child: Icon(FluentIcons.update_restore, size: 20),
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         l10n.firstRunSectionAutoUpdate,
@@ -121,7 +124,10 @@ class _FirstRunConsentDialogState extends State<FirstRunConsentDialog> {
                 children: [
                   Row(
                     children: [
-                      const Icon(FluentIcons.diagnostic, size: 20),
+                      const Tooltip(
+                        message: 'Diagnostic logging',
+                        child: Icon(FluentIcons.diagnostic, size: 20),
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         l10n.firstRunSectionLogging,
@@ -157,7 +163,10 @@ class _FirstRunConsentDialogState extends State<FirstRunConsentDialog> {
                 children: [
                   Row(
                     children: [
-                      const Icon(FluentIcons.ringer, size: 20),
+                      const Tooltip(
+                        message: 'Notifications',
+                        child: Icon(FluentIcons.ringer, size: 20),
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         l10n.firstRunSectionNotifications,
