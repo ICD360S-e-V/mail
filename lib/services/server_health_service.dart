@@ -31,6 +31,7 @@ class ServerHealthService {
       LoggerService.logError('HEALTH', ex, stackTrace);
     }
 
+    status.lastChecked = DateTime.now();
     return status;
   }
 
@@ -273,6 +274,7 @@ class ServerHealthStatus {
   HealthCheckResult dmarcStatus;
   HealthCheckResult ipv4Status;
   HealthCheckResult ipv6Status;
+  DateTime? lastChecked;
 
   ServerHealthStatus({
     HealthCheckResult? spfStatus,
@@ -280,6 +282,7 @@ class ServerHealthStatus {
     HealthCheckResult? dmarcStatus,
     HealthCheckResult? ipv4Status,
     HealthCheckResult? ipv6Status,
+    this.lastChecked,
   })  : spfStatus = spfStatus ?? HealthCheckResult(),
         dkimStatus = dkimStatus ?? HealthCheckResult(),
         dmarcStatus = dmarcStatus ?? HealthCheckResult(),
