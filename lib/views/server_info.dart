@@ -291,6 +291,8 @@ class _ServerInfoDialogState extends State<ServerInfoDialog> {
             health?.spfStatus),
         _buildHealthRow(theme, 'DKIM', FluentIcons.shield_solid,
             health?.dkimStatus),
+        _buildHealthRow(theme, 'DMARC', FluentIcons.shield_solid,
+            health?.dmarcStatus),
         _buildHealthRow(theme, 'IPv4 Blacklist', FluentIcons.warning,
             health?.ipv4Status),
         _buildHealthRow(theme, 'IPv6 Blacklist', FluentIcons.warning,
