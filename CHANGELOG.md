@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.75.5 - 2026-04-23
+#### Bug Fixes
+- (**a11y**) add tooltips/semantic labels in compose_window.dart - (5ff5cfe) - icd360sevofficial
+- (**a11y**) add tooltips and semantic labels in security_health_view.dart - (9e9f710) - icd360sevofficial
+- (**a11y**) add high contrast theme support - (99810ba) - icd360sevofficial
+- (**a11y**) add tooltips/semantic labels in log_viewer_window.dart - (8fdef7c) - icd360sevofficial
+- (**a11y**) add tooltips and semantic labels in attachment_viewer_window.dart - (bd389e5) - icd360sevofficial
+- (**a11y**) add tooltips/semantic labels in dns_details_window.dart - (acdbb99) - icd360sevofficial
+- (**a11y**) add tooltips and semantic labels in server_info.dart - (91aee56) - icd360sevofficial
+- (**a11y**) add tooltips/semantic labels in blacklist_details_window.dart - (8e3a87b) - icd360sevofficial
+
+- - -
+
 ## v2.75.4 - 2026-04-23
 #### Bug Fixes
 - (**a11y**) add Tooltip to remaining delete IconButtons in email list - (a2857ce) - icd360sevofficial
