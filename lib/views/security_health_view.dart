@@ -86,15 +86,18 @@ class _SecurityHealthDialogState extends State<SecurityHealthDialog> {
         child: _buildBody(theme),
       ),
       actions: [
-        Button(
-          onPressed: _loading ? null : _runChecks,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: const [
-              Icon(FluentIcons.refresh, size: 14),
-              SizedBox(width: 8),
-              Text('Re-check'),
-            ],
+        Tooltip(
+          message: 'Re-check security',
+          child: Button(
+            onPressed: _loading ? null : _runChecks,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                Icon(FluentIcons.refresh, size: 14),
+                SizedBox(width: 8),
+                Text('Re-check'),
+              ],
+            ),
           ),
         ),
         FilledButton(
@@ -232,19 +235,22 @@ class _SecurityHealthDialogState extends State<SecurityHealthDialog> {
                   ),
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  check.status.name.toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: color,
+              Semantics(
+                label: '${check.name} status: ${check.status.name}',
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    check.status.name.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: color,
+                    ),
                   ),
                 ),
               ),
@@ -297,10 +303,13 @@ class _SecurityHealthDialogState extends State<SecurityHealthDialog> {
                         check.status == SecurityStatus.critical)
                       Padding(
                         padding: const EdgeInsets.only(left: 8),
-                        child: Button(
-                          onPressed: _openMacFileVaultSettings,
-                          child: const Text('Open Settings',
-                              style: TextStyle(fontSize: 11)),
+                        child: Tooltip(
+                          message: 'Open settings',
+                          child: Button(
+                            onPressed: _openMacFileVaultSettings,
+                            child: const Text('Open Settings',
+                                style: TextStyle(fontSize: 11)),
+                          ),
                         ),
                       ),
                   ],
