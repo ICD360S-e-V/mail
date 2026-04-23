@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.71.0 - 2026-04-23
+#### Features
+- (**ui**) show exact date+time per health check row - (8fa8ae4) - icd360sevofficial
+
+- - -
+
 ## v2.70.0 - 2026-04-23
 #### Features
 - (**health**) per-check timestamp on every HealthCheckResult - (4674602) - icd360sevofficial
