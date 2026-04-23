@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.76.2 - 2026-04-23
+#### Bug Fixes
+- close Tooltip parenthesis on Remove account IconButton - (fce0ae6) - icd360sevofficial
+
+- - -
+
 ## v2.76.1 - 2026-04-23
 #### Bug Fixes
 - close Tooltip parentheses on all 8 IconButtons - (1cb5883) - icd360sevofficial
