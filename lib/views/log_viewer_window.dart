@@ -76,7 +76,10 @@ ${l10n.logViewerMetadataSeparator}
       ),
       title: Row(
         children: [
-          const Icon(FluentIcons.code, size: 24),
+          const Tooltip(
+            message: 'Log viewer',
+            child: Icon(FluentIcons.code, size: 24),
+          ),
           const SizedBox(width: 12),
           Text(l10n.logViewerDialogTitle),
         ],
@@ -137,7 +140,10 @@ ${l10n.logViewerMetadataSeparator}
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(FluentIcons.copy, size: 14),
+              const Tooltip(
+                message: 'Copy logs',
+                child: Icon(FluentIcons.copy, size: 14),
+              ),
               const SizedBox(width: 6),
               Text(l10n.logViewerButtonCopyAll),
             ],
