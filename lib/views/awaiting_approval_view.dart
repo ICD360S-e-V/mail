@@ -198,11 +198,14 @@ class _AwaitingApprovalDialogState extends State<AwaitingApprovalDialog> {
       constraints: const BoxConstraints(maxWidth: 480),
       title: Row(
         children: [
-          Icon(
-            widget.isTransfer
-                ? FluentIcons.transition_effect
-                : FluentIcons.contact_card,
-            size: 22,
+          Semantics(
+            label: 'Awaiting approval',
+            child: Icon(
+              widget.isTransfer
+                  ? FluentIcons.transition_effect
+                  : FluentIcons.contact_card,
+              size: 22,
+            ),
           ),
           const SizedBox(width: 12),
           Text(widget.isTransfer
@@ -216,7 +219,10 @@ class _AwaitingApprovalDialogState extends State<AwaitingApprovalDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            const ProgressRing(),
+            Semantics(
+              label: 'Waiting for approval',
+              child: const ProgressRing(),
+            ),
             const SizedBox(height: 24),
             Text(
               widget.username,
@@ -244,10 +250,13 @@ class _AwaitingApprovalDialogState extends State<AwaitingApprovalDialog> {
                 ),
                 child: Row(
                   children: [
-                    Icon(
-                      FluentIcons.warning,
-                      color: Colors.orange,
-                      size: 18,
+                    Tooltip(
+                      message: 'Warning',
+                      child: Icon(
+                        FluentIcons.warning,
+                        color: Colors.orange,
+                        size: 18,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     const Expanded(
