@@ -277,6 +277,12 @@ Please report security vulnerabilities responsibly. See [SECURITY.md](SECURITY.m
 
 ---
 
+## Accessibility
+
+This app is designed following WCAG 2.1 Level AA guidelines. See [ACCESSIBILITY.md](ACCESSIBILITY.md) for details.
+
+---
+
 ## Versioning
 
 Automated with [Conventional Commits](https://www.conventionalcommits.org/):
