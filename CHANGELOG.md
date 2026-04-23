@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.65.0 - 2026-04-23
+#### Features
+- (**dns**) add DMARC record lookup via DoH - (e48a14d) - icd360sevofficial
+
+- - -
+
 ## v2.64.5 - 2026-04-22
 #### Bug Fixes
 - (**smtp**) save to Sent folder in background, don't block Send - (ee86cb6) - icd360sevofficial
