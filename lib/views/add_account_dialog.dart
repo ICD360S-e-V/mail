@@ -193,7 +193,10 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
       ),
       title: Row(
         children: [
-          const Icon(FluentIcons.contact, size: 24),
+          const Semantics(
+            excludeSemantics: true,
+            child: Icon(FluentIcons.contact, size: 24),
+          ),
           const SizedBox(width: 12),
           Text(l10n.dialogTitleAddAccount),
         ],
