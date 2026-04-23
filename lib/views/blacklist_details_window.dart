@@ -50,7 +50,10 @@ class BlacklistDetailsWindow extends StatelessWidget {
       ),
       title: Row(
         children: [
-          Icon(FluentIcons.blocked2, size: 24, color: statusColor),
+          Tooltip(
+            message: 'Blacklist status',
+            child: Icon(FluentIcons.blocked2, size: 24, color: statusColor),
+          ),
           const SizedBox(width: 12),
           Text(l10n.blacklistDetailsTitle(ipType)),
         ],
@@ -119,7 +122,10 @@ class BlacklistDetailsWindow extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Icon(FluentIcons.info, size: 16, color: statusColor),
+                  Tooltip(
+                    message: 'Information',
+                    child: Icon(FluentIcons.info, size: 16, color: statusColor),
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -235,7 +241,10 @@ class BlacklistDetailsWindow extends StatelessWidget {
               padding: const EdgeInsets.only(left: 16, bottom: 4),
               child: Row(
                 children: [
-                  const Icon(FluentIcons.checkbox_composite, size: 12),
+                  const Tooltip(
+                    message: 'Provider checked',
+                    child: Icon(FluentIcons.checkbox_composite, size: 12),
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(provider, style: theme.typography.body),
