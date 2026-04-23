@@ -804,6 +804,46 @@ class _MainWindowState extends State<MainWindow> {
               ),
             ),
 
+            // Accessibility info
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: Tooltip(
+                message: 'Accessibility',
+                child: IconButton(
+                  icon: const Icon(FluentIcons.accessibility, size: 16),
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (_) => ContentDialog(
+                        title: Row(
+                          children: [
+                            const Icon(FluentIcons.accessibility, size: 20),
+                            const SizedBox(width: 8),
+                            const Text('Accessibility'),
+                          ],
+                        ),
+                        content: const Text(
+                          'This app is designed following WCAG 2.1 Level AA guidelines.\n\n'
+                          '• Screen reader support (TalkBack / VoiceOver)\n'
+                          '• Full keyboard navigation\n'
+                          '• High contrast mode support\n'
+                          '• System font scaling\n'
+                          '• Color-independent status indicators\n\n'
+                          'If you encounter accessibility barriers, please contact kontakt@icd360s.de',
+                        ),
+                        actions: [
+                          FilledButton(
+                            child: const Text('OK'),
+                            onPressed: () => Navigator.of(context).pop(),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+
             // Settings button — notification privacy + PIN management
             Padding(
               padding: const EdgeInsets.only(right: 8.0),
