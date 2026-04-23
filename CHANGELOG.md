@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.75.3 - 2026-04-23
+#### Bug Fixes
+- (**a11y**) add Tooltip to remove attachment IconButton - (c9a3626) - icd360sevofficial
+
+- - -
+
 ## v2.75.2 - 2026-04-23
 #### Bug Fixes
 - (**a11y**) add Tooltip to all IconButtons in email viewer - (f7ebe03) - icd360sevofficial
