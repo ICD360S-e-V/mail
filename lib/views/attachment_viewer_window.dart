@@ -92,21 +92,30 @@ class _AttachmentViewerWindowState extends State<AttachmentViewerWindow> {
       content: _buildContent(isPdf, isImage, l10n),
       actions: [
         // Download button
-        IconButton(
-          icon: const Icon(FluentIcons.download, size: 20),
-          onPressed: () => _downloadFile(l10n),
+        Tooltip(
+          message: 'Download',
+          child: IconButton(
+            icon: const Icon(FluentIcons.download, size: 20),
+            onPressed: () => _downloadFile(l10n),
+          ),
         ),
 
         // Print button
-        IconButton(
-          icon: const Icon(FluentIcons.print, size: 20),
-          onPressed: () => _printFile(isPdf, isImage, l10n),
+        Tooltip(
+          message: 'Print',
+          child: IconButton(
+            icon: const Icon(FluentIcons.print, size: 20),
+            onPressed: () => _printFile(isPdf, isImage, l10n),
+          ),
         ),
 
         // Close button
-        FilledButton(
-          child: const Icon(FluentIcons.chrome_close, size: 20),
-          onPressed: () => Navigator.of(context).pop(),
+        Tooltip(
+          message: 'Close',
+          child: FilledButton(
+            child: const Icon(FluentIcons.chrome_close, size: 20),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
         ),
       ],
     );
@@ -174,6 +183,7 @@ class _AttachmentViewerWindowState extends State<AttachmentViewerWindow> {
           child: Image.memory(
             widget.fileData,
             fit: BoxFit.contain,
+            semanticLabel: 'Attachment preview',
           ),
         ),
       );
