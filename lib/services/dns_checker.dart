@@ -119,6 +119,45 @@ class DnsChecker {
   }
 
 
+
+  /// Check MTA-STS record for a domain.
+  static Future<String?> lookupMtaSts(String domain) async {
+    final stsDomain = '_mta-sts.\$domain';
+    final records = await lookupTxt(stsDomain);
+    for (final r in records) {
+      if (r.toLowerCase().startsWith('v=stsv1')) {
+        return r;
+      }
+    }
+    return null;
+  }
+
+  /// Check TLS-RPT record for a domain.
+  static Future<String?> lookupTlsRpt(String domain) async {
+    final rptDomain = '_smtp._tls.\$domain';
+    final records = await lookupTxt(rptDomain);
+    for (final r in records) {
+      if (r.toLowerCase().startsWith('v=tlsrptv1')) {
+        return r;
+      }
+    }
+    return null;
+  }
+
+
+  /// Look up MX records for [domain].
+  static Future<List<String>> lookupMx(String domain) async {
+    try {
+      return await _queryDoH(_primaryEndpoint, domain, 'MX');
+    } catch (_) {
+      try {
+        return await _queryDoH(_fallbackEndpoint, domain, 'MX');
+      } catch (_) {
+        return [];
+      }
+    }
+  }
+
   /// Look up CAA records for [domain].
   static Future<List<String>> lookupCaa(String domain) async {
     try {
