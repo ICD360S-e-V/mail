@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024-2026 ICD360S e.V.
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import 'dart:typed_data';
 import 'dart:io';
 import 'package:fluent_ui/fluent_ui.dart';
@@ -262,4 +265,4 @@ class _AttachmentViewerWindowState extends State<AttachmentViewerWindow> {
     }
   }
 }
-
+
