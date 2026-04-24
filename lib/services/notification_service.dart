@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024-2026 ICD360S e.V.
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import 'dart:io';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../models/models.dart';
