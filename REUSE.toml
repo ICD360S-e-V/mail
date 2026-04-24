@@ -1,0 +1,45 @@
+# REUSE Specification 3.3 — https://reuse.software/spec-3.3/
+# Covers files that cannot contain SPDX comment headers.
+# Source files (.dart) already have inline SPDX headers.
+
+version = 1
+
+[[annotations]]
+path = ["*.md", "*.txt", ".gitignore", ".metadata", ".gitattributes"]
+SPDX-FileCopyrightText = "2024-2026 ICD360S e.V."
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+[[annotations]]
+path = [".github/**"]
+SPDX-FileCopyrightText = "2024-2026 ICD360S e.V."
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+[[annotations]]
+path = ["*.json", "*.yaml", "*.yml", "*.toml", "*.lock"]
+SPDX-FileCopyrightText = "2024-2026 ICD360S e.V."
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+[[annotations]]
+path = ["*.png", "*.jpg", "*.jpeg", "*.svg", "*.ico", "*.webp"]
+SPDX-FileCopyrightText = "2024-2026 ICD360S e.V."
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+[[annotations]]
+path = ["android/**", "ios/**", "linux/**", "macos/**", "windows/**"]
+SPDX-FileCopyrightText = "2024-2026 ICD360S e.V."
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+[[annotations]]
+path = ["assets/**", "certificates/**", "scripts/**", "test/**"]
+SPDX-FileCopyrightText = "2024-2026 ICD360S e.V."
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+[[annotations]]
+path = ["enough_mail_fork/**"]
+SPDX-FileCopyrightText = "2024-2026 ICD360S e.V."
+SPDX-License-Identifier = "AGPL-3.0-or-later"
+
+[[annotations]]
+path = ["lib/generated/**"]
+SPDX-FileCopyrightText = "2024-2026 ICD360S e.V."
+SPDX-License-Identifier = "AGPL-3.0-or-later"
