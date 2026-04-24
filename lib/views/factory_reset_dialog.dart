@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024-2026 ICD360S e.V.
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import 'dart:io';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
@@ -239,4 +242,3 @@ class _ConfirmPhraseDialogState extends State<_ConfirmPhraseDialog> {
     );
   }
 }
-
