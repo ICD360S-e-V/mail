@@ -31,6 +31,12 @@ class ServerHealthService {
       // Check CAA
       status.caaStatus = await _checkCaaAsync();
 
+      // Check DNSSEC
+      status.dnssecStatus = await _checkDnssecAsync();
+
+      // Check DANE
+      status.daneStatus = await _checkDaneAsync();
+
       // Check TLS-RPT
       status.tlsRptStatus = await _checkTlsRptAsync();
 
@@ -210,6 +216,56 @@ class ServerHealthService {
     }
   }
 
+
+  /// Check DNSSEC status
+  Future<HealthCheckResult> _checkDnssecAsync() async {
+    try {
+      final isActive = await DnsChecker.checkDnssec(domain);
+      LoggerService.log('HEALTH', 'DNSSEC: ${isActive ? "active" : "inactive"}');
+      return HealthCheckResult(checkedAt: DateTime.now(),
+        status: isActive ? 'OK' : 'MISSING',
+        color: isActive ? 'Green' : 'Orange',
+        message: isActive
+            ? 'DNSSEC active for $domain (AD flag verified)'
+            : 'DNSSEC not active for $domain',
+      );
+    } catch (ex) {
+      return HealthCheckResult(checkedAt: DateTime.now(),
+        status: 'ERROR',
+        color: 'Orange',
+        message: ex.toString(),
+      );
+    }
+  }
+
+  /// Check DANE TLSA records
+  Future<HealthCheckResult> _checkDaneAsync() async {
+    try {
+      final records = await DnsChecker.lookupTlsa('mail.$domain');
+      if (records.isNotEmpty) {
+        final has311 = records.any((r) =>
+            r.contains('3 1 1') || r.contains('03 01 01'));
+        LoggerService.log('HEALTH', 'DANE: ${records.length} TLSA records');
+        return HealthCheckResult(checkedAt: DateTime.now(),
+          status: has311 ? 'OK' : 'WARN',
+          color: has311 ? 'Green' : 'Orange',
+          message: 'DANE: ${records.length} TLSA records for mail.$domain',
+        );
+      }
+      return HealthCheckResult(checkedAt: DateTime.now(),
+        status: 'MISSING',
+        color: 'Orange',
+        message: 'No DANE TLSA records for mail.$domain',
+      );
+    } catch (ex) {
+      return HealthCheckResult(checkedAt: DateTime.now(),
+        status: 'ERROR',
+        color: 'Orange',
+        message: ex.toString(),
+      );
+    }
+  }
+
   /// Check IP blacklist
   Future<HealthCheckResult> _checkIpBlacklistAsync(bool isIpv4) async {
     try {
@@ -370,6 +426,8 @@ class ServerHealthStatus {
   HealthCheckResult mtaStsStatus;
   HealthCheckResult tlsRptStatus;
   HealthCheckResult caaStatus;
+  HealthCheckResult dnssecStatus;
+  HealthCheckResult daneStatus;
   HealthCheckResult ipv4Status;
   HealthCheckResult ipv6Status;
   DateTime? lastChecked;
@@ -381,6 +439,8 @@ class ServerHealthStatus {
     HealthCheckResult? mtaStsStatus,
     HealthCheckResult? tlsRptStatus,
     HealthCheckResult? caaStatus,
+    HealthCheckResult? dnssecStatus,
+    HealthCheckResult? daneStatus,
     HealthCheckResult? ipv4Status,
     HealthCheckResult? ipv6Status,
     this.lastChecked,
@@ -390,6 +450,8 @@ class ServerHealthStatus {
         mtaStsStatus = mtaStsStatus ?? HealthCheckResult(),
         tlsRptStatus = tlsRptStatus ?? HealthCheckResult(),
         caaStatus = caaStatus ?? HealthCheckResult(),
+        dnssecStatus = dnssecStatus ?? HealthCheckResult(),
+        daneStatus = daneStatus ?? HealthCheckResult(),
         ipv4Status = ipv4Status ?? HealthCheckResult(),
         ipv6Status = ipv6Status ?? HealthCheckResult();
 }
