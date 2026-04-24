@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024-2026 ICD360S e.V.
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import 'package:flutter/material.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:html/parser.dart' as html_parser;
