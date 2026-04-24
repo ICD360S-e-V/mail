@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024-2026 ICD360S e.V.
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// PII (Personally Identifiable Information) redaction for diagnostic logs.
 ///
 /// GDPR Art. 25 (Privacy by Design): redaction is built into the logging
