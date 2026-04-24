@@ -21,11 +21,8 @@ jobs:
           fetch-depth: 0
 
       - name: Run gitleaks
-        # gitleaks-action v2.3.9 still ships a Node 20 action.yml; the
-        # FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 escape hatch lets the
-        # runner execute it on Node 24 until upstream cuts a v3.
-        # Tracking: https://github.com/gitleaks/gitleaks-action/issues
         uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
           FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'

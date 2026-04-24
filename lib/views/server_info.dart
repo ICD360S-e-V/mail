@@ -305,6 +305,8 @@ class _ServerInfoDialogState extends State<ServerInfoDialog> {
         _buildHealthRow(theme, 'MTA-STS', FluentIcons.shield_solid,
             health?.mtaStsStatus),
         _buildHealthRow(theme, 'TLS-RPT', FluentIcons.shield_solid,
+        _buildHealthRow(theme, 'CAA', FluentIcons.shield_solid,
+            health?.caaStatus),
             health?.tlsRptStatus),
         _buildHealthRow(theme, 'IPv4 Blacklist', FluentIcons.warning,
             health?.ipv4Status),
