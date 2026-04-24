@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.81.0 - 2026-04-24
+#### Features
+- (**ui**) add DNSSEC and DANE rows in Email Health dashboard - (d2c3a40) - icd360sevofficial
+
+- - -
+
 ## v2.80.0 - 2026-04-24
 #### Features
 - (**health**) add DNSSEC and DANE TLSA health checks - (edf6515) - icd360sevofficial
