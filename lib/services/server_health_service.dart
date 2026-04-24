@@ -28,6 +28,9 @@ class ServerHealthService {
       // Check MTA-STS
       status.mtaStsStatus = await _checkMtaStsAsync();
 
+      // Check CAA
+      status.caaStatus = await _checkCaaAsync();
+
       // Check TLS-RPT
       status.tlsRptStatus = await _checkTlsRptAsync();
 
@@ -140,6 +143,34 @@ class ServerHealthService {
         status: 'MISSING',
         color: 'Orange',
         message: 'No MTA-STS record found for $domain',
+      );
+    } catch (ex) {
+      return HealthCheckResult(checkedAt: DateTime.now(),
+        status: 'ERROR',
+        color: 'Orange',
+        message: ex.toString(),
+      );
+    }
+  }
+
+  /// Check CAA DNS record
+  Future<HealthCheckResult> _checkCaaAsync() async {
+    try {
+      final records = await DnsChecker.lookupCaa(domain);
+      if (records.isNotEmpty) {
+        final hasIssue = records.any((r) => r.contains('issue'));
+        final issuer = RegExp(r'issue "([^"]+)"').firstMatch(records.join(' '))?.group(1) ?? 'unknown';
+        LoggerService.log('HEALTH', 'CAA record found: ${records.join(", ")}');
+        return HealthCheckResult(checkedAt: DateTime.now(),
+          status: hasIssue ? 'OK' : 'WARN',
+          color: hasIssue ? 'Green' : 'Orange',
+          message: 'CAA: issue=$issuer for $domain',
+        );
+      }
+      return HealthCheckResult(checkedAt: DateTime.now(),
+        status: 'MISSING',
+        color: 'Orange',
+        message: 'No CAA record found for $domain',
       );
     } catch (ex) {
       return HealthCheckResult(checkedAt: DateTime.now(),
@@ -335,6 +366,7 @@ class ServerHealthStatus {
   HealthCheckResult dmarcStatus;
   HealthCheckResult mtaStsStatus;
   HealthCheckResult tlsRptStatus;
+  HealthCheckResult caaStatus;
   HealthCheckResult ipv4Status;
   HealthCheckResult ipv6Status;
   DateTime? lastChecked;
@@ -345,6 +377,7 @@ class ServerHealthStatus {
     HealthCheckResult? dmarcStatus,
     HealthCheckResult? mtaStsStatus,
     HealthCheckResult? tlsRptStatus,
+    HealthCheckResult? caaStatus,
     HealthCheckResult? ipv4Status,
     HealthCheckResult? ipv6Status,
     this.lastChecked,
@@ -353,6 +386,7 @@ class ServerHealthStatus {
         dmarcStatus = dmarcStatus ?? HealthCheckResult(),
         mtaStsStatus = mtaStsStatus ?? HealthCheckResult(),
         tlsRptStatus = tlsRptStatus ?? HealthCheckResult(),
+        caaStatus = caaStatus ?? HealthCheckResult(),
         ipv4Status = ipv4Status ?? HealthCheckResult(),
         ipv6Status = ipv6Status ?? HealthCheckResult();
 }
