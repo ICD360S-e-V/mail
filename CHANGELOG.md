@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.78.0 - 2026-04-24
+#### Features
+- add CAA DNS record check to Email Health (#20) - (d6013b6) - icd360sevofficial
+
+- - -
+
 ## v2.77.0 - 2026-04-24
 #### Features
 - add AGPL source code link in header (Section 13 compliance) - (93668a4) - icd360sevofficial
