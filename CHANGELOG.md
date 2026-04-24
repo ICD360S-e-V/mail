@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.81.1 - 2026-04-24
+#### Bug Fixes
+- restore dns_checker.dart with lookupCaa, checkDnssec, lookupTlsa - (9984359) - icd360sevofficial
+
+- - -
+
 ## v2.81.0 - 2026-04-24
 #### Features
 - (**ui**) add DNSSEC and DANE rows in Email Health dashboard - (d2c3a40) - icd360sevofficial
