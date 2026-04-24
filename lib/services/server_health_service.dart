@@ -153,18 +153,21 @@ class ServerHealthService {
     }
   }
 
-  /// Check CAA DNS record
+/// Check CAA DNS record
   Future<HealthCheckResult> _checkCaaAsync() async {
     try {
       final records = await DnsChecker.lookupCaa(domain);
       if (records.isNotEmpty) {
-        final hasIssue = records.any((r) => r.contains('issue'));
-        final issuer = RegExp(r'issue "([^"]+)"').firstMatch(records.join(' '))?.group(1) ?? 'unknown';
-        LoggerService.log('HEALTH', 'CAA record found: ${records.join(", ")}');
+        final joined = records.join(' ');
+        final hasIssue = joined.contains('issue') ||
+            joined.contains('69 73 73 75 65');
+        LoggerService.log('HEALTH', 'CAA record found: ${records.length} records');
         return HealthCheckResult(checkedAt: DateTime.now(),
           status: hasIssue ? 'OK' : 'WARN',
           color: hasIssue ? 'Green' : 'Orange',
-          message: 'CAA: issue=$issuer for $domain',
+          message: hasIssue
+              ? 'CAA configured (${records.length} records) for $domain'
+              : 'CAA exists but no issue tag for $domain',
         );
       }
       return HealthCheckResult(checkedAt: DateTime.now(),
