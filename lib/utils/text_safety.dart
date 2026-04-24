@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024-2026 ICD360S e.V.
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// Strips Unicode bidirectional control characters from a string.
 ///
 /// SECURITY: Defends against "Trojan Source" / CVE-2021-42574 visual
