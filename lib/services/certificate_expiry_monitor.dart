@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024-2026 ICD360S e.V.
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import 'package:basic_utils/basic_utils.dart';
 import 'certificate_service.dart';
 import 'logger_service.dart';
