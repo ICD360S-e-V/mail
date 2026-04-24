@@ -134,6 +134,20 @@ class DnsChecker {
     return null;
   }
 
+  /// Look up CAA (Certificate Authority Authorization) records for [domain].
+  /// Returns CAA record strings (e.g. "0 issue \"letsencrypt.org\"").
+  static Future<List<String>> lookupCaa(String domain) async {
+    try {
+      return await _queryDoH(_primaryEndpoint, domain, 'CAA');
+    } catch (_) {
+      try {
+        return await _queryDoH(_fallbackEndpoint, domain, 'CAA');
+      } catch (_) {
+        return [];
+      }
+    }
+  }
+
   /// Check TLS-RPT record for a domain.
   /// Returns the TLS-RPT TXT record or null.
   static Future<String?> lookupTlsRpt(String domain) async {
