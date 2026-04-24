@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024-2026 ICD360S e.V.
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import 'package:fluent_ui/fluent_ui.dart';
 import '../utils/l10n_helper.dart';
 import '../services/changelog_service.dart';
@@ -319,7 +322,3 @@ class _ChangelogWindowState extends State<ChangelogWindow> {
     );
   }
 }
-
-
-
-
