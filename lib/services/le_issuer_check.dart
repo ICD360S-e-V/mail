@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024-2026 ICD360S e.V.
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /// Validation helper for Let's Encrypt issuer DNs.
 ///
 /// SECURITY: Dart's `X509Certificate.issuer` returns the DN in OpenSSL
