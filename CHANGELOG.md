@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.79.0 - 2026-04-24
+#### Features
+- (**dns**) add lookupCaa, checkDnssec, lookupTlsa methods - (d54985c) - icd360sevofficial
+
+- - -
+
 ## v2.78.2 - 2026-04-24
 #### Bug Fixes
 - (**health**) CAA shows OK instead of WARN + DNSSEC prep (#21) - (07d53bf) - icd360sevofficial
