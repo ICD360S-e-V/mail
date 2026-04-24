@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.78.1 - 2026-04-24
+#### Bug Fixes
+- (**ui**) correct CAA row placement in server_info.dart - (713a2df) - icd360sevofficial
+
+- - -
+
 ## v2.78.0 - 2026-04-24
 #### Features
 - add CAA DNS record check to Email Health (#20) - (d6013b6) - icd360sevofficial
