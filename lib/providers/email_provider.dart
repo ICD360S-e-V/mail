@@ -33,6 +33,7 @@ class EmailProvider with ChangeNotifier {
   bool _isFetching = false; // Guard against concurrent fetchEmails
   bool _isCheckingServer = false; // For auto-refresh indicator
   String? _error;
+  DateTime? _lastSyncTime;
 
   // ── RAM-only session cache ────────────────────────────────────────
   //
@@ -82,6 +83,7 @@ class EmailProvider with ChangeNotifier {
   String get currentFolder => _currentFolder;
   bool get isLoading => _isLoading || _isCheckingServer;
   String? get error => _error;
+  DateTime? get lastSyncTime => _lastSyncTime;
   ServerHealthStatus? get serverHealth => _serverHealth;
   ConnectionStatus? get connectionStatus => _connectionStatus;
   String get performanceStats => _performanceStats;
@@ -777,7 +779,8 @@ class EmailProvider with ChangeNotifier {
       account.folderCounts[_currentFolder] = _emails.length;
 
       _error = null;
-      LoggerService.log('PROVIDER', '✓ Fetched ${_emails.length} emails (cached in RAM)');
+      _lastSyncTime = DateTime.now();
+      LoggerService.log('PROVIDER', '✓ Fetched \${_emails.length} emails (cached in RAM)');
     } catch (ex, stackTrace) {
       _error = ex.toString();
       LoggerService.logError('PROVIDER', ex, stackTrace);
