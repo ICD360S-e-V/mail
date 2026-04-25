@@ -2050,11 +2050,21 @@ class _MainWindowState extends State<MainWindow> {
   }
 
   /// Build footer status bar
+  /// Build footer status bar
   Widget _buildFooter(FluentThemeData theme, EmailProvider emailProvider) {
     final l10n = l10nOf(context);
 
+    // Calculate total unread across all accounts
+    int totalUnread = 0;
+    int totalEmails = emailProvider.emails.length;
+    for (final acc in emailProvider.accounts) {
+      totalUnread += acc.folderCounts['INBOX'] ?? 0;
+    }
+
+    final isE2ee = emailProvider.accounts.isNotEmpty;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
       decoration: BoxDecoration(
         color: theme.scaffoldBackgroundColor,
         border: Border(
@@ -2064,39 +2074,26 @@ class _MainWindowState extends State<MainWindow> {
           ),
         ),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: Row(
         children: [
-          // Row 0: Application Status (ÎNTOTDEAUNA VIZIBIL - deasupra)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            decoration: BoxDecoration(
-              color: emailProvider.error != null
-                  ? Colors.red.withValues(alpha: 0.1)
-                  : emailProvider.isLoading
-                      ? Colors.orange.withValues(alpha: 0.1)
-                      : Colors.green.withValues(alpha: 0.05),
-              border: Border(
-                bottom: BorderSide(
-                  color: emailProvider.error != null
-                      ? Colors.red
-                      : emailProvider.isLoading
-                          ? Colors.orange
-                          : Colors.green,
-                  width: 1,
-                ),
-              ),
-            ),
+          // Status indicator
+          Tooltip(
+            message: emailProvider.error != null
+                ? l10n.mainWindowStatusError(emailProvider.error!)
+                : emailProvider.isLoading
+                    ? l10n.mainWindowStatusCheckingEmails(emailProvider.currentAccount?.username ?? "")
+                    : l10n.mainWindowStatusReady,
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 ExcludeSemantics(
                   child: Icon(
                     emailProvider.error != null
                         ? FluentIcons.error
                         : emailProvider.isLoading
-                            ? FluentIcons.sync
+                            ? FluentIcons.sync_icon
                             : FluentIcons.check_mark,
-                    size: 14,
+                    size: 12,
                     color: emailProvider.error != null
                         ? Colors.red
                         : emailProvider.isLoading
@@ -2104,107 +2101,128 @@ class _MainWindowState extends State<MainWindow> {
                             : Colors.green,
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    emailProvider.isLoading
-                        ? l10n.mainWindowStatusCheckingEmails(emailProvider.currentAccount?.username ?? "unknown")
-                        : emailProvider.error != null
-                            ? l10n.mainWindowStatusError(emailProvider.error!)
-                            : l10n.mainWindowStatusReady,
-                    style: theme.typography.caption?.copyWith(
-                      color: emailProvider.error != null
-                          ? Colors.red
-                          : emailProvider.isLoading
-                              ? Colors.orange
-                              : Colors.green,
-                      fontWeight: FontWeight.bold,
-                    ),
+                const SizedBox(width: 4),
+                Text(
+                  emailProvider.error != null
+                      ? 'Error'
+                      : emailProvider.isLoading
+                          ? 'Syncing...'
+                          : 'Ready',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: emailProvider.error != null
+                        ? Colors.red
+                        : emailProvider.isLoading
+                            ? Colors.orange
+                            : Colors.green,
                   ),
                 ),
               ],
             ),
           ),
 
-          // Row 1: Legal links (centered)
-          const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Wrap(
-                spacing: 8,
+          const SizedBox(width: 12),
+
+          // E2E encryption indicator
+          if (isE2ee)
+            Tooltip(
+              message: 'End-to-end encrypted (PGP)',
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-              HoverButton(
-                onPressed: () => _openUrl('https://icd360s.de/impressum/'),
-                builder: (context, states) => Text(
-                  l10n.mainWindowLegalImpressum,
-                  style: theme.typography.caption?.copyWith(
-                    decoration: states.isHovered ? TextDecoration.underline : null,
+                  ExcludeSemantics(
+                    child: Icon(FluentIcons.lock_solid,
+                        size: 12, color: const Color(0xFF107C10)),
                   ),
-                ),
-              ),
-              Text('|', style: theme.typography.caption),
-              HoverButton(
-                onPressed: () => _openUrl('https://icd360s.de/datenschutz/'),
-                builder: (context, states) => Text(
-                  l10n.mainWindowLegalPrivacy,
-                  style: theme.typography.caption?.copyWith(
-                    decoration: states.isHovered ? TextDecoration.underline : null,
-                  ),
-                ),
-              ),
-              Text('|', style: theme.typography.caption),
-              HoverButton(
-                onPressed: () => _openUrl('https://icd360s.de/widerrufsrecht/'),
-                builder: (context, states) => Text(
-                  l10n.mainWindowLegalWithdrawal,
-                  style: theme.typography.caption?.copyWith(
-                    decoration: states.isHovered ? TextDecoration.underline : null,
-                  ),
-                ),
-              ),
-              Text('|', style: theme.typography.caption),
-              HoverButton(
-                onPressed: () => _openUrl('https://icd360s.de/kundigung/'),
-                builder: (context, states) => Text(
-                  l10n.mainWindowLegalCancellation,
-                  style: theme.typography.caption?.copyWith(
-                    decoration: states.isHovered ? TextDecoration.underline : null,
-                  ),
-                ),
-              ),
-              Text('|', style: theme.typography.caption),
-              HoverButton(
-                onPressed: () => _openUrl('https://icd360s.de/satzung360s/'),
-                builder: (context, states) => Text(
-                  l10n.mainWindowLegalConstitution,
-                  style: theme.typography.caption?.copyWith(
-                    decoration: states.isHovered ? TextDecoration.underline : null,
-                  ),
-                ),
-              ),
+                  const SizedBox(width: 3),
+                  const Text('E2E',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF107C10))),
                 ],
               ),
-            ],
+            ),
+
+          const SizedBox(width: 12),
+
+          // Unread / total count
+          Text(
+            '$totalUnread unread / $totalEmails total',
+            style: TextStyle(fontSize: 11, color: theme.inactiveColor),
           ),
 
-          // Row 3: Copyright (centered) (was Row 2)
-          const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                l10n.mainWindowFooterCopyright(DateTime.now().year),
+          const Spacer(),
+
+          // Rechtliches button
+          Tooltip(
+            message: 'Legal information',
+            child: HoverButton(
+              onPressed: () => _showRechtlichesDialog(),
+              builder: (context, states) => Text(
+                'Rechtliches',
                 style: theme.typography.caption?.copyWith(
-                  color: theme.inactiveColor,
+                  decoration: states.isHovered ? TextDecoration.underline : null,
                 ),
               ),
-            ],
+            ),
           ),
         ],
-      ), // Close Column
-    ); // Close Container
+      ),
+    );
   }
+
+  /// Show legal information dialog
+  void _showRechtlichesDialog() {
+    final theme = FluentTheme.of(context);
+    final l10n = l10nOf(context);
+    showDialog(
+      context: context,
+      builder: (context) => ContentDialog(
+        title: const Text('Rechtliches'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildLegalLink(theme, l10n.mainWindowLegalImpressum, 'https://icd360s.de/impressum/'),
+            const SizedBox(height: 12),
+            _buildLegalLink(theme, l10n.mainWindowLegalPrivacy, 'https://icd360s.de/datenschutz/'),
+            const SizedBox(height: 12),
+            _buildLegalLink(theme, l10n.mainWindowLegalWithdrawal, 'https://icd360s.de/widerrufsrecht/'),
+            const SizedBox(height: 12),
+            _buildLegalLink(theme, l10n.mainWindowLegalCancellation, 'https://icd360s.de/kundigung/'),
+            const SizedBox(height: 12),
+            _buildLegalLink(theme, l10n.mainWindowLegalConstitution, 'https://icd360s.de/satzung360s/'),
+          ],
+        ),
+        actions: [
+          FilledButton(
+            child: const Text('Close'),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLegalLink(FluentThemeData theme, String label, String url) {
+    return HoverButton(
+      onPressed: () => _openUrl(url),
+      builder: (context, states) => Row(
+        children: [
+          ExcludeSemantics(
+            child: Icon(FluentIcons.open_in_new_window, size: 14, color: theme.accentColor),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: theme.typography.body?.copyWith(
+              decoration: states.isHovered ? TextDecoration.underline : null,
+              color: theme.accentColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
 
 }
 
