@@ -1093,7 +1093,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
                               icon = FluentIcons.warning;
                             case RecipientSecurityLevel.checking:
                               color = Colors.grey;
-                              icon = FluentIcons.sync_icon;
+                              icon = FluentIcons.sync;
                             case RecipientSecurityLevel.error:
                               color = Colors.grey;
                               icon = FluentIcons.unknown;
