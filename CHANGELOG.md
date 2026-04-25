@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.83.0 - 2026-04-25
+#### Features
+- recipient transport security indicator in compose (#22) - (80b584a) - icd360sevofficial
+
+- - -
+
 ## v2.82.0 - 2026-04-25
 #### Features
 - (**ui**) compact footer with Rechtliches dialog (#23) - (67cb0af) - icd360sevofficial
