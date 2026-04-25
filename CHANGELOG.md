@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.85.0 - 2026-04-25
+#### Features
+- (**ui**) add dynamic copyright year to Rechtliches dialog - (ffacc04) - icd360sevofficial
+
+- - -
+
 ## v2.84.0 - 2026-04-25
 #### Features
 - (**ui**) Rechtliches dialog with app branding, in-app browser, source code link - (b416c12) - icd360sevofficial
