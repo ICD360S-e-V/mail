@@ -174,32 +174,44 @@ class DnsChecker {
   /// Check if DNSSEC is active for [domain] by verifying the AD
   /// (Authenticated Data) flag in the DNS response via DoH.
   static Future<bool> checkDnssec(String domain) async {
-    try {
-      final uri = Uri.parse(_primaryEndpoint).replace(queryParameters: {
-        'name': domain,
-        'type': 'A',
-      });
-      final client = MtlsService.createMtlsHttpClient() ??
-          (PinnedSecurityContext.createHttpClient()
-            ..badCertificateCallback = (cert, host, port) {
-              return isTrustedLetsEncryptIssuer(cert.issuer);
-            });
+    for (final endpoint in [_primaryEndpoint, _fallbackEndpoint]) {
       try {
-        final request = await client.getUrl(uri).timeout(_timeout);
-        request.headers.set('Accept', 'application/dns-json');
-        final response = await request.close().timeout(_timeout);
-        final body = await response.transform(utf8.decoder).join();
-        if (response.statusCode != 200) return false;
-        final json = jsonDecode(body) as Map<String, dynamic>;
-        return json['AD'] == true;
-      } finally {
-        client.close();
+        final isOwnServer = endpoint.contains('mail.icd360s.de');
+        final uri = Uri.parse(endpoint).replace(queryParameters: {
+          'name': domain,
+          'type': 'A',
+        });
+        HttpClient client;
+        if (isOwnServer) {
+          client = MtlsService.createMtlsHttpClient() ??
+              (PinnedSecurityContext.createHttpClient()
+                ..badCertificateCallback = (cert, host, port) {
+                  return isTrustedLetsEncryptIssuer(cert.issuer);
+                });
+        } else {
+          client = HttpClient()
+            ..connectionTimeout = _timeout
+            ..idleTimeout = const Duration(seconds: 5);
+        }
+        try {
+          final request = await client.getUrl(uri).timeout(_timeout);
+          request.headers.set('Accept', 'application/dns-json');
+          final response = await request.close().timeout(_timeout);
+          final body = await response.transform(utf8.decoder).join();
+          if (response.statusCode != 200) continue;
+          final json = jsonDecode(body) as Map<String, dynamic>;
+          return json['AD'] == true;
+        } finally {
+          client.close();
+        }
+      } catch (ex) {
+        LoggerService.logWarning('DNS', 'DNSSEC check failed on $endpoint: $ex');
+        continue;
       }
-    } catch (ex) {
-      LoggerService.logWarning('DNS', 'DNSSEC check failed: $ex');
-      return false;
     }
+    return false;
   }
+
 
   /// Check if DANE TLSA records exist for [domain] on [port].
   static Future<List<String>> lookupTlsa(String domain, {int port = 25}) async {
