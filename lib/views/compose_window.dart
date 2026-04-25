@@ -18,6 +18,7 @@ import '../providers/email_provider.dart';
 import '../services/device_registration_service.dart';
 import '../services/notification_service.dart';
 import '../services/logger_service.dart';
+import '../services/recipient_security_service.dart';
 import '../services/email_history_service.dart';
 import '../services/pgp_key_service.dart';
 import '../services/mtls_service.dart';
@@ -89,6 +90,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
 
   // E2EE: per-recipient PGP key status
   final Map<String, bool> _recipientHasKey = {};
+  final Map<String, RecipientSecurityResult> _recipientSecurity = {};
   bool _encryptionPossible = false;
   Timer? _keyLookupTimer;
 
@@ -554,6 +556,24 @@ class _ComposeWindowState extends State<ComposeWindow> {
     }
   }
 
+
+  /// Check transport security level for all recipients.
+  void _checkRecipientSecurity() {
+    final recipients = _getRecipientsList();
+    for (final email in recipients) {
+      if (email.contains('@') && !_recipientSecurity.containsKey(email)) {
+        _recipientSecurity[email] = RecipientSecurityResult.checking;
+        RecipientSecurityService.check(email).then((result) {
+          if (mounted) {
+            setState(() => _recipientSecurity[email] = result);
+          }
+        });
+      }
+    }
+    // Remove stale entries
+    _recipientSecurity.removeWhere((k, _) => !recipients.contains(k));
+  }
+
   /// Parse recipients from comma-separated string
   List<String> _getRecipientsList() {
     if (_toController.text.isEmpty) return [];
@@ -1012,6 +1032,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
 
                       // E2EE: look up PGP keys for recipients
                       _scheduleKeyLookup();
+                      _checkRecipientSecurity();
                     },
                   ),
                   // E2EE encryption status indicator
@@ -1044,7 +1065,57 @@ class _ComposeWindowState extends State<ComposeWindow> {
                         ],
                       ),
                     ),
-                  // Auto-complete suggestions dropdown
+                  // Transport security indicator per recipient
+                  if (_recipientSecurity.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: _recipientSecurity.entries.map((entry) {
+                          final email = entry.key;
+                          final sec = entry.value;
+                          final short = email.split('@').last;
+                          Color color;
+                          IconData icon;
+                          switch (sec.level) {
+                            case RecipientSecurityLevel.e2ee:
+                              color = const Color(0xFF107C10);
+                              icon = FluentIcons.lock_solid;
+                            case RecipientSecurityLevel.daneTls:
+                              color = const Color(0xFF0078D4);
+                              icon = FluentIcons.shield_solid;
+                            case RecipientSecurityLevel.tls:
+                              color = const Color(0xFFCA5010);
+                              icon = FluentIcons.shield;
+                            case RecipientSecurityLevel.plaintext:
+                              color = const Color(0xFFD83B01);
+                              icon = FluentIcons.warning;
+                            case RecipientSecurityLevel.checking:
+                              color = Colors.grey;
+                              icon = FluentIcons.sync_icon;
+                            case RecipientSecurityLevel.error:
+                              color = Colors.grey;
+                              icon = FluentIcons.unknown;
+                          }
+                          return Tooltip(
+                            message: sec.detail,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(icon, size: 10, color: color),
+                                const SizedBox(width: 3),
+                                Text(
+                                  '$short: ${sec.label}',
+                                  style: TextStyle(fontSize: 10, color: color),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                                    // Auto-complete suggestions dropdown
                   if (_showToSuggestions && _toSuggestions.isNotEmpty)
                     Container(
                       margin: const EdgeInsets.only(top: 4),
