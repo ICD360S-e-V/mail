@@ -2225,20 +2225,50 @@ class _MainWindowState extends State<MainWindow> {
     showDialog(
       context: context,
       builder: (context) => ContentDialog(
-        title: const Text('Rechtliches'),
+        title: Row(
+          children: [
+            Image.asset('assets/logo.png', width: 32, height: 32),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('ICD360S Mail',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                Text('v${UpdateService.currentVersion}',
+                    style: TextStyle(fontSize: 12, color: theme.inactiveColor)),
+              ],
+            ),
+          ],
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const SizedBox(height: 8),
+            Text(
+              'ICD360S e.V. — gemeinnütziger Verein',
+              style: TextStyle(fontSize: 12, color: theme.inactiveColor),
+            ),
+            Text(
+              'Amtsgericht Memmingen, VR 201335',
+              style: TextStyle(fontSize: 11, color: theme.inactiveColor),
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 12),
             _buildLegalLink(theme, l10n.mainWindowLegalImpressum, 'https://icd360s.de/impressum/'),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _buildLegalLink(theme, l10n.mainWindowLegalPrivacy, 'https://icd360s.de/datenschutz/'),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _buildLegalLink(theme, l10n.mainWindowLegalWithdrawal, 'https://icd360s.de/widerrufsrecht/'),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _buildLegalLink(theme, l10n.mainWindowLegalCancellation, 'https://icd360s.de/kundigung/'),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             _buildLegalLink(theme, l10n.mainWindowLegalConstitution, 'https://icd360s.de/satzung360s/'),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            _buildLegalLink(theme, 'Source Code (AGPL-3.0)', 'https://github.com/ICD360S-e-V/mail'),
           ],
         ),
         actions: [
@@ -2251,23 +2281,49 @@ class _MainWindowState extends State<MainWindow> {
     );
   }
 
+  Future<void> _openLegalUrl(String url) async {
+    try {
+      final uri = Uri.parse(url);
+      await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+    } catch (_) {
+      try {
+        final uri = Uri.parse(url);
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } catch (_) {}
+    }
+  }
+
   Widget _buildLegalLink(FluentThemeData theme, String label, String url) {
     return HoverButton(
-      onPressed: () => _openUrl(url),
-      builder: (context, states) => Row(
-        children: [
-          ExcludeSemantics(
-            child: Icon(FluentIcons.open_in_new_window, size: 14, color: theme.accentColor),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: theme.typography.body?.copyWith(
-              decoration: states.isHovered ? TextDecoration.underline : null,
-              color: theme.accentColor,
+      onPressed: () => _openLegalUrl(url),
+      builder: (context, states) => Container(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+        decoration: BoxDecoration(
+          color: states.isHovered
+              ? theme.accentColor.withValues(alpha: 0.08)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Row(
+          children: [
+            ExcludeSemantics(
+              child: Icon(FluentIcons.open_in_new_window, size: 14, color: theme.accentColor),
             ),
-          ),
-        ],
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                style: theme.typography.body?.copyWith(
+                  color: theme.accentColor,
+                  fontWeight: states.isHovered ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+            ),
+            ExcludeSemantics(
+              child: Icon(FluentIcons.chevron_right, size: 12, color: theme.inactiveColor),
+            ),
+          ],
+        ),
       ),
     );
   }
