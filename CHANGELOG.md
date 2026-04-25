@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.81.4 - 2026-04-25
+#### Bug Fixes
+- (**dns**) fix string interpolation in lookupMtaSts and lookupTlsRpt - (cef68e7) - icd360sevofficial
+
+- - -
+
 ## v2.81.3 - 2026-04-25
 #### Bug Fixes
 - (**dns**) add Cloudflare fallback to checkDnssec for non-mTLS contexts - (cdd042e) - icd360sevofficial
