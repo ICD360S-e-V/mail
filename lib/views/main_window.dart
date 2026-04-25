@@ -2146,7 +2146,7 @@ class _MainWindowState extends State<MainWindow> {
                     emailProvider.error != null
                         ? FluentIcons.error
                         : emailProvider.isLoading
-                            ? FluentIcons.sync_icon
+                            ? FluentIcons.sync
                             : FluentIcons.check_mark,
                     size: 12,
                     color: statusColor,
@@ -2275,6 +2275,7 @@ class _MainWindowState extends State<MainWindow> {
     );
   }
 
+}
 
 // Keyboard shortcut intents
 class DeleteEmailIntent extends Intent {
