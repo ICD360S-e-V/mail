@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.83.1 - 2026-04-25
+#### Bug Fixes
+- add missing closing brace for _MainWindowState + fix sync icon - (e874f92) - icd360sevofficial
+
+- - -
+
 ## v2.83.0 - 2026-04-25
 #### Features
 - recipient transport security indicator in compose (#22) - (80b584a) - icd360sevofficial
