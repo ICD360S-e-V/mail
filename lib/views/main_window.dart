@@ -2315,6 +2315,11 @@ class _MainWindowState extends State<MainWindow> {
             initialSettings: InAppWebViewSettings(
               transparentBackground: true,
               javaScriptEnabled: true,
+              useHybridComposition: true,
+              hardwareAcceleration: true,
+              allowsBackForwardNavigationGestures: true,
+              isFraudulentWebsiteWarningEnabled: false,
+              disableDefaultErrorPage: true,
             ),
           ),
         ),
