@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.84.0 - 2026-04-25
+#### Features
+- (**ui**) Rechtliches dialog with app branding, in-app browser, source code link - (b416c12) - icd360sevofficial
+
+- - -
+
 ## v2.83.3 - 2026-04-25
 #### Bug Fixes
 - replace Material LinearProgressIndicator with Fluent UI ProgressBar - (60a623e) - icd360sevofficial
