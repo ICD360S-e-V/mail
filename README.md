@@ -156,13 +156,22 @@ graph LR
 
 ### Desktop
 
-<p align="center">
-  <a href="https://mail.icd360s.de/downloads/mail/windows/icd360s-mail-setup.exe"><img src="https://img.shields.io/badge/Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Windows"/></a>
-  &nbsp;
-  <a href="https://mail.icd360s.de/downloads/mail/macos/icd360s-mail.dmg"><img src="https://img.shields.io/badge/macOS-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS"/></a>
-  &nbsp;
-  <a href="https://mail.icd360s.de/downloads/mail/linux/icd360s-mail.AppImage"><img src="https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux"/></a>
-</p>
+<table>
+<tr>
+<td align="center" width="200">
+<br/><a href="https://mail.icd360s.de/downloads/mail/windows/icd360s-mail-setup.exe"><img src="https://img.shields.io/badge/Windows-0078D4?style=for-the-badge&logo=windows&logoColor=white" alt="Windows"/></a><br/><br/>
+<img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=https://mail.icd360s.de/downloads/mail/windows/icd360s-mail-setup.exe" width="120" alt="QR"/><br/><br/>
+</td>
+<td align="center" width="200">
+<br/><a href="https://mail.icd360s.de/downloads/mail/macos/icd360s-mail.dmg"><img src="https://img.shields.io/badge/macOS-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS"/></a><br/><br/>
+<img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=https://mail.icd360s.de/downloads/mail/macos/icd360s-mail.dmg" width="120" alt="QR"/><br/><br/>
+</td>
+<td align="center" width="200">
+<br/><a href="https://mail.icd360s.de/downloads/mail/linux/icd360s-mail.AppImage"><img src="https://img.shields.io/badge/Linux-FCC624?style=for-the-badge&logo=linux&logoColor=black" alt="Linux"/></a><br/><br/>
+<img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=https://mail.icd360s.de/downloads/mail/linux/icd360s-mail.AppImage" width="120" alt="QR"/><br/><br/>
+</td>
+</tr>
+</table>
 
 <details>
 <summary><kbd>Linux packages: DEB, RPM, tar.gz</kbd></summary>
@@ -177,11 +186,18 @@ graph LR
 
 ### Mobile
 
-<p align="center">
-  <a href="https://mail.icd360s.de/downloads/mail/android/universal/app-arm64-v8a-universal-release.apk"><img src="https://img.shields.io/badge/Android_(ARM64)-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android"/></a>
-  &nbsp;
-  <a href="https://mail.icd360s.de/downloads/mail/ios/icd360s-mail.ipa"><img src="https://img.shields.io/badge/iOS-000000?style=for-the-badge&logo=apple&logoColor=white" alt="iOS"/></a>
-</p>
+<table>
+<tr>
+<td align="center" width="250">
+<br/><a href="https://mail.icd360s.de/downloads/mail/android/universal/app-arm64-v8a-universal-release.apk"><img src="https://img.shields.io/badge/Android_(ARM64)-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android"/></a><br/><br/>
+<img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=https://mail.icd360s.de/downloads/mail/android/universal/app-arm64-v8a-universal-release.apk" width="120" alt="QR"/><br/><br/>
+</td>
+<td align="center" width="250">
+<br/><a href="https://mail.icd360s.de/downloads/mail/ios/icd360s-mail.ipa"><img src="https://img.shields.io/badge/iOS-000000?style=for-the-badge&logo=apple&logoColor=white" alt="iOS"/></a><br/><br/>
+<img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=https://mail.icd360s.de/downloads/mail/ios/icd360s-mail.ipa" width="120" alt="QR"/><br/><br/>
+</td>
+</tr>
+</table>
 
 <details>
 <summary><kbd>Android flavors: F-Droid, Samsung, Huawei, Google Play</kbd></summary>
