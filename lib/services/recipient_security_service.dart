@@ -105,32 +105,7 @@ class RecipientSecurityService {
       }
     }
 
-    // Check if MX supports STARTTLS by attempting connection
-    try {
-      final socket = await Socket.connect(mxHost, 25,
-          timeout: const Duration(seconds: 5));
-      final banner = await socket.transform(
-        const SystemEncoding().decoder).first.timeout(
-        const Duration(seconds: 5));
-      socket.write('EHLO icd360s.de\r\n');
-      await Future.delayed(const Duration(seconds: 1));
-      final response = await socket.transform(
-        const SystemEncoding().decoder).first.timeout(
-        const Duration(seconds: 5));
-      socket.destroy();
-
-      if (response.contains('STARTTLS')) {
-        return RecipientSecurityResult(
-          level: RecipientSecurityLevel.tls,
-          label: 'TLS',
-          detail: 'Transport encrypted (STARTTLS on $mxHost)',
-        );
-      }
-    } catch (_) {
-      // Connection failed or timeout — can't verify TLS
-    }
-
-    // Check MTA-STS as fallback indicator
+    // Check MTA-STS
     final mtaSts = await DnsChecker.lookupMtaSts(domain);
     if (mtaSts != null) {
       return RecipientSecurityResult(
