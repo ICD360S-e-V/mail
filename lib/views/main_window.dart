@@ -2053,15 +2053,72 @@ class _MainWindowState extends State<MainWindow> {
   /// Build footer status bar
   Widget _buildFooter(FluentThemeData theme, EmailProvider emailProvider) {
     final l10n = l10nOf(context);
+    final activeAccount = emailProvider.currentAccount;
 
-    // Calculate total unread across all accounts
-    int totalUnread = 0;
-    int totalEmails = emailProvider.emails.length;
-    for (final acc in emailProvider.accounts) {
-      totalUnread += acc.folderCounts['INBOX'] ?? 0;
+    // Last sync relative time
+    String syncText = 'Not synced';
+    if (emailProvider.isLoading) {
+      syncText = 'Syncing...';
+    } else if (emailProvider.lastSyncTime != null) {
+      final diff = DateTime.now().difference(emailProvider.lastSyncTime!);
+      if (diff.inSeconds < 30) {
+        syncText = 'Just synced';
+      } else if (diff.inMinutes < 1) {
+        syncText = 'Synced ${diff.inSeconds}s ago';
+      } else if (diff.inHours < 1) {
+        syncText = 'Synced ${diff.inMinutes}m ago';
+      } else {
+        syncText = 'Synced ${diff.inHours}h ago';
+      }
     }
 
-    final isE2ee = emailProvider.accounts.isNotEmpty;
+    // Status color
+    final statusColor = emailProvider.error != null
+        ? Colors.red
+        : emailProvider.isLoading
+            ? Colors.orange
+            : Colors.green;
+
+    // Quota for selected account
+    Widget quotaWidget = const SizedBox.shrink();
+    if (activeAccount != null && activeAccount.quotaLimitKB != null && activeAccount.quotaLimitKB! > 0) {
+      final usedMB = (activeAccount.quotaUsedKB ?? 0) / 1024;
+      final limitMB = activeAccount.quotaLimitKB! / 1024;
+      final pct = activeAccount.quotaPercentage ?? 0;
+      final quotaColor = pct > 90 ? Colors.red : pct > 70 ? Colors.orange : Colors.green;
+      final usedStr = usedMB >= 1024 ? '${(usedMB / 1024).toStringAsFixed(1)}GB' : '${usedMB.toStringAsFixed(0)}MB';
+      final limitStr = limitMB >= 1024 ? '${(limitMB / 1024).toStringAsFixed(1)}GB' : '${limitMB.toStringAsFixed(0)}MB';
+
+      quotaWidget = Tooltip(
+        message: '${activeAccount.username}: $usedStr / $limitStr (${pct.toStringAsFixed(0)}%)',
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ExcludeSemantics(
+              child: Icon(FluentIcons.hard_drive, size: 11, color: theme.inactiveColor),
+            ),
+            const SizedBox(width: 4),
+            SizedBox(
+              width: 60,
+              height: 6,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(3),
+                child: LinearProgressIndicator(
+                  value: (pct / 100).clamp(0.0, 1.0),
+                  backgroundColor: theme.inactiveBackgroundColor,
+                  color: quotaColor,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '$usedStr/$limitStr',
+              style: TextStyle(fontSize: 10, color: theme.inactiveColor),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
@@ -2076,13 +2133,11 @@ class _MainWindowState extends State<MainWindow> {
       ),
       child: Row(
         children: [
-          // Status indicator
+          // Sync status
           Tooltip(
             message: emailProvider.error != null
                 ? l10n.mainWindowStatusError(emailProvider.error!)
-                : emailProvider.isLoading
-                    ? l10n.mainWindowStatusCheckingEmails(emailProvider.currentAccount?.username ?? "")
-                    : l10n.mainWindowStatusReady,
+                : syncText,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -2094,28 +2149,13 @@ class _MainWindowState extends State<MainWindow> {
                             ? FluentIcons.sync_icon
                             : FluentIcons.check_mark,
                     size: 12,
-                    color: emailProvider.error != null
-                        ? Colors.red
-                        : emailProvider.isLoading
-                            ? Colors.orange
-                            : Colors.green,
+                    color: statusColor,
                   ),
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  emailProvider.error != null
-                      ? 'Error'
-                      : emailProvider.isLoading
-                          ? 'Syncing...'
-                          : 'Ready',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: emailProvider.error != null
-                        ? Colors.red
-                        : emailProvider.isLoading
-                            ? Colors.orange
-                            : Colors.green,
-                  ),
+                  syncText,
+                  style: TextStyle(fontSize: 11, color: statusColor),
                 ),
               ],
             ),
@@ -2123,35 +2163,47 @@ class _MainWindowState extends State<MainWindow> {
 
           const SizedBox(width: 12),
 
-          // E2E encryption indicator
-          if (isE2ee)
+          // E2E indicator
+          if (emailProvider.accounts.isNotEmpty)
             Tooltip(
-              message: 'End-to-end encrypted (PGP)',
+              message: 'End-to-end encrypted (OpenPGP)',
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   ExcludeSemantics(
                     child: Icon(FluentIcons.lock_solid,
-                        size: 12, color: const Color(0xFF107C10)),
+                        size: 11, color: const Color(0xFF107C10)),
                   ),
                   const SizedBox(width: 3),
                   const Text('E2E',
-                      style: TextStyle(fontSize: 11, color: Color(0xFF107C10))),
+                      style: TextStyle(fontSize: 10, color: Color(0xFF107C10), fontWeight: FontWeight.bold)),
                 ],
               ),
             ),
 
           const SizedBox(width: 12),
 
-          // Unread / total count
-          Text(
-            '$totalUnread unread / $totalEmails total',
-            style: TextStyle(fontSize: 11, color: theme.inactiveColor),
-          ),
+          // Ping
+          if (_pingMs != null && !_pingError)
+            Tooltip(
+              message: 'Server latency',
+              child: Text(
+                '${_pingMs}ms',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: _pingMs! <= 50 ? Colors.green : _pingMs! <= 100 ? Colors.orange : Colors.red,
+                ),
+              ),
+            ),
+
+          const SizedBox(width: 12),
+
+          // Quota (selected account)
+          quotaWidget,
 
           const Spacer(),
 
-          // Rechtliches button
+          // Rechtliches
           Tooltip(
             message: 'Legal information',
             child: HoverButton(
@@ -2223,8 +2275,6 @@ class _MainWindowState extends State<MainWindow> {
     );
   }
 
-
-}
 
 // Keyboard shortcut intents
 class DeleteEmailIntent extends Intent {
