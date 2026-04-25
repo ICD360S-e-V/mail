@@ -290,6 +290,6 @@ Contributions welcome under AGPL-3.0. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 **[ICD360S e.V.](https://icd360s.de)** -- Registered nonprofit, Amtsgericht Memmingen, VR 201335
 
-[kontakt@icd360s.de](mailto:kontakt@icd360s.de)
+[kontakt@icd360s.de](mailto:kontakt@icd360s.de) &bull; [Impressum](https://icd360s.de/impressum/) &bull; [Datenschutz](https://icd360s.de/datenschutz/)
 
 </div>
