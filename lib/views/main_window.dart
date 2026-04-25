@@ -2101,13 +2101,10 @@ class _MainWindowState extends State<MainWindow> {
             SizedBox(
               width: 60,
               height: 6,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(3),
-                child: LinearProgressIndicator(
-                  value: (pct / 100).clamp(0.0, 1.0),
-                  backgroundColor: theme.inactiveBackgroundColor,
-                  color: quotaColor,
-                ),
+              child: ProgressBar(
+                value: pct.clamp(0, 100),
+                backgroundColor: theme.inactiveBackgroundColor,
+                activeColor: quotaColor,
               ),
             ),
             const SizedBox(width: 4),
