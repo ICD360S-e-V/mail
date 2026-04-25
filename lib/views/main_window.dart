@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import '../models/models.dart';
 import '../providers/email_provider.dart';
 import '../providers/theme_provider.dart';
@@ -2287,15 +2288,57 @@ class _MainWindowState extends State<MainWindow> {
   }
 
   Future<void> _openLegalUrl(String url) async {
-    try {
-      final uri = Uri.parse(url);
-      await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
-    } catch (_) {
-      try {
-        final uri = Uri.parse(url);
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } catch (_) {}
-    }
+    if (!mounted) return;
+    Navigator.of(context).pop();
+    final title = Uri.parse(url).pathSegments.where((s) => s.isNotEmpty).lastOrNull ?? 'Browser';
+    showDialog(
+      context: context,
+      builder: (ctx) => ContentDialog(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(ctx).size.width > 800
+              ? 800
+              : MediaQuery.of(ctx).size.width * 0.95,
+          maxHeight: MediaQuery.of(ctx).size.height * 0.85,
+        ),
+        title: Row(
+          children: [
+            ExcludeSemantics(child: Icon(FluentIcons.globe, size: 18)),
+            const SizedBox(width: 8),
+            Expanded(child: Text(title, overflow: TextOverflow.ellipsis)),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: MediaQuery.of(ctx).size.height * 0.7,
+          child: InAppWebView(
+            initialUrlRequest: URLRequest(url: WebUri(url)),
+            initialSettings: InAppWebViewSettings(
+              transparentBackground: true,
+              javaScriptEnabled: true,
+            ),
+          ),
+        ),
+        actions: [
+          Button(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ExcludeSemantics(child: Icon(FluentIcons.open_in_new_window, size: 14)),
+                const SizedBox(width: 6),
+                const Text('Open in Browser'),
+              ],
+            ),
+            onPressed: () {
+              launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+            },
+          ),
+          FilledButton(
+            child: const Text('Close'),
+            onPressed: () => Navigator.of(ctx).pop(),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildLegalLink(FluentThemeData theme, String label, String url) {
