@@ -2253,6 +2253,11 @@ class _MainWindowState extends State<MainWindow> {
               'Amtsgericht Memmingen, VR 201335',
               style: TextStyle(fontSize: 11, color: theme.inactiveColor),
             ),
+            const SizedBox(height: 4),
+            Text(
+              '\u00a9 2025\u2013${DateTime.now().year} ICD360S e.V.',
+              style: TextStyle(fontSize: 11, color: theme.inactiveColor),
+            ),
             const SizedBox(height: 16),
             const Divider(),
             const SizedBox(height: 12),
