@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.82.0 - 2026-04-25
+#### Features
+- (**ui**) compact footer with Rechtliches dialog (#23) - (67cb0af) - icd360sevofficial
+
+- - -
+
 ## v2.81.4 - 2026-04-25
 #### Bug Fixes
 - (**dns**) fix string interpolation in lookupMtaSts and lookupTlsRpt - (cef68e7) - icd360sevofficial
