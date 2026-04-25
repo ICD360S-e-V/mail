@@ -122,7 +122,7 @@ class DnsChecker {
 
   /// Check MTA-STS record for a domain.
   static Future<String?> lookupMtaSts(String domain) async {
-    final stsDomain = '_mta-sts.\$domain';
+    final stsDomain = '_mta-sts.$domain';
     final records = await lookupTxt(stsDomain);
     for (final r in records) {
       if (r.toLowerCase().startsWith('v=stsv1')) {
@@ -134,7 +134,7 @@ class DnsChecker {
 
   /// Check TLS-RPT record for a domain.
   static Future<String?> lookupTlsRpt(String domain) async {
-    final rptDomain = '_smtp._tls.\$domain';
+    final rptDomain = '_smtp._tls.$domain';
     final records = await lookupTxt(rptDomain);
     for (final r in records) {
       if (r.toLowerCase().startsWith('v=tlsrptv1')) {
