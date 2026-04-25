@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.83.3 - 2026-04-25
+#### Bug Fixes
+- replace Material LinearProgressIndicator with Fluent UI ProgressBar - (60a623e) - icd360sevofficial
+
+- - -
+
 ## v2.83.2 - 2026-04-25
 #### Bug Fixes
 - remove STARTTLS socket check (type error on mobile) - (c846cd6) - icd360sevofficial
