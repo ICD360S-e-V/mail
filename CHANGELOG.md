@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.83.2 - 2026-04-25
+#### Bug Fixes
+- remove STARTTLS socket check (type error on mobile) - (c846cd6) - icd360sevofficial
+- FluentIcons.sync_icon -> FluentIcons.sync in compose - (85ac398) - icd360sevofficial
+
+- - -
+
 ## v2.83.1 - 2026-04-25
 #### Bug Fixes
 - add missing closing brace for _MainWindowState + fix sync icon - (e874f92) - icd360sevofficial
