@@ -80,6 +80,7 @@ dependencies:
 
   # NOTE: pdfrx uses PDFium natively, works on RDP sessions unlike WebView
   # NOTE: Using native webview plugin for integrated browser
+  flutter_inappwebview: ^6.1.5
   # Other storage uses pure Dart file I/O (hardcoded %APPDATA% paths)
 
 dev_dependencies:
