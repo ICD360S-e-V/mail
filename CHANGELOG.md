@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.86.5 - 2026-04-26
+#### Bug Fixes
+- (**fork**) remove extra closing braces from header folding backport - (2974790) - icd360sevofficial
+
+- - -
+
 ## v2.86.4 - 2026-04-26
 #### Bug Fixes
 - (**fork**) backport header folding fixes from upstream (angle bracket + long email) - (a263c0e) - icd360sevofficial
