@@ -228,33 +228,19 @@ class _MainWindowState extends State<MainWindow> {
       setState(() => _isLocked = false);
       LoggerService.log('SECURITY', 'Application unlocked');
 
-      // Re-download certificates and reconnect after unlock
-      _reconnectAfterUnlock();
-
-      _startAutoLockTimer();
-    }
-  }
-
-  /// Re-download certificates and refresh connections after unlock
-  Future<void> _reconnectAfterUnlock() async {
-    LoggerService.log('SECURITY', 'Reconnecting after unlock...');
-
-    final emailProvider = context.read<EmailProvider>();
-
-    // Re-download certificates for all accounts
+          // Restore certificates from secure storage for all accounts
     for (final account in emailProvider.accounts) {
       try {
-        final success = await CertificateService.downloadCertificateForUser(account.username, password: account.password ?? '');
+        final success = await CertificateService.restoreFromSecureStorageFor(account.username);
         if (success) {
-          LoggerService.log('SECURITY', '✓ Certificate re-downloaded for ${account.username}');
+          LoggerService.log('SECURITY', '✓ Certificate restored for \${account.username}');
         } else {
-          LoggerService.log('SECURITY', '⚠️ Certificate re-download failed for ${account.username}, will retry on next check');
+          LoggerService.log('SECURITY', '⚠️ No certificate in secure storage for \${account.username}');
         }
       } catch (e) {
-        LoggerService.log('SECURITY', '⚠️ Certificate error for ${account.username}: $e');
+        LoggerService.log('SECURITY', '⚠️ Certificate restore error for \${account.username}: \$e');
       }
     }
-
     // Restart all timers
     _startTimers();
     LoggerService.log('SECURITY', 'All timers restarted after unlock');
