@@ -1471,8 +1471,6 @@ class Header {
       }
     }
   }
-    }
-  }
 }
 
 /// A BODY or BODYSTRUCTURE information element
