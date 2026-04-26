@@ -38,10 +38,13 @@ jobs:
 
       - name: Install cocogitto
         run: |
-          COG_VERSION=$(curl -sI https://github.com/cocogitto/cocogitto/releases/latest | grep -i '^location:' | grep -oP 'tag/\K[^[:space:]]+')
+          COG_VERSION="7.0.0"
+          COG_SHA256="e03938ff2c4c86d71c00c0f3284dbbe95c5ca76fe34a51f33e945c23010d59bb"
           echo "Installing cocogitto $COG_VERSION"
-          curl -sSL "https://github.com/cocogitto/cocogitto/releases/download/${COG_VERSION}/cocogitto-${COG_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
-            | tar xz --strip-components=1 -C /usr/local/bin
+          curl -sSL "https://github.com/cocogitto/cocogitto/releases/download/${COG_VERSION}/cocogitto-${COG_VERSION}-x86_64-unknown-linux-musl.tar.gz" -o /tmp/cog.tar.gz
+          echo "${COG_SHA256}  /tmp/cog.tar.gz" | sha256sum -c -
+          tar xz --strip-components=1 -C /usr/local/bin < /tmp/cog.tar.gz
+          rm -f /tmp/cog.tar.gz
           cog --version
 
       - name: Run auto-bump
