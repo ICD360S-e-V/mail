@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.86.13 - 2026-04-26
+#### Bug Fixes
+- (**security**) wrap account.username with piiEmail() in log calls - (394d5f7) - icd360sevofficial
+
+- - -
+
 ## v2.86.12 - 2026-04-26
 #### Code Refactoring
 - (**security**) remove legacy password-based downloadCertificateForUser - (331b6c5) - icd360sevofficial
