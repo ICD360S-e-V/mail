@@ -9,6 +9,28 @@ import '../smtp_command.dart';
 
 enum _BdatSequence { mailFrom, rcptTo, bdat, done }
 
+void _validateSmtpAddress(String? email) {
+  if (email == null || email.isEmpty) return;
+  for (var i = 0; i < email.length; i++) {
+    final c = email.codeUnitAt(i);
+    if (c < 32 || c == 127) {
+      throw ArgumentError('Email address contains control character at $i');
+    }
+  }
+  if (email.contains('<') || email.contains('>')) {
+    throw ArgumentError('Email address contains angle brackets');
+  }
+  if (email.length > 254) {
+    throw ArgumentError('Email address exceeds 254 characters');
+  }
+}
+
+final RegExp _bccPattern = RegExp(
+  r'^Bcc:[^\r\n]*\r\n(?:[ \t][^\r\n]*\r\n)*',
+  multiLine: true,
+  caseSensitive: false,
+);
+
 class _SmtpSendBdatCommand extends SmtpCommand {
   _SmtpSendBdatCommand(
     this.getData,
@@ -57,10 +79,8 @@ class _SmtpSendBdatCommand extends SmtpCommand {
 
   @override
   String get command {
+    _validateSmtpAddress(fromEmail);
     if (supportUnicode) {
-      print('supportUnicode $supportUnicode');
-      // cSpell:ignore SMTPUTF8
-
       return 'MAIL FROM:<$fromEmail> SMTPUTF8';
     }
     if (use8BitEncoding) {
@@ -112,7 +132,10 @@ class _SmtpSendBdatCommand extends SmtpCommand {
     return SmtpCommandData(null, chunk);
   }
 
-  String _getRecipientToCommand(String email) => 'RCPT TO:<$email>';
+  String _getRecipientToCommand(String email) {
+    _validateSmtpAddress(email);
+    return 'RCPT TO:<$email>';
+  }
 
   @override
   bool isCommandDone(SmtpResponse response) {
@@ -137,7 +160,7 @@ class SmtpSendBdatMailCommand extends _SmtpSendBdatCommand {
   }) : super(
           () => message
               .renderMessage()
-              .replaceAll(RegExp('^Bcc:.*\r\n', multiLine: true), ''),
+              .replaceAll(_bccPattern, ''),
           from?.email ?? message.fromEmail,
           recipientEmails,
           use8BitEncoding: use8BitEncoding,
@@ -160,7 +183,7 @@ class SmtpSendBdatMailDataCommand extends _SmtpSendBdatCommand {
   }) : super(
           () => data
               .toString()
-              .replaceAll(RegExp('^Bcc:.*\r\n', multiLine: true), ''),
+              .replaceAll(_bccPattern, ''),
           from.email,
           recipientEmails,
           use8BitEncoding: use8BitEncoding,
