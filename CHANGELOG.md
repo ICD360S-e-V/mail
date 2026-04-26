@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.86.7 - 2026-04-26
+#### Bug Fixes
+- (**security**) re-enable JS for legal pages (CSP restricts to same-origin) - (fde597f) - icd360sevofficial
+
+- - -
+
 ## v2.86.6 - 2026-04-26
 #### Bug Fixes
 - (**security**) harden InAppWebView for legal pages - (751a301) - icd360sevofficial
