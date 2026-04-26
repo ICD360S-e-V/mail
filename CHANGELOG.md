@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.89.2 - 2026-04-26
+#### Bug Fixes
+- (**security**) finalize sodium vault migration - (02d1af0) - icd360sevofficial
+
+- - -
+
 ## v2.89.1 - 2026-04-26
 #### Bug Fixes
 - (**security**) log vault format version on unlock - (8cd0c3d) - icd360sevofficial
