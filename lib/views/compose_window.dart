@@ -684,6 +684,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
     _subjectController.dispose();
     _bodyController.dispose();
     _attachFlyout.dispose();
+    _securePasswordController.dispose();
     super.dispose();
   }
 
