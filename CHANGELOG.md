@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.89.0 - 2026-04-26
+#### Features
+- (**security**) migrate vault to sodium (SecureKey + XChaCha20) - (cb35214) - icd360sevofficial
+
+- - -
+
 ## v2.88.0 - 2026-04-26
 #### Features
 - (**security**) initialize sodium SodiumSumo for vault crypto - (ab4dd75) - icd360sevofficial
