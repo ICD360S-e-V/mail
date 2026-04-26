@@ -234,23 +234,8 @@ class EmailProvider with ChangeNotifier {
   /// Acquire the per-user mTLS certificate for [account]. Returns true
   /// when the cert is loaded into [CertificateService]'s in-memory cache.
   ///
-  /// Two paths (added v2.28.2 to fix Faza 3 add-account flow):
-  ///
-  /// - **Legacy** — `account.password` is non-null/non-empty.
-  ///   Calls `CertificateService.downloadCertificateForUser(...)` against
-  ///   `/api/get-certificate.php` which authenticates by raw IMAP LOGIN.
-  ///   Used by all accounts created with v2.26.x or earlier and any
-  ///   account where the user explicitly set a password.
-  ///
-  /// - **Cert-only** — `account.password` is null/empty (Faza 3 flow,
-  ///   v2.27.0+ add-account dialog never asks for a password). The cert
-  ///   was already downloaded by [DeviceApprovalService] via the
-  ///   one-time-token endpoint and persisted to PortableSecureStorage.
-  ///   Calling the legacy `/api/get-certificate.php` here would 401 with
-  ///   "Authentication required" (the bug observed in v2.28.0). Instead
-  ///   we just call [CertificateService.restoreFromSecureStorage] which
-  ///   loads the previously-persisted cert into the in-memory cache.
-  ///   Verifies the loaded cert's CN matches the requested account.
+  /// Restores the cert from secure storage (Keychain/DPAPI/Keystore).
+  /// If not found, auto-submits a Faza 3 re-approval request.
   Future<bool> _ensureCertForAccount(EmailAccount account) async {
     // Cert-first strategy (v2.46.2): try secure storage BEFORE API.
     //
@@ -271,16 +256,7 @@ class EmailProvider with ChangeNotifier {
       return true;
     }
 
-    // Fallback: legacy password-based download (account never went
-    // through Faza 3, or Keychain was wiped).
-    final pwd = account.password;
-    if (pwd != null && pwd.isNotEmpty) {
-      LoggerService.log('PROVIDER',
-          'Downloading per-user certificate for ${account.username}...');
-      return CertificateService.downloadCertificateForUser(
-          account.username, password: pwd);
-    }
-
+    // No cert in secure storage — request Faza 3 re-approval.
     // Cert-only account with no cert in storage. Instead of silently
     // failing (leaves the account stuck on spinning circle forever),
     // auto-submit a Faza 3 re-approval request so the admin gets
