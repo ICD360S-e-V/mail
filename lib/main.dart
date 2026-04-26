@@ -4,6 +4,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:cryptography_flutter/cryptography_flutter.dart';
+import 'package:sodium/sodium_sumo.dart';
 import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -16,6 +17,7 @@ import 'providers/locale_provider.dart';
 import 'providers/email_provider.dart';
 import 'services/notification_service.dart';
 import 'services/logger_service.dart';
+import 'services/master_vault.dart';
 import 'services/localization_service.dart';
 import 'services/macos_bundle_migration.dart';
 import 'services/platform_service.dart';
@@ -114,6 +116,12 @@ Future<void> _appMain() async {
   // ~2-3 seconds to ~200 ms with the Bitwarden-recommended 64 MiB /
   // 3 iters / 4 threads parameters.
   FlutterCryptography.enable();
+
+  // Initialize libsodium (SecureKey with mlock + sodium_memzero).
+  // SodiumSumo required for pwhash (Argon2id).
+  if (Platform.isMacOS) {
+    MasterVault.sodium = await SodiumSumoInit.init();
+  }
 
   // One-time macOS bundle ID migration (com.example.icd360sMailClient
   // → de.icd360s.mailclient, introduced in v2.25.0). MUST run before
