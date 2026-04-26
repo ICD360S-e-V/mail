@@ -2314,13 +2314,33 @@ class _MainWindowState extends State<MainWindow> {
             initialUrlRequest: URLRequest(url: WebUri(url)),
             initialSettings: InAppWebViewSettings(
               transparentBackground: true,
-              javaScriptEnabled: true,
               useHybridComposition: true,
               hardwareAcceleration: true,
               allowsBackForwardNavigationGestures: true,
-              isFraudulentWebsiteWarningEnabled: false,
               disableDefaultErrorPage: true,
+              javaScriptEnabled: false,
+              javaScriptCanOpenWindowsAutomatically: false,
+              supportMultipleWindows: false,
+              isFraudulentWebsiteWarningEnabled: true,
+              safeBrowsingEnabled: true,
+              allowFileAccess: false,
+              allowFileAccessFromFileURLs: false,
+              allowUniversalAccessFromFileURLs: false,
+              allowContentAccess: false,
+              mixedContentMode: MixedContentMode.MIXED_CONTENT_NEVER_ALLOW,
+              upgradeKnownHostsToHTTPS: true,
+              useShouldOverrideUrlLoading: true,
             ),
+            shouldOverrideUrlLoading: (controller, action) async {
+              final uri = action.request.url;
+              if (uri != null && uri.host.endsWith('icd360s.de')) {
+                return NavigationActionPolicy.ALLOW;
+              }
+              if (uri != null) {
+                launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+              return NavigationActionPolicy.CANCEL;
+            },
           ),
         ),
         actions: [
