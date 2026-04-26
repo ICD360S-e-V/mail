@@ -2318,7 +2318,7 @@ class _MainWindowState extends State<MainWindow> {
               hardwareAcceleration: true,
               allowsBackForwardNavigationGestures: true,
               disableDefaultErrorPage: true,
-              javaScriptEnabled: false,
+              javaScriptEnabled: true,
               javaScriptCanOpenWindowsAutomatically: false,
               supportMultipleWindows: false,
               isFraudulentWebsiteWarningEnabled: true,
