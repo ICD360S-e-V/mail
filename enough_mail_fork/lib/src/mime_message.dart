@@ -1387,53 +1387,90 @@ class Header {
   /// Renders this header into a the [buffer] wrapping it if necessary.
   void render(StringBuffer buffer) {
     final value = this.value;
-    var length = name.length + ': '.length + (value?.length ?? 0);
-    buffer
-      ..write(name)
-      ..write(': ');
-    if (value == null || length < MailConventions.textLineMaxLength) {
-      if (value != null) {
-        buffer.write(value);
-      }
-      buffer.write('\r\n');
+    if (value == null) {
+      buffer
+        ..write(name)
+        ..write(': \r\n');
 
       return;
     }
+    final totalLength = value.length;
     var currentLineLength = name.length + ': '.length;
-    length -= name.length + ': '.length;
-    final runes = value.runes.toList();
+    buffer
+      ..write(name)
+      ..write(': ');
+    if (currentLineLength + totalLength < MailConventions.textLineMaxLength) {
+      buffer
+        ..write(value)
+        ..write('\r\n');
+
+      return;
+    }
     var startIndex = 0;
-    while (length > 0) {
+    while (startIndex < totalLength) {
       var chunkLength = MailConventions.textLineMaxLength - currentLineLength;
-      if (startIndex + chunkLength >= value.length) {
+      if (startIndex + chunkLength >= totalLength) {
         // write reminder:
         buffer
           ..write(value.substring(startIndex).trim())
           ..write('\r\n');
         break;
       }
-      for (var runeIndex = startIndex + chunkLength;
-          runeIndex > startIndex;
-          runeIndex--) {
-        final rune = runes[runeIndex];
-        if (rune == AsciiRunes.runeSemicolon ||
-            rune == AsciiRunes.runeSpace ||
-            rune == AsciiRunes.runeClosingParentheses ||
-            rune == AsciiRunes.runeClosingBracket ||
-            rune == AsciiRunes.runeGreaterThan) {
-          chunkLength = runeIndex - startIndex + 1;
+      var foundFoldingPoint = false;
+      for (var i = startIndex + chunkLength; i > startIndex; i--) {
+        final char = value.codeUnitAt(i);
+        if (char == AsciiRunes.runeSemicolon ||
+            char == AsciiRunes.runeSpace ||
+            char == AsciiRunes.runeClosingParentheses ||
+            char == AsciiRunes.runeClosingBracket ||
+            char == AsciiRunes.runeGreaterThan ||
+            char == AsciiRunes.runeComma) {
+          chunkLength = i - startIndex + 1;
+          foundFoldingPoint = true;
           break;
+        }
+      }
+      if (!foundFoldingPoint) {
+        for (var i = startIndex + chunkLength + 1; i < totalLength; i++) {
+          if (currentLineLength + (i - startIndex) >=
+              MailConventions.messageLineMaxLength) {
+            chunkLength = i - startIndex;
+            if (chunkLength > 0 &&
+                value.codeUnitAt(startIndex + chunkLength - 1) >= 0xD800 &&
+                value.codeUnitAt(startIndex + chunkLength - 1) <= 0xDBFF) {
+              chunkLength--;
+            }
+            break;
+          }
+          final char = value.codeUnitAt(i);
+          if (char == AsciiRunes.runeSemicolon ||
+              char == AsciiRunes.runeSpace ||
+              char == AsciiRunes.runeClosingParentheses ||
+              char == AsciiRunes.runeClosingBracket ||
+              char == AsciiRunes.runeGreaterThan ||
+              char == AsciiRunes.runeComma) {
+            chunkLength = i - startIndex + 1;
+            foundFoldingPoint = true;
+            break;
+          }
+        }
+        if (!foundFoldingPoint && startIndex + chunkLength < totalLength) {
+          if (currentLineLength + (totalLength - startIndex) <
+              MailConventions.messageLineMaxLength) {
+            chunkLength = totalLength - startIndex;
+          }
         }
       }
       buffer
         ..write(value.substring(startIndex, startIndex + chunkLength).trim())
         ..write('\r\n');
-      length -= chunkLength;
       startIndex += chunkLength;
-      if (length > 0) {
+      if (startIndex < totalLength) {
         buffer.writeCharCode(AsciiRunes.runeTab);
         currentLineLength = 1;
       }
+    }
+  }
     }
   }
 }
