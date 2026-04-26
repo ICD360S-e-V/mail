@@ -383,12 +383,34 @@ class MasterPasswordService {
         final parsed = _parseArgon2idPhc(savedHash);
         if (parsed != null) {
           final vault = MasterVault.instance;
-          final masterKey =
-              await vault.deriveMasterKey(password, parsed.salt);
-          final authHash = await vault.deriveAuthHash(masterKey);
-          // NOTE: masterKey NOT zeroed here — _cachedMasterKey holds a
-          // separate copy for PIN setup. Local var is GC'd after scope.
-          isValid = _constantTimeEqualsBytes(authHash, parsed.hash);
+          final isLegacy = savedHash.contains('p=4');
+
+          if (isLegacy) {
+            // Legacy format (Argon2id p=4 + HKDF-SHA256)
+            final legacyMasterKey =
+                await vault.deriveLegacyMasterKey(password, parsed.salt);
+            final legacyAuthHash =
+                await vault.deriveLegacyAuthHash(legacyMasterKey);
+            isValid = _constantTimeEqualsBytes(legacyAuthHash, parsed.hash);
+
+            if (isValid) {
+              // Migrate auth hash to sodium format (Argon2id p=1 + BLAKE2b)
+              LoggerService.log('AUTH', 'Migrating auth hash from legacy to sodium');
+              final newSalt = vault.vaultArgon2Salt ?? parsed.salt;
+              final newMasterKey =
+                  await vault.deriveMasterKey(password, newSalt);
+              final newAuthHash = await vault.deriveAuthHash(newMasterKey);
+              final newPhc = _encodeArgon2idPhc(salt: newSalt, hash: newAuthHash);
+              await File(_passwordHashFilePath!).writeAsString(newPhc);
+              LoggerService.log('AUTH', '✓ Auth hash migrated to sodium');
+            }
+          } else {
+            // New format (sodium Argon2id p=1 + BLAKE2b-KDF)
+            final masterKey =
+                await vault.deriveMasterKey(password, parsed.salt);
+            final authHash = await vault.deriveAuthHash(masterKey);
+            isValid = _constantTimeEqualsBytes(authHash, parsed.hash);
+          }
         }
       }
       // All legacy formats (PBKDF2, SHA-256, wrapped) are no longer
