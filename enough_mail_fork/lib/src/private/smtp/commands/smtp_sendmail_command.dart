@@ -3,6 +3,36 @@ import '../smtp_command.dart';
 
 enum _SmtpSendCommandSequence { mailFrom, rcptTo, data, done }
 
+void _validateSmtpAddress(String? email) {
+  if (email == null || email.isEmpty) return;
+  for (var i = 0; i < email.length; i++) {
+    final c = email.codeUnitAt(i);
+    if (c < 32 || c == 127) {
+      throw ArgumentError('Email address contains control character at $i');
+    }
+  }
+  if (email.contains('<') || email.contains('>')) {
+    throw ArgumentError('Email address contains angle brackets');
+  }
+  if (email.length > 254) {
+    throw ArgumentError('Email address exceeds 254 characters');
+  }
+}
+
+final RegExp _bccPattern = RegExp(
+  r'^Bcc:[^\r\n]*\r\n(?:[ \t][^\r\n]*\r\n)*',
+  multiLine: true,
+  caseSensitive: false,
+);
+
+String _dotStuff(String data) {
+  final result = data.replaceAll('\r\n.', '\r\n..');
+  if (result.endsWith('\r\n')) {
+    return '$result.\r\n';
+  }
+  return '$result\r\n.\r\n';
+}
+
 class _SmtpSendCommand extends SmtpCommand {
   _SmtpSendCommand(
     this.getData,
@@ -22,6 +52,7 @@ class _SmtpSendCommand extends SmtpCommand {
 
   @override
   String get command {
+    _validateSmtpAddress(fromEmail);
     final buffer = StringBuffer('MAIL FROM:<$fromEmail>');
     if (use8BitEncoding) {
       buffer.write(' BODY=8BITMIME');
@@ -55,17 +86,14 @@ class _SmtpSendCommand extends SmtpCommand {
         }
       case _SmtpSendCommandSequence.data:
         _currentStep = _SmtpSendCommandSequence.done;
-
-        final data = getData();
-
-        // \r\n.\r\n is the data stop sequence, so 'pad' this sequence in the message data
-        return '${data.replaceAll('\r\n.\r\n', '\r\n..\r\n')}\r\n.';
+        return _dotStuff(getData());
       default:
         return null;
     }
   }
 
   String _getRecipientToCommand(String email) {
+    _validateSmtpAddress(email);
     if (requestDsn) {
       return 'RCPT TO:<$email> NOTIFY=SUCCESS,FAILURE,DELAY';
     }
@@ -95,7 +123,7 @@ class SmtpSendMailCommand extends _SmtpSendCommand {
   }) : super(
           () => message
               .renderMessage()
-              .replaceAll(RegExp('^Bcc:.*\r\n', multiLine: true), ''),
+              .replaceAll(_bccPattern, ''),
           from?.email ?? message.fromEmail,
           recipientEmails,
           use8BitEncoding: use8BitEncoding,
@@ -117,7 +145,7 @@ class SmtpSendMailDataCommand extends _SmtpSendCommand {
   }) : super(
           () => data
               .toString()
-              .replaceAll(RegExp('^Bcc:.*\r\n', multiLine: true), ''),
+              .replaceAll(_bccPattern, ''),
           from.email,
           recipientEmails,
           use8BitEncoding: use8BitEncoding,
