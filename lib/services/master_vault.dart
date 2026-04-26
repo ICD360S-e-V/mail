@@ -306,6 +306,21 @@ class MasterVault {
     return Uint8List.fromList(authBytes);
   }
 
+
+  /// Legacy master key derivation (Argon2id p=4, cryptography pkg).
+  /// Used to verify passwords stored with the old format.
+  Future<Uint8List> deriveLegacyMasterKey(
+    String masterPassword,
+    Uint8List argonSalt,
+  ) async {
+    _initLegacyCrypto();
+    final masterKey = await _legacyArgon2!.deriveKey(
+      secretKey: old_crypto.SecretKey(utf8.encode(masterPassword)),
+      nonce: argonSalt,
+    );
+    final bytes = await masterKey.extractBytes();
+    return Uint8List.fromList(bytes);
+  }
   /// Get cached salt for external use (MasterPasswordService).
   Uint8List? get vaultArgon2Salt => _argon2Salt != null
       ? Uint8List.fromList(_argon2Salt!) : null;
