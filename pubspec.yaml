@@ -41,7 +41,7 @@ dependencies:
   # cryptography_flutter on iOS/Android/macOS (up to 100x faster).
   cryptography: ^2.7.0
   cryptography_flutter: ^2.3.2
-  sodium: ^4.0.2  # libsodium: SecureKey (mlock + sodium_memzero) for vault keys
+  sodium: ^4.0.2  # libsodium: SecureKey with mlock + sodium_memzero for vault keys
   path: ^1.9.0  # Path manipulation
   flutter_secure_storage: ^10.0.0  # Secure password storage (Keychain/Credential Manager)
   http: ^1.2.0  # HTTP client for certificate download API
