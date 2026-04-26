@@ -252,6 +252,7 @@ class _MainWindowState extends State<MainWindow> {
       // Force refresh emails
       await emailProvider.checkForNewEmails();
     }
+  }
 
   /// Show master password dialog for unlock
   Future<bool> _showMasterPasswordDialog() async {
