@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.86.10 - 2026-04-26
+#### Code Refactoring
+- (**security**) remove legacy password-based cert download - (3ba2c6f) - icd360sevofficial
+
+- - -
+
 ## v2.86.9 - 2026-04-26
 #### Bug Fixes
 - (**fork**) prevent SMTP injection and BCC leak in BDAT command - (3014ad9) - icd360sevofficial
