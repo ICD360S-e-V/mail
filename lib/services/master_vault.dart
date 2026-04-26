@@ -85,7 +85,7 @@ class MasterVault {
     if (!Platform.isMacOS) return;
     if (isUnlocked) return;
     _assertSodium();
-    LoggerService.log('MASTER_VAULT', 'Unlocking vault (sodium v0x04)…');
+    LoggerService.log('MASTER_VAULT', 'Unlocking vault (format=v0x04, crypto=sodium)…');
     try {
       final path = await _path();
       final file = File(path);
