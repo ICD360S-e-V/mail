@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.86.3 - 2026-04-26
+#### Bug Fixes
+- (**fork**) backport bare LF tolerance in MIME parsing from upstream - (c3faf97) - icd360sevofficial
+
+- - -
+
 ## v2.86.2 - 2026-04-25
 #### Bug Fixes
 - (**ui**) enable hardware acceleration and hybrid composition for InAppWebView - (06b65dc) - icd360sevofficial
