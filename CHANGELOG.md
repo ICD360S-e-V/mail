@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.87.0 - 2026-04-26
+#### Features
+- (**security**) add sodium ^4.0.2 for secure memory vault keys - (88d1d35) - icd360sevofficial
+
+- - -
+
 ## v2.86.17 - 2026-04-26
 #### Bug Fixes
 - add missing closing brace for _lockApp() method - (7aaf517) - icd360sevofficial
