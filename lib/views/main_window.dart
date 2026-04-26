@@ -41,6 +41,7 @@ import 'security_health_view.dart';
 import 'device_revoked_screen.dart';
 import 'server_info.dart';
 import '../utils/text_safety.dart';
+import '../utils/pii_redactor.dart';
 
 /// Main window with Fluent Design
 class MainWindow extends StatefulWidget {
@@ -233,12 +234,12 @@ class _MainWindowState extends State<MainWindow> {
       try {
         final success = await CertificateService.restoreFromSecureStorageFor(account.username);
         if (success) {
-          LoggerService.log('SECURITY', '✓ Certificate restored for \${account.username}');
+          LoggerService.log('SECURITY', '✓ Certificate restored for \${piiEmail(account.username)}');
         } else {
-          LoggerService.log('SECURITY', '⚠️ No certificate in secure storage for \${account.username}');
+          LoggerService.log('SECURITY', '⚠️ No certificate in secure storage for \${piiEmail(account.username)}');
         }
       } catch (e) {
-        LoggerService.log('SECURITY', '⚠️ Certificate restore error for \${account.username}: \$e');
+        LoggerService.log('SECURITY', '⚠️ Certificate restore error for \${piiEmail(account.username)}: \$e');
       }
     }
     // Restart all timers
