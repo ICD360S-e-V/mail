@@ -229,26 +229,29 @@ class _MainWindowState extends State<MainWindow> {
       setState(() => _isLocked = false);
       LoggerService.log('SECURITY', 'Application unlocked');
 
-          // Restore certificates from secure storage for all accounts
-    for (final account in emailProvider.accounts) {
-      try {
-        final success = await CertificateService.restoreFromSecureStorageFor(account.username);
-        if (success) {
-          LoggerService.log('SECURITY', '✓ Certificate restored for \${piiEmail(account.username)}');
-        } else {
-          LoggerService.log('SECURITY', '⚠️ No certificate in secure storage for \${piiEmail(account.username)}');
-        }
-      } catch (e) {
-        LoggerService.log('SECURITY', '⚠️ Certificate restore error for \${piiEmail(account.username)}: \$e');
-      }
-    }
-    // Restart all timers
-    _startTimers();
-    LoggerService.log('SECURITY', 'All timers restarted after unlock');
+      final emailProvider = context.read<EmailProvider>();
 
-    // Force refresh emails
-    await emailProvider.checkForNewEmails();
-  }
+      // Restore certificates from secure storage for all accounts
+      for (final account in emailProvider.accounts) {
+        try {
+          final success = await CertificateService.restoreFromSecureStorageFor(account.username);
+          if (success) {
+            LoggerService.log('SECURITY', '✓ Certificate restored for ${piiEmail(account.username)}');
+          } else {
+            LoggerService.log('SECURITY', '⚠️ No certificate in secure storage for ${piiEmail(account.username)}');
+          }
+        } catch (e) {
+          LoggerService.log('SECURITY', '⚠️ Certificate restore error for ${piiEmail(account.username)}: $e');
+        }
+      }
+
+      // Restart all timers
+      _startTimers();
+      LoggerService.log('SECURITY', 'All timers restarted after unlock');
+
+      // Force refresh emails
+      await emailProvider.checkForNewEmails();
+    }
 
   /// Show master password dialog for unlock
   Future<bool> _showMasterPasswordDialog() async {
