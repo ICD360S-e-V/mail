@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.86.15 - 2026-04-26
+#### Bug Fixes
+- restore missing emailProvider variable and fix indentation - (cc1dd98) - icd360sevofficial
+
+- - -
+
 ## v2.86.14 - 2026-04-26
 #### Bug Fixes
 - (**security**) dispose _securePasswordController in compose window - (e5939cf) - icd360sevofficial
