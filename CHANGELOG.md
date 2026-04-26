@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.86.11 - 2026-04-26
+#### Code Refactoring
+- (**security**) use secure storage restore instead of password download - (57fbd9c) - icd360sevofficial
+
+- - -
+
 ## v2.86.10 - 2026-04-26
 #### Code Refactoring
 - (**security**) remove legacy password-based cert download - (3ba2c6f) - icd360sevofficial
