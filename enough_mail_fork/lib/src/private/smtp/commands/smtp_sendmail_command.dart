@@ -27,9 +27,8 @@ final RegExp _bccPattern = RegExp(
 
 String _dotStuff(String data) {
   final result = data.replaceAll('\r\n.', '\r\n..');
-  if (result.endsWith('\r\n')) {
-    return '$result.\r\n';
-  }
+  return '$result\r\n.';
+}
   return '$result\r\n.\r\n';
 }
 
