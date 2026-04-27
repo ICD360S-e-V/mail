@@ -4,6 +4,7 @@
 import 'dart:io';
 import 'dart:convert';
 import 'le_issuer_check.dart';
+import 'package:basic_utils/basic_utils.dart';
 import 'logger_service.dart';
 import 'certificate_service.dart';
 import 'pinned_security_context.dart';
@@ -97,6 +98,25 @@ class MtlsService {
     }
   }
 
+
+  /// Check if cert's SAN contains the expected hostname.
+  /// Falls back to CN check if SAN parsing fails.
+  static bool _matchesExpectedHost(X509Certificate cert) {
+    // Primary: SAN check via basic_utils (future-proof, RFC 6125)
+    try {
+      final certData = X509Utils.x509CertificateFromPem(cert.pem);
+      final sans = certData.subjectAlternativNames ?? [];
+      if (sans.any((san) => san.toLowerCase() == _expectedHost)) {
+        return true;
+      }
+    } catch (_) {
+      // SAN parsing failed — fall through to CN check
+    }
+    // Fallback: CN check (deprecated per RFC 6125, but still works)
+    final subjectCN = _extractCN(cert.subject);
+    return subjectCN == _expectedHost;
+  }
+
   /// Callback for server certificate validation.
   ///
   /// SECURITY: This callback fires when Dart's built-in PKIX chain
@@ -125,8 +145,8 @@ class MtlsService {
       final issuerCN = _extractCN(issuer);
 
       // Case 1: LEAF cert for our domain.
-      // Extract CN exactly — no substring matching.
-      if (subjectCN == _expectedHost) {
+      // Check SAN first (RFC 6125), CN as fallback.
+      if (_matchesExpectedHost(cert)) {
         // Verify the leaf was signed by a trusted LE intermediate.
         if (isTrustedLetsEncryptIssuer(issuer)) {
           LoggerService.log('MTLS',
