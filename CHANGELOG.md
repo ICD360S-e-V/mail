@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.89.6 - 2026-04-27
+#### Bug Fixes
+- (**fork**) remove extra CRLF from dot-stuffing terminator - (f029d5b) - icd360sevofficial
+
+- - -
+
 ## v2.89.5 - 2026-04-27
 #### Bug Fixes
 - (**security**) try sodium first then legacy fallback for auth hash - (3cfd6b1) - icd360sevofficial
