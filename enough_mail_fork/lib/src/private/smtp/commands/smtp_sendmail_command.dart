@@ -29,8 +29,6 @@ String _dotStuff(String data) {
   final result = data.replaceAll('\r\n.', '\r\n..');
   return '$result\r\n.';
 }
-  return '$result\r\n.\r\n';
-}
 
 class _SmtpSendCommand extends SmtpCommand {
   _SmtpSendCommand(
