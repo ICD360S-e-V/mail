@@ -443,7 +443,7 @@ class _EmailViewerState extends State<EmailViewer> {
   /// formatted content while blocking all remote resources by default.
   /// Plain-text emails use the existing clickable-text renderer.
   Widget _buildEmailBody(FluentThemeData theme, Email email) {
-    final isHtml = _isHtmlEmail(email.body, contentType: email.contentType);
+    final isHtml = _isHtmlEmail(email.body, contentType: email.headers['Content-Type'] ?? email.headers['content-type'] ?? '');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
