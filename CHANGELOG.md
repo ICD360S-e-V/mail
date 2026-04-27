@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.89.12 - 2026-04-27
+#### Bug Fixes
+- (**security**) add SAN-based hostname verification (RFC 6125) - (1484c95) - icd360sevofficial
+
+- - -
+
 ## v2.89.11 - 2026-04-27
 #### Bug Fixes
 - (**security**) bound recipient security cache to 256 entries (LRU+TTL) - (ccd3bb5) - icd360sevofficial
