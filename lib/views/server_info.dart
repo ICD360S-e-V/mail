@@ -448,13 +448,17 @@ class _ServerInfoDialogState extends State<ServerInfoDialog> {
   }
 
   /// Solid circle used as a status indicator dot
-  Widget _statusDot(Color color) {
-    return Container(
-      width: 10,
-      height: 10,
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
+  Widget _statusDot(Color color, {String? label}) {
+    return Semantics(
+      label: label ?? (color == Colors.green ? 'OK' : color == Colors.red ? 'Error' : 'Warning'),
+      excludeSemantics: true,
+      child: Container(
+        width: 10,
+        height: 10,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+        ),
       ),
     );
   }
