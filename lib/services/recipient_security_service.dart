@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2024-2026 ICD360S e.V.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import 'dart:collection';
 import 'dart:io';
 import 'dns_checker.dart';
 import 'logger_service.dart';
@@ -32,24 +33,38 @@ class RecipientSecurityResult {
   );
 }
 
+class _CacheEntry {
+  final RecipientSecurityResult result;
+  final DateTime expiresAt;
+  _CacheEntry(this.result, this.expiresAt);
+  bool get isExpired => DateTime.now().isAfter(expiresAt);
+}
+
 class RecipientSecurityService {
-  static final Map<String, RecipientSecurityResult> _cache = {};
-  static final Map<String, DateTime> _cacheExpiry = {};
+  static const _maxCacheSize = 256;
   static const _cacheDuration = Duration(minutes: 10);
+  static const _sweepInterval = 50;
+  static final LinkedHashMap<String, _CacheEntry> _cache = LinkedHashMap<String, _CacheEntry>();
+  static int _accessCount = 0;
 
   static Future<RecipientSecurityResult> check(String email) async {
     final domain = email.split('@').last.toLowerCase();
 
     final cached = _cache[domain];
-    final expiry = _cacheExpiry[domain];
-    if (cached != null && expiry != null && DateTime.now().isBefore(expiry)) {
-      return cached;
+    if (cached != null && !cached.isExpired) {
+      _cache.remove(domain);
+      _cache[domain] = cached;
+      _maybeSweep();
+      return cached.result;
     }
+    if (cached != null) _cache.remove(domain);
 
     try {
       final result = await _checkDomain(domain);
-      _cache[domain] = result;
-      _cacheExpiry[domain] = DateTime.now().add(_cacheDuration);
+      while (_cache.length >= _maxCacheSize) {
+        _cache.remove(_cache.keys.first);
+      }
+      _cache[domain] = _CacheEntry(result, DateTime.now().add(_cacheDuration));
       return result;
     } catch (ex) {
       LoggerService.logWarning('RCPT_SEC', 'Check failed for $domain: $ex');
@@ -58,6 +73,14 @@ class RecipientSecurityService {
         label: 'Unknown',
         detail: 'Could not verify recipient security',
       );
+    }
+  }
+
+  static void _maybeSweep() {
+    _accessCount++;
+    if (_accessCount >= _sweepInterval) {
+      _accessCount = 0;
+      _cache.removeWhere((_, entry) => entry.isExpired);
     }
   }
 
