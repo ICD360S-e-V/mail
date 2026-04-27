@@ -385,31 +385,30 @@ class MasterPasswordService {
           final vault = MasterVault.instance;
           final isLegacy = savedHash.contains('p=4');
 
-          if (isLegacy) {
-            // Legacy format (Argon2id p=4 + HKDF-SHA256)
+          // Try sodium first (new format), then legacy fallback
+          final masterKey =
+              await vault.deriveMasterKey(password, parsed.salt);
+          final authHash = await vault.deriveAuthHash(masterKey);
+          isValid = _constantTimeEqualsBytes(authHash, parsed.hash);
+          LoggerService.log('AUTH', 'Sodium verify: $isValid');
+
+          if (!isValid && isLegacy) {
+            LoggerService.log('AUTH', 'Trying legacy Argon2id p=4 + HKDF');
             final legacyMasterKey =
                 await vault.deriveLegacyMasterKey(password, parsed.salt);
             final legacyAuthHash =
                 await vault.deriveLegacyAuthHash(legacyMasterKey);
             isValid = _constantTimeEqualsBytes(legacyAuthHash, parsed.hash);
+            LoggerService.log('AUTH', 'Legacy verify: $isValid');
+          }
 
-            if (isValid) {
-              // Migrate auth hash to sodium format (Argon2id p=1 + BLAKE2b)
-              LoggerService.log('AUTH', 'Migrating auth hash from legacy to sodium');
-              final newSalt = vault.vaultArgon2Salt ?? parsed.salt;
-              final newMasterKey =
-                  await vault.deriveMasterKey(password, newSalt);
-              final newAuthHash = await vault.deriveAuthHash(newMasterKey);
-              final newPhc = _encodeArgon2idPhc(salt: newSalt, hash: newAuthHash);
-              await File(_passwordHashFilePath!).writeAsString(newPhc);
-              LoggerService.log('AUTH', '✓ Auth hash migrated to sodium');
-            }
-          } else {
-            // New format (sodium Argon2id p=1 + BLAKE2b-KDF)
-            final masterKey =
-                await vault.deriveMasterKey(password, parsed.salt);
-            final authHash = await vault.deriveAuthHash(masterKey);
-            isValid = _constantTimeEqualsBytes(authHash, parsed.hash);
+          if (isValid && isLegacy) {
+            LoggerService.log('AUTH', 'Migrating auth hash to sodium');
+            final newMk = await vault.deriveMasterKey(password, parsed.salt);
+            final newHash = await vault.deriveAuthHash(newMk);
+            final newPhc = _encodeArgon2idPhc(salt: parsed.salt, hash: newHash);
+            await File(_passwordHashFilePath!).writeAsString(newPhc);
+            LoggerService.log('AUTH', 'Auth hash migrated (p=1)');
           }
         }
       }
@@ -489,11 +488,12 @@ class MasterPasswordService {
   static String _encodeArgon2idPhc({
     required Uint8List salt,
     required Uint8List hash,
+    int parallelism = 1,
   }) {
     final saltB64 = base64.encode(salt).replaceAll('=', '');
     final hashB64 = base64.encode(hash).replaceAll('=', '');
     // Parameters match MasterVault._argon2* constants.
-    return '\$argon2id\$v=19\$m=65536,t=3,p=4\$$saltB64\$$hashB64';
+    return '\$argon2id\$v=19\$m=65536,t=3,p=$parallelism\$$saltB64\$$hashB64';
   }
 
   /// Parse an Argon2id PHC string. Returns null if format is invalid.
