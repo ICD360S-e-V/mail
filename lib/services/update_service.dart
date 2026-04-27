@@ -25,7 +25,7 @@ import 'version_baseline.dart';
 /// Auto-update service for checking and installing updates
 class UpdateService {
   static const String updateUrl = 'https://mail.icd360s.de/updates/version.json';
-  static const String currentVersion = '2.89.18';
+  static const String currentVersion = '2.89.17';
 
   // Progress callback for UI updates
   static Function(int downloaded, int total, String status)? onProgress;
@@ -555,53 +555,83 @@ class UpdateService {
   ///   method (in _downloadAndInstallAutoInternal), so what we hand to
   ///   the user is integrity-checked
   static Future<bool> _installMacOS(File updateFile, UpdateInfo updateInfo) async {
-    LoggerService.log('UPDATE',
-        'Opening DMG in Finder: ${updateFile.path}');
+    LoggerService.log('UPDATE', 'Auto-installing macOS update: ${updateFile.path}');
 
-    // Sanity check: file exists and is non-trivial
     if (!updateFile.existsSync() || updateFile.lengthSync() < 1024 * 1024) {
-      LoggerService.log('UPDATE',
-          '❌ Update file missing or too small: ${updateFile.path}');
+      LoggerService.log('UPDATE', '❌ Update file missing or too small');
       return false;
     }
 
-    // ⚠️ IMPORTANT (added v2.28.1): the user MUST drag the new .app
-    // onto the /Applications shortcut shown in the mounted DMG window
-    // — they CANNOT just double-click the app inside the DMG. Doing
-    // so triggers macOS App Translocation (Gatekeeper Path
-    // Randomization, Sierra+) which runs the binary from a randomized
-    // read-only `/private/var/folders/...` path. Translocation breaks
-    // `getApplicationSupportDirectory()` and several other relative
-    // paths in unpredictable ways and was the cause of the v2.28.0
-    // "moves up and down + Application Not Responding" hang on first
-    // launch. The DMG produced by build-all-platforms.yml since
-    // v2.28.1 includes an /Applications symlink for exactly this
-    // reason — the user just has to drag the icon onto it.
-    LoggerService.log('UPDATE',
-        '⚠️ IMPORTANT: drag the new app onto the /Applications shortcut '
-        'in the DMG window. Do NOT run the app directly from the DMG '
-        '(macOS App Translocation will hang it on first launch).');
+    try {
+      // 1. Mount DMG silently
+      final mountResult = await Process.run('hdiutil', [
+        'attach', updateFile.path, '-nobrowse', '-quiet',
+      ]);
+      if (mountResult.exitCode != 0) {
+        LoggerService.log('UPDATE', '❌ Failed to mount DMG: ${mountResult.stderr}');
+        return false;
+      }
 
-    // `open <dmg>` mounts the DMG and reveals it in Finder. macOS shows
-    // the standard install window with the .app icon and Applications
-    // shortcut for drag-and-drop. Returns immediately (non-blocking).
-    final result = await Process.run('open', [updateFile.path]);
-    if (result.exitCode != 0) {
-      LoggerService.log('UPDATE',
-          '❌ Failed to open DMG: ${result.stderr}');
+      // 2. Find mounted volume and .app
+      final mountOutput = mountResult.stdout as String;
+      final mountMatch = RegExp(r'/Volumes/.+').firstMatch(mountOutput);
+      final mountPoint = mountMatch?.group(0)?.trim();
+      if (mountPoint == null) {
+        LoggerService.log('UPDATE', '❌ Could not find mount point');
+        return false;
+      }
+      LoggerService.log('UPDATE', 'DMG mounted at: $mountPoint');
+
+      final volumeDir = Directory(mountPoint);
+      final apps = volumeDir.listSync()
+          .where((e) => e.path.endsWith('.app'))
+          .toList();
+      if (apps.isEmpty) {
+        LoggerService.log('UPDATE', '❌ No .app found in DMG');
+        await Process.run('hdiutil', ['detach', mountPoint, '-quiet']);
+        return false;
+      }
+      final appSource = apps.first.path;
+
+      // 3. Determine install destination from current executable path
+      final currentExe = Platform.resolvedExecutable;
+      final currentApp = currentExe.contains('.app/Contents/')
+          ? currentExe.substring(0, currentExe.indexOf('.app/Contents/') + 4)
+          : '/Applications/${apps.first.path.split('/').last}';
+      LoggerService.log('UPDATE', 'Replacing: $currentApp');
+
+      // 4. Remove old app and copy new one
+      final rmResult = await Process.run('rm', ['-rf', currentApp]);
+      if (rmResult.exitCode != 0) {
+        LoggerService.log('UPDATE', '❌ Failed to remove old app: ${rmResult.stderr}');
+        await Process.run('hdiutil', ['detach', mountPoint, '-quiet']);
+        return false;
+      }
+
+      final cpResult = await Process.run('cp', ['-R', appSource, currentApp]);
+      if (cpResult.exitCode != 0) {
+        LoggerService.log('UPDATE', '❌ Failed to copy new app: ${cpResult.stderr}');
+        await Process.run('hdiutil', ['detach', mountPoint, '-quiet']);
+        return false;
+      }
+
+      // 5. Remove quarantine flag (ad-hoc signed apps)
+      await Process.run('xattr', ['-dr', 'com.apple.quarantine', currentApp]);
+
+      // 6. Unmount DMG and delete it
+      await Process.run('hdiutil', ['detach', mountPoint, '-quiet']);
+      try { updateFile.deleteSync(); } catch (_) {}
+
+      LoggerService.log('UPDATE', '✓ Update installed — relaunching');
+
+      // 7. Relaunch the new app
+      await Process.run('open', [currentApp]);
+      await Future.delayed(const Duration(milliseconds: 500));
+      exit(0);
+    } catch (ex, st) {
+      LoggerService.logError('UPDATE', ex, st);
       return false;
     }
-
-    LoggerService.log('UPDATE',
-        '✓ DMG opened in Finder. Quitting current app so user can '
-        'drag the new version onto the Applications shortcut.');
-
-    // Wait a moment so the user sees the Finder window pop up before
-    // we vanish — without this, the app exits before macOS finishes
-    // mounting the volume and the Finder window may not appear.
-    await Future.delayed(const Duration(seconds: 1));
-
-    exit(0);
   }
 
   /// Linux: Replace AppImage or open browser for .deb/.rpm
