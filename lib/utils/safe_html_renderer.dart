@@ -327,13 +327,14 @@ class SafeHtmlRenderer extends StatelessWidget {
         final schemes = (attrName == 'src')
             ? _allowedSrcSchemes
             : _allowedHrefSchemes;
-        // Allow data: URIs only in src with safe MIME type
+        // Allow data: URIs only in src with safe raster MIME type
         if (value.trim().toLowerCase().startsWith('data:')) {
-          if (attr != 'src' || !_isSafeDataUri(value.trim().toLowerCase())) {
-            element.attributes.remove(attr);
-            continue;
+          if (attrName != 'src' || !_isSafeDataUri(value.trim().toLowerCase())) {
+            keysToRemove.add(key);
           }
-        } else if (_hasDisallowedScheme(value, schemes)) {
+          return;
+        }
+        if (_hasDisallowedScheme(value, schemes)) {
           keysToRemove.add(key);
         }
         return;
