@@ -29,6 +29,33 @@ class DnsChecker {
 
   /// Look up TXT records for [domain].
   /// Tries our own DoH (mTLS-authenticated) first, falls back to Cloudflare.
+
+  static final _ldhLabel = RegExp(r'^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\$');
+  static final _underscoredLabel = RegExp(r'^_[a-zA-Z][a-zA-Z0-9-]{0,61}\$');
+
+  static void _validateDomain(String domain) {
+    if (domain.codeUnits.any((c) => c < 0x20 || c == 0x7F)) {
+      throw ArgumentError('Domain contains control characters');
+    }
+    var d = domain.trim();
+    if (d.endsWith('.')) d = d.substring(0, d.length - 1);
+    if (d.isEmpty || d.length > 253) {
+      throw ArgumentError('Domain length invalid: \${d.length}');
+    }
+    for (final label in d.split('.')) {
+      if (label.isEmpty || label.length > 63) {
+        throw ArgumentError('Label length invalid: \${label.length}');
+      }
+      if (label.startsWith('_')) {
+        if (!_underscoredLabel.hasMatch(label)) {
+          throw ArgumentError('Invalid underscored label: \$label');
+        }
+      } else if (!_ldhLabel.hasMatch(label)) {
+        throw ArgumentError('Invalid label: \$label');
+      }
+    }
+  }
+
   static Future<List<String>> lookupTxt(String domain) async {
     try {
       return await _queryDoH(_primaryEndpoint, domain, 'TXT');
@@ -240,6 +267,7 @@ class DnsChecker {
     String domain,
     String type,
   ) async {
+    _validateDomain(domain);
     final uri = Uri.parse(endpoint).replace(queryParameters: {
       'name': domain,
       'type': type,
@@ -320,6 +348,7 @@ class DnsChecker {
 
   /// Build a minimal DNS query message (RFC 1035 §4.1).
   static Uint8List _buildDnsQuery(String domain, int qtype) {
+    _validateDomain(domain);
     final buf = BytesBuilder();
     // Header: ID (random), flags (RD=1), QDCOUNT=1, rest=0
     final id = Random.secure().nextInt(0xFFFF);
