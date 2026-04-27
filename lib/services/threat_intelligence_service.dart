@@ -144,6 +144,8 @@ class ThreatIntelligenceService {
   /// Parse Authentication-Results header (RFC 8601).
   ///
   /// Returns a map of method → result, e.g. {'dkim': 'pass', 'spf': 'fail'}.
+  static const _expectedAuthServId = 'mail.icd360s.de';
+
   static Map<String, String> _parseAuthResults(Email email) {
     final header = email.headers['Authentication-Results'] ??
         email.headers['authentication-results'] ??
@@ -152,9 +154,17 @@ class ThreatIntelligenceService {
     if (header.isEmpty) return results;
 
     // The header format is: authserv-id; method=result ...; method=result ...
-    // Strip authserv-id (everything before first ';')
+    // Validate authserv-id matches our server (RFC 8601 §2.4).
+    // Foreign AR headers (injected by attackers or upstream relays)
+    // are ignored — only trust results from our own MTA.
     final semiIdx = header.indexOf(';');
     if (semiIdx < 0) return results;
+    final authServId = header.substring(0, semiIdx).trim().toLowerCase();
+    if (!authServId.contains(_expectedAuthServId)) {
+      LoggerService.log('THREAT',
+          'Ignoring AR header from untrusted authserv-id: $authServId');
+      return results;
+    }
     final methodsPart = header.substring(semiIdx + 1);
 
     // Split on ';' to get individual method results
