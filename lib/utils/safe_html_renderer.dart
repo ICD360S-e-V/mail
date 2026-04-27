@@ -92,9 +92,28 @@ class SafeHtmlRenderer extends StatelessWidget {
   /// Attributes that contain URLs — subject to scheme validation.
   static const _urlAttributes = <String>{'href', 'src', 'cite'};
 
+
+  /// Safe MIME types for data: URIs (raster images only).
+  /// SVG blocked: parser differentials, CSS exfiltration (ProtonMail 2023 vuln).
+  static const _safeDataMimes = <String>{
+    'image/png', 'image/jpeg', 'image/jpg', 'image/gif',
+    'image/webp', 'image/x-icon', 'image/bmp',
+  };
+
+  /// Check if a data: URI has a safe MIME type (raster image only).
+  static bool _isSafeDataUri(String uri) {
+    if (!uri.startsWith('data:')) return false;
+    final mimeEnd = uri.indexOf(';');
+    final commaEnd = uri.indexOf(',');
+    final end = (mimeEnd > 0 && mimeEnd < commaEnd) ? mimeEnd : commaEnd;
+    if (end < 0) return false;
+    final mime = uri.substring(5, end).trim().toLowerCase();
+    return _safeDataMimes.contains(mime);
+  }
+
   /// Allowed URL schemes for `src` attributes (images, embedded content).
   static const _allowedSrcSchemes = <String>{
-    'http', 'https', 'mailto', 'cid', 'data',
+    'http', 'https', 'mailto', 'cid',
   };
 
   /// Allowed URL schemes for `href`/`cite` attributes — `data:` is
@@ -308,7 +327,13 @@ class SafeHtmlRenderer extends StatelessWidget {
         final schemes = (attrName == 'src')
             ? _allowedSrcSchemes
             : _allowedHrefSchemes;
-        if (_hasDisallowedScheme(value, schemes)) {
+        // Allow data: URIs only in src with safe MIME type
+        if (value.trim().toLowerCase().startsWith('data:')) {
+          if (attr != 'src' || !_isSafeDataUri(value.trim().toLowerCase())) {
+            element.attributes.remove(attr);
+            continue;
+          }
+        } else if (_hasDisallowedScheme(value, schemes)) {
           keysToRemove.add(key);
         }
         return;
