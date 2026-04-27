@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.89.7 - 2026-04-27
+#### Bug Fixes
+- (**fork**) remove orphan lines from dot-stuffing function - (c6ad234) - icd360sevofficial
+
+- - -
+
 ## v2.89.6 - 2026-04-27
 #### Bug Fixes
 - (**fork**) remove extra CRLF from dot-stuffing terminator - (f029d5b) - icd360sevofficial
