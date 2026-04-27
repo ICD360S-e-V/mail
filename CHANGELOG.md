@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.89.13 - 2026-04-27
+#### Bug Fixes
+- (**security**) restrict data: URIs to raster image MIME types only - (4f8d63f) - icd360sevofficial
+
+- - -
+
 ## v2.89.12 - 2026-04-27
 #### Bug Fixes
 - (**security**) add SAN-based hostname verification (RFC 6125) - (1484c95) - icd360sevofficial
