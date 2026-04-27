@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.89.17 - 2026-04-27
+#### Bug Fixes
+- (**a11y**) add Semantics to status indicator dots (WCAG 1.1.1) - (0acf2a9) - icd360sevofficial
+
+- - -
+
 ## v2.89.16 - 2026-04-27
 #### Bug Fixes
 - use headers map for Content-Type (not on Email model) - (c85bcf7) - icd360sevofficial
