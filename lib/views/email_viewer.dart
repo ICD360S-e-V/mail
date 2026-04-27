@@ -424,30 +424,17 @@ class _EmailViewerState extends State<EmailViewer> {
   ///   3. Document with body: `<body`
   ///   4. Fragment starting with any opening tag: `<` + letter
   ///   5. Body containing common block tags anywhere
-  bool _isHtmlEmail(String body) {
-    final trimmed = body.trimLeft();
-    if (trimmed.isEmpty) return false;
-    final lower = trimmed.toLowerCase();
-    if (lower.startsWith('<!doctype') || lower.startsWith('<html')) {
-      return true;
-    }
-    if (lower.contains('<body')) return true;
-    // Fragment heuristic: starts with `<` followed by a letter (= tag name)
-    if (trimmed.length >= 2 &&
-        trimmed[0] == '<' &&
-        RegExp(r'[a-zA-Z]').hasMatch(trimmed[1])) {
-      return true;
-    }
-    // Body contains common HTML block markers anywhere (catches plain-text
-    // emails with embedded HTML signatures)
-    return lower.contains('<div') ||
-        lower.contains('<span') ||
-        lower.contains('<p>') ||
-        lower.contains('<p ') ||
-        lower.contains('<table') ||
-        lower.contains('<br>') ||
-        lower.contains('<br/') ||
-        lower.contains('<a href');
+  bool _isHtmlEmail(String body, {String contentType = ''}) {
+    // Primary: use Content-Type header (RFC 2046).
+    // Body sniffing is a security anti-pattern (CVE-2025-59526).
+    final ct = contentType.toLowerCase();
+    if (ct.contains('text/html')) return true;
+    if (ct.contains('text/plain')) return false;
+    // Content-Type missing: RFC 2046 default is text/plain,
+    // but fall back to minimal structural check for emails
+    // from broken servers that send HTML without Content-Type.
+    final trimmed = body.trimLeft().toLowerCase();
+    return trimmed.startsWith('<!doctype') || trimmed.startsWith('<html');
   }
 
   /// Build email body widget.
@@ -456,7 +443,7 @@ class _EmailViewerState extends State<EmailViewer> {
   /// formatted content while blocking all remote resources by default.
   /// Plain-text emails use the existing clickable-text renderer.
   Widget _buildEmailBody(FluentThemeData theme, Email email) {
-    final isHtml = _isHtmlEmail(email.body);
+    final isHtml = _isHtmlEmail(email.body, contentType: email.contentType);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
