@@ -117,11 +117,8 @@ Future<void> _appMain() async {
   // 3 iters / 4 threads parameters.
   FlutterCryptography.enable();
 
-  // Initialize libsodium (SecureKey with mlock + sodium_memzero).
-  // SodiumSumo required for pwhash (Argon2id).
-  if (Platform.isMacOS) {
-    MasterVault.sodium = await SodiumSumoInit.init();
-  }
+  // Initialize libsodium on all platforms (SecureKey, pwhash).
+  MasterVault.sodium = await SodiumSumoInit.init();
 
   // One-time macOS bundle ID migration (com.example.icd360sMailClient
   // → de.icd360s.mailclient, introduced in v2.25.0). MUST run before
