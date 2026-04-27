@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.90.0 - 2026-04-27
+#### Features
+- auto-install macOS updates without drag-and-drop - (fbcbd14) - icd360sevofficial
+
+- - -
+
 ## v2.89.18 - 2026-04-27
 #### Bug Fixes
 - initialize sodium on all platforms (fixes Android crash) - (e296ee0) - icd360sevofficial
