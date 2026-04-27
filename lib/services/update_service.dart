@@ -25,7 +25,7 @@ import 'version_baseline.dart';
 /// Auto-update service for checking and installing updates
 class UpdateService {
   static const String updateUrl = 'https://mail.icd360s.de/updates/version.json';
-  static const String currentVersion = '2.89.8';
+  static const String currentVersion = '2.89.9';
 
   // Progress callback for UI updates
   static Function(int downloaded, int total, String status)? onProgress;
