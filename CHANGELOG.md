@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.89.15 - 2026-04-27
+#### Bug Fixes
+- (**security**) use Content-Type header instead of body sniffing for HTML detection - (ef0f318) - icd360sevofficial
+
+- - -
+
 ## v2.89.14 - 2026-04-27
 #### Bug Fixes
 - correct data URI check — use attrName/keysToRemove/return - (f795711) - icd360sevofficial
