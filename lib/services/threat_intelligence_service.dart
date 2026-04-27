@@ -48,18 +48,10 @@ class ThreatIntelligenceService {
       );
     }
 
-    // --- Step 4: MDN / read receipt detection (RFC 8098) ---
-    // Detect by Content-Type header, NOT by subject prefix.
-    if (_isAuthenticatedMdn(email, dmarcPass: dmarcPass)) {
-      LoggerService.log('THREAT',
-          'Authenticated MDN from $fromDomain - score=0');
-      return ThreatAnalysis(
-        level: 'Safe',
-        score: 0,
-        details: '✅ Read receipt (Content-Type=disposition-notification, '
-            'DMARC=${dmarcPass ? "pass" : "unchecked"})',
-      );
-    }
+    // --- Step 4: MDN scoring (RFC 8098 §6: MDNs are forgeable) ---
+    // MDNs are NOT whitelisted. Per RFC 8098: "MDNs can be forged
+    // as easily as ordinary Internet electronic mail." Auto-Submitted
+    // is trivially spoofable. Score MDNs normally like any email.
 
     // --- Step 5: Score based on authentication ---
     if (!dkimPass) {
@@ -231,38 +223,6 @@ class ThreatIntelligenceService {
     return domain;
   }
 
-  /// Detect legitimate MDN read receipts (RFC 8098).
-  ///
-  /// MDNs are identified by Content-Type, not by subject prefix. Subject
-  /// prefixes like "Read:" vary by locale and client and are trivially
-  /// spoofable.
-  static bool _isAuthenticatedMdn(Email email, {required bool dmarcPass}) {
-    final contentType =
-        (email.headers['Content-Type'] ?? email.headers['content-type'] ?? '')
-            .toLowerCase();
-
-    // RFC 8098: MDN uses Content-Type: multipart/report;
-    //   report-type=disposition-notification
-    final isMdn = contentType.contains('multipart/report') &&
-        contentType.contains('disposition-notification');
-
-    if (!isMdn) return false;
-
-    // Also accept if Auto-Submitted header is present (RFC 3834)
-    // — confirms it's machine-generated, not a human-crafted fake.
-    final autoSubmitted = (email.headers['Auto-Submitted'] ??
-            email.headers['auto-submitted'] ??
-            '')
-        .toLowerCase();
-    final isMachineGenerated = autoSubmitted.contains('auto-replied') ||
-        autoSubmitted.contains('auto-generated');
-
-    // Whitelist the MDN if DMARC passes OR if it is machine-generated
-    // from a multipart/report. Both conditions confirm legitimacy.
-    return dmarcPass || isMachineGenerated;
-  }
-
-  /// Extract sender IP from Received headers
   static String? _extractSenderIp(Email email) {
     final received = email.headers['Received'] ?? email.headers['received'];
 
