@@ -86,9 +86,14 @@ jobs:
 
       - name: Determine what changed
         id: check
+        env:
+          CACHE_LINUX: $CACHE_LINUX
+          CACHE_ANDROID: $CACHE_ANDROID
+          CACHE_APPLE: $CACHE_APPLE
+          CACHE_WINDOWS: $CACHE_WINDOWS
         run: |
           # If cache hit, platform hasn't changed since last successful build
-          if [ "${{ steps.cache-linux.outputs.cache-hit }}" = "true" ]; then
+          if [ "$CACHE_LINUX" = "true" ]; then
             echo "linux_changed=false" >> "$GITHUB_OUTPUT"
             echo "::notice::Linux: skipping (no changes since last successful build)"
           else
@@ -96,7 +101,7 @@ jobs:
             echo "::notice::Linux: will build"
           fi
 
-          if [ "${{ steps.cache-android.outputs.cache-hit }}" = "true" ]; then
+          if [ "$CACHE_ANDROID" = "true" ]; then
             echo "android_changed=false" >> "$GITHUB_OUTPUT"
             echo "::notice::Android: skipping (no changes since last successful build)"
           else
@@ -104,7 +109,7 @@ jobs:
             echo "::notice::Android: will build"
           fi
 
-          if [ "${{ steps.cache-apple.outputs.cache-hit }}" = "true" ]; then
+          if [ "$CACHE_APPLE" = "true" ]; then
             echo "apple_changed=false" >> "$GITHUB_OUTPUT"
             echo "::notice::Apple: skipping (no changes since last successful build)"
           else
@@ -112,7 +117,7 @@ jobs:
             echo "::notice::Apple: will build"
           fi
 
-          if [ "${{ steps.cache-windows.outputs.cache-hit }}" = "true" ]; then
+          if [ "$CACHE_WINDOWS" = "true" ]; then
             echo "windows_changed=false" >> "$GITHUB_OUTPUT"
             echo "::notice::Windows: skipping (no changes since last successful build)"
           else
@@ -345,7 +350,7 @@ jobs:
         if: success()
         run: |
           mkdir -p .cache-marker-linux
-          echo "${{ github.sha }}" > .cache-marker-linux/sha
+          echo "$GITHUB_SHA" > .cache-marker-linux/sha
 
       - name: Save Linux build cache
         if: success()
@@ -433,9 +438,13 @@ jobs:
         run: flutter pub get --enforce-lockfile
 
       - name: Compile Android ${{ matrix.flavor }} ${{ matrix.format }} (release)
+        env:
+          BUILD_FORMAT: ${{ matrix.format }}
+          BUILD_FLAVOR: ${{ matrix.flavor }}
+          BUILD_ARGS: ${{ matrix.build_args }}
         run: |
-          flutter build ${{ matrix.format }} --release \
-            --flavor ${{ matrix.flavor }} ${{ matrix.build_args }}
+          flutter build "$BUILD_FORMAT" --release \
+            --flavor "$BUILD_FLAVOR" $BUILD_ARGS
 
       - name: Upload Android ${{ matrix.flavor }} ${{ matrix.format }} artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -449,14 +458,17 @@ jobs:
 
       - name: Android ${{ matrix.flavor }} ${{ matrix.format }} build summary
         if: always()
+        env:
+          BUILD_FORMAT: ${{ matrix.format }}
+          BUILD_FLAVOR: ${{ matrix.flavor }}
         run: |
           {
-            echo "## 🤖 Android Build Summary — ${{ matrix.flavor }} (${{ matrix.format }})"
+            echo "## 🤖 Android Build Summary — $BUILD_FLAVOR ($BUILD_FORMAT)"
             echo ""
             echo "| Artifact | Size | Status |"
             echo "|----------|-----:|:------:|"
-            for f in build/app/outputs/flutter-apk/*${{ matrix.flavor }}*.apk \
-                     build/app/outputs/bundle/${{ matrix.flavor }}Release/*.aab; do
+            for f in build/app/outputs/flutter-apk/*${BUILD_FLAVOR}*.apk \
+                     build/app/outputs/bundle/${BUILD_FLAVOR}Release/*.aab; do
               if [ -f "$f" ]; then
                 NAME=$(basename "$f")
                 SIZE=$(du -h "$f" | cut -f1)
@@ -467,8 +479,8 @@ jobs:
             echo "### Build steps completed"
             echo "- ✅ Java 17 + Flutter SDK installed"
             echo "- ✅ Keystore decoded from CI secrets"
-            echo "- ✅ Flutter build ${{ matrix.format }} --flavor ${{ matrix.flavor }} (release)"
-            echo "- ✅ Uploaded as android-${{ matrix.flavor }}-${{ matrix.format }} artifact"
+            echo "- ✅ Flutter build $BUILD_FORMAT --flavor $BUILD_FLAVOR (release)"
+            echo "- ✅ Uploaded as android-$BUILD_FLAVOR-$BUILD_FORMAT artifact"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # Save Android cache marker (runs after all matrix jobs)
@@ -497,7 +509,7 @@ jobs:
       - name: Save cache marker
         run: |
           mkdir -p .cache-marker-android
-          echo "${{ github.sha }}" > .cache-marker-android/sha
+          echo "$GITHUB_SHA" > .cache-marker-android/sha
 
       - name: Save Android build cache
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
@@ -653,7 +665,7 @@ jobs:
         if: success()
         run: |
           mkdir -p .cache-marker-apple
-          echo "${{ github.sha }}" > .cache-marker-apple/sha
+          echo "$GITHUB_SHA" > .cache-marker-apple/sha
 
       - name: Save Apple build cache
         if: success()
@@ -768,7 +780,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p .cache-marker-windows
-          echo "${{ github.sha }}" > .cache-marker-windows/sha
+          echo "$GITHUB_SHA" > .cache-marker-windows/sha
 
       - name: Save Windows build cache
         if: success()
@@ -929,7 +941,7 @@ jobs:
         run: |
           # Checkout repo to get CHANGELOG.md and conversion script
           # (artifacts don't include repo files)
-          git clone --depth 1 https://github.com/${{ github.repository }}.git repo-for-changelog || true
+          git clone --depth 1 "https://github.com/${GITHUB_REPOSITORY}.git" repo-for-changelog || true
           if [ -f "repo-for-changelog/CHANGELOG.md" ] && [ -f "repo-for-changelog/scripts/changelog-to-json.sh" ]; then
             bash repo-for-changelog/scripts/changelog-to-json.sh repo-for-changelog/CHANGELOG.md > deploy/downloads/mail/changelog.json
             echo "✓ changelog.json generated ($(wc -l < deploy/downloads/mail/changelog.json) lines)"
