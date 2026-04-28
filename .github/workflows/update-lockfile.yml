@@ -11,6 +11,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: update-lockfile
+  cancel-in-progress: true
+
 jobs:
   update-lockfile:
     name: Sync pubspec.lock
