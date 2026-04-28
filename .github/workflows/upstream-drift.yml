@@ -36,12 +36,13 @@ jobs:
       - name: Manage drift issue
         env:
           GH_TOKEN: ${{ github.token }}
+          DRIFT_COUNT: ${{ steps.diff.outputs.count }}
         run: |
           set -e
           TITLE="Upstream drift: enough_mail"
           EXISTING=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')
 
-          if [ "${{ steps.diff.outputs.count }}" = "0" ]; then
+          if [ "$DRIFT_COUNT" = "0" ]; then
             if [ -n "$EXISTING" ]; then
               gh issue close "$EXISTING" -c "No drift detected on $(date -u +%F). Closing automatically."
             fi
@@ -53,7 +54,7 @@ jobs:
             echo "Detected differences between \`enough_mail_fork/\` and upstream [\`Enough-Software/enough_mail@main\`](https://github.com/Enough-Software/enough_mail/tree/main)."
             echo
             echo "**Run date:** $(date -u +%FT%TZ)"
-            echo "**Differing entries:** ${{ steps.diff.outputs.count }}"
+            echo "**Differing entries:** $DRIFT_COUNT"
             echo
             echo '## File-level diff (first 200 entries)'
             echo
