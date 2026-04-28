@@ -130,10 +130,16 @@ class MasterPasswordService {
   /// persisted rate-limit state. Saves the new state immediately so
   /// the lockout survives a process kill.
   static Future<void> _enforceTamperLockout(String reason) async {
+    // Crash corrupts AES-GCM state file. Reset instead of 24h lockout.
+    // Attacker gains nothing from file tampering — still needs password.
     LoggerService.log('AUTH',
-        '⚠ Rate-limit tamper / corruption detected ($reason) — forcing 24 h lockout');
-    _failedAttempts = _freeAttempts + 10;
-    _lockoutUntil = DateTime.now().add(_tamperLockoutDuration);
+        '⚠ Rate-limit state corrupt ($reason) — resetting');
+    _failedAttempts = 0;
+    _lockoutUntil = null;
+    try {
+      final f = File(_rateLimitFilePath!);
+      if (await f.exists()) await f.delete();
+    } catch (_) {}
     await _saveRateLimitState();
   }
 
