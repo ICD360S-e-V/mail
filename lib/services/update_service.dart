@@ -25,7 +25,7 @@ import 'version_baseline.dart';
 /// Auto-update service for checking and installing updates
 class UpdateService {
   static const String updateUrl = 'https://mail.icd360s.de/updates/version.json';
-  static const String currentVersion = '2.90.8';
+  static const String currentVersion = '2.90.7';
 
   // Progress callback for UI updates
   static Function(int downloaded, int total, String status)? onProgress;
@@ -565,7 +565,7 @@ class UpdateService {
     try {
       // 1. Mount DMG silently
       final mountResult = await Process.run('hdiutil', [
-        'attach', updateFile.path, '-nobrowse', '-quiet',
+        'attach', updateFile.path, '-nobrowse',
       ]);
       if (mountResult.exitCode != 0) {
         LoggerService.log('UPDATE', '❌ Failed to mount DMG: ${mountResult.stderr}');
