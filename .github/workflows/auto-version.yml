@@ -74,8 +74,10 @@ jobs:
 
       - name: Convert to annotated tag and push
         if: steps.cog_bump.outputs.version != ''
+        env:
+          COG_VERSION: ${{ steps.cog_bump.outputs.version }}
         run: |
-          VERSION="${{ steps.cog_bump.outputs.version }}"
+          VERSION="$COG_VERSION"
           TAG="v${VERSION}"
           PREV_TAG=$(git tag -l 'v*' --sort=-version:refname | grep -v "$TAG" | head -1)
 
