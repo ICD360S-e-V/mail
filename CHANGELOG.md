@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.90.4 - 2026-04-28
+#### Bug Fixes
+- (**ci**) replace all shell ${{ }} interpolation with env vars - (6ef3dfa) - icd360sevofficial
+
+- - -
+
 ## v2.90.3 - 2026-04-28
 #### Bug Fixes
 - (**ci**) pass step outputs through env vars (upstream-drift) - (5949c7b) - icd360sevofficial
