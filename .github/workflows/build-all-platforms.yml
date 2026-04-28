@@ -627,9 +627,10 @@ jobs:
           cp -R build/macos/Build/Products/Release/icd360s_mail_client.app "$DMG_STAGING/"
           ln -s /Applications "$DMG_STAGING/Applications"
 
+          # Create APFS DMG (required for macOS 26 Tahoe — HFS+ DMGs fail to mount)
           hdiutil create -volname "ICD360S Mail Client" \
             -srcfolder "$DMG_STAGING" \
-            -ov -format UDZO \
+            -ov -format UDZO -fs APFS \
             build/icd360s-mail.dmg
 
           rm -rf "$DMG_STAGING"
