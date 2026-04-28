@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.90.3 - 2026-04-28
+#### Bug Fixes
+- (**ci**) pass step outputs through env vars (upstream-drift) - (5949c7b) - icd360sevofficial
+- (**ci**) pass step outputs through env vars (auto-version) - (f515544) - icd360sevofficial
+
+- - -
+
 ## v2.90.2 - 2026-04-28
 #### Bug Fixes
 - (**ci**) verify Flutter SDK integrity with SHA-256 on macOS - (8f575e8) - icd360sevofficial
