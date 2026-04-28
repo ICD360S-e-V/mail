@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.90.7 - 2026-04-28
+#### Performance Improvements
+- (**ci**) cache sodium native build hooks across runs - (1f6e9c3) - icd360sevofficial
+
+- - -
+
 ## v2.90.6 - 2026-04-28
 #### Bug Fixes
 - reset rate-limit on corruption instead of 24h lockout - (3c0a218) - icd360sevofficial
