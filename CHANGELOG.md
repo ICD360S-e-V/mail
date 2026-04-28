@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.90.2 - 2026-04-28
+#### Bug Fixes
+- (**ci**) verify Flutter SDK integrity with SHA-256 on macOS - (8f575e8) - icd360sevofficial
+
+- - -
+
 ## v2.90.1 - 2026-04-28
 #### Bug Fixes
 - per-user install, auto-detect version, remove taskbar pin - (c5d47dc) - icd360sevofficial
