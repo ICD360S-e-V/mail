@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.90.10 - 2026-04-28
+#### Bug Fixes
+- (**ci**) switch DMG from HFS+ to APFS for macOS 26 Tahoe - (b14a486) - icd360sevofficial
+
+- - -
+
 ## v2.90.9 - 2026-04-28
 #### Bug Fixes
 - remove -quiet from hdiutil attach (suppressed mount point output) - (4e84dce) - icd360sevofficial
