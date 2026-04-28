@@ -48,10 +48,10 @@ class DnsChecker {
       }
       if (label.startsWith('_')) {
         if (!_underscoredLabel.hasMatch(label)) {
-          throw ArgumentError('Invalid underscored label: \$label');
+          throw ArgumentError('Invalid underscored label: $label');
         }
       } else if (!_ldhLabel.hasMatch(label)) {
-        throw ArgumentError('Invalid label: \$label');
+        throw ArgumentError('Invalid label: $label');
       }
     }
   }
