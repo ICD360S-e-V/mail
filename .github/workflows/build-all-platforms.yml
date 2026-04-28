@@ -516,10 +516,24 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      # Install Flutter manually on macOS (subosito has tar bug on macOS)
+      # Install Flutter via official archive with SHA-256 verification.
+      # Avoids git clone tag-repointing attacks and macOS tar bugs.
       - name: Install Flutter (manual)
         run: |
-          git clone https://github.com/flutter/flutter.git -b ${{ env.FLUTTER_VERSION }} --depth 1 "$HOME/flutter"
+          FLUTTER_ZIP="flutter_macos_${{ env.FLUTTER_VERSION }}-stable.zip"
+          FLUTTER_URL="https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/${FLUTTER_ZIP}"
+          EXPECTED_SHA="05fd35d2e4c29def0acb02e08e4faa6853115c3d9cf05c4e30c7e687b51f746d"
+          curl -fsSL -o "$FLUTTER_ZIP" "$FLUTTER_URL"
+          ACTUAL_SHA=$(shasum -a 256 "$FLUTTER_ZIP" | cut -d' ' -f1)
+          if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
+            echo "::error::Flutter SDK integrity check FAILED!"
+            echo "Expected: $EXPECTED_SHA"
+            echo "Actual:   $ACTUAL_SHA"
+            exit 1
+          fi
+          echo "✓ Flutter SDK SHA-256 verified"
+          unzip -q "$FLUTTER_ZIP" -d "$HOME"
+          rm "$FLUTTER_ZIP"
           echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
 
       - name: Flutter precache
