@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.90.1 - 2026-04-28
+#### Bug Fixes
+- per-user install, auto-detect version, remove taskbar pin - (c5d47dc) - icd360sevofficial
+
+- - -
+
 ## v2.90.0 - 2026-04-27
 #### Features
 - auto-install macOS updates without drag-and-drop - (fbcbd14) - icd360sevofficial
