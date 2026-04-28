@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.90.9 - 2026-04-28
+#### Bug Fixes
+- remove -quiet from hdiutil attach (suppressed mount point output) - (4e84dce) - icd360sevofficial
+
+- - -
+
 ## v2.90.8 - 2026-04-28
 #### Bug Fixes
 - unescape label variable in DNS validation errors - (216745e) - icd360sevofficial
