@@ -1,5 +1,5 @@
 #define MyAppName "ICD360S Mail Client"
-#define MyAppVersion "2.21.5"
+#define MyAppVersion GetStringFileInfo(AddBackslash(SourcePath) + "..\build\windows\x64\runner\Release\icd360s_mail_client.exe", "ProductVersion")
 #define MyAppPublisher "ICD360S e.V."
 #define MyAppURL "https://icd360s.de"
 #define MyAppExeName "icd360s_mail_client.exe"
@@ -39,8 +39,8 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 UninstallDisplayName={#MyAppName}
 
 ; Privileges
-PrivilegesRequired=admin
-PrivilegesRequiredOverridesAllowed=dialog
+PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=dialog commandline
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -48,7 +48,6 @@ Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
-Name: "pintotaskbar"; Description: "Pin to Windows Taskbar (recommended)"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
 ; Main executable
@@ -119,16 +118,7 @@ var
 begin
   if CurStep = ssPostInstall then
   begin
-    // Pin to taskbar if selected
-    if WizardIsTaskSelected('pintotaskbar') then
-    begin
-      Exec('powershell.exe',
-        '-Command "$shell = New-Object -ComObject Shell.Application; ' +
-        '$item = $shell.Namespace(''' + ExpandConstant('{app}') + ''').ParseName(''' +
-        ExpandConstant('{#MyAppExeName}') + '''); ' +
-        '$item.InvokeVerb(''taskbarpin'')"',
-        '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    end;
+    // Taskbar pinning removed — blocked by Windows 11+
   end;
 end;
 
