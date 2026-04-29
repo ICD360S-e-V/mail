@@ -149,7 +149,7 @@ jobs:
           sudo gem install fpm
 
       - name: Cache native build hooks (sodium)
-        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
         with:
           path: .dart_tool/hooks_runner/
           key: native-hooks-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pubspec.lock') }}
@@ -443,7 +443,7 @@ jobs:
           chmod 600 android/key.properties
 
       - name: Cache native build hooks (sodium)
-        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
         with:
           path: .dart_tool/hooks_runner/
           key: native-hooks-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pubspec.lock') }}
@@ -573,7 +573,7 @@ jobs:
           flutter doctor -v
 
       - name: Cache native build hooks (sodium)
-        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
         with:
           path: .dart_tool/hooks_runner/
           key: native-hooks-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pubspec.lock') }}
@@ -719,7 +719,7 @@ jobs:
           cache: true
 
       - name: Cache native build hooks (sodium)
-        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
         with:
           path: .dart_tool/hooks_runner/
           key: native-hooks-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pubspec.lock') }}
