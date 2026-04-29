@@ -87,10 +87,10 @@ jobs:
       - name: Determine what changed
         id: check
         env:
-          CACHE_LINUX: $CACHE_LINUX
-          CACHE_ANDROID: $CACHE_ANDROID
-          CACHE_APPLE: $CACHE_APPLE
-          CACHE_WINDOWS: $CACHE_WINDOWS
+          CACHE_LINUX: ${{ steps.cache-linux.outputs.cache-hit }}
+          CACHE_ANDROID: ${{ steps.cache-android.outputs.cache-hit }}
+          CACHE_APPLE: ${{ steps.cache-apple.outputs.cache-hit }}
+          CACHE_WINDOWS: ${{ steps.cache-windows.outputs.cache-hit }}
         run: |
           # If cache hit, platform hasn't changed since last successful build
           if [ "$CACHE_LINUX" = "true" ]; then
@@ -176,7 +176,7 @@ jobs:
             --description "ICD360S Mail Client - Modern email client with threat detection" \
             --maintainer "ICD360S e.V." \
             --url "https://github.com/ICD360S-e-V/mail" \
-            --license "Proprietary" \
+            --license "AGPL-3.0-or-later" \
             --depends libgtk-3-0 \
             --depends libsecret-1-0 \
             --category mail \
@@ -192,7 +192,7 @@ jobs:
             --description "ICD360S Mail Client - Modern email client with threat detection" \
             --maintainer "ICD360S e.V." \
             --url "https://github.com/ICD360S-e-V/mail" \
-            --license "Proprietary" \
+            --license "AGPL-3.0-or-later" \
             --depends gtk3 \
             --depends libsecret \
             --category "Applications/Internet" \
@@ -547,8 +547,10 @@ jobs:
       # Install Flutter via official archive with SHA-256 verification.
       # Avoids git clone tag-repointing attacks and macOS tar bugs.
       - name: Install Flutter (manual)
+        env:
+          FL_VER: ${{ env.FLUTTER_VERSION }}
         run: |
-          FLUTTER_ZIP="flutter_macos_${{ env.FLUTTER_VERSION }}-stable.zip"
+          FLUTTER_ZIP="flutter_macos_${FL_VER}-stable.zip"
           FLUTTER_URL="https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/${FLUTTER_ZIP}"
           EXPECTED_SHA="05fd35d2e4c29def0acb02e08e4faa6853115c3d9cf05c4e30c7e687b51f746d"
           curl -fsSL -o "$FLUTTER_ZIP" "$FLUTTER_URL"
