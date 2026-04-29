@@ -170,8 +170,6 @@ class _AttachmentViewerWindowState extends State<AttachmentViewerWindow> {
           controller: _pdfController,
           params: PdfViewerParams(
             textSelectionParams: PdfTextSelectionParams(enabled: true),
-            maxScale: 5.0,
-            minScale: 0.5,
             scrollByMouseWheel: 1.0,
             pageDropShadow: const BoxShadow(
               color: Color(0x33000000),
