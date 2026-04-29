@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.90.13 - 2026-04-29
+#### Bug Fixes
+- (**ci**) use cache/restore for Android sodium hooks (eliminates 409 conflicts) - (5db6a0a) - icd360sevofficial
+
+- - -
+
 ## v2.90.12 - 2026-04-29
 #### Bug Fixes
 - (**ci**) migrate sodium cache from actions/cache v4 (Node 20) to v5 (Node 24) - (931ee2f) - icd360sevofficial
