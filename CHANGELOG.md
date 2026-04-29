@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.91.1 - 2026-04-29
+#### Bug Fixes
+- (**ci**) use RELEASE_PAT in update-lockfile workflow - (e57e928) - icd360sevofficial
+
+- - -
+
 ## v2.91.0 - 2026-04-29
 #### Features
 - upgrade pdfrx from 1.0.100 to 2.2.24 - (b0483a5) - icd360sevofficial
