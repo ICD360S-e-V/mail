@@ -1015,11 +1015,40 @@ jobs:
             mail-deploy@mail.icd360s.de:./
 
       - name: Verify deploy via HTTPS
+        env:
+          EXPECTED_VERSION: ${{ github.ref_name }}
         run: |
-          # Verify by hitting the public endpoint instead of SSH
-          # (the deploy user has no read access to the server filesystem)
-          echo "## Deploy verification (via HTTPS):" >> "$GITHUB_STEP_SUMMARY"
-          curl -sf https://mail.icd360s.de/updates/version.json | python3 -m json.tool >> "$GITHUB_STEP_SUMMARY" || echo "version.json not yet updated"
+          expected="${EXPECTED_VERSION#v}"
+          echo "Expected version: $expected"
+          echo "## Deploy verification" >> "$GITHUB_STEP_SUMMARY"
+
+          for attempt in 1 2 3; do
+            echo "--- Attempt $attempt/3 ---"
+            response=$(curl -sfS \
+              -H 'Cache-Control: no-cache' \
+              "https://mail.icd360s.de/updates/version.json?_cb=$(date +%s%N)" 2>&1) || {
+              echo "::warning::Attempt $attempt: version.json not yet available"
+              [ "$attempt" -lt 3 ] && sleep 15 && continue
+              echo "version.json not reachable after 3 attempts (H2 signer may still be processing)" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            }
+
+            deployed=$(echo "$response" | jq -r '.version // empty')
+            if [ "$deployed" = "$expected" ]; then
+              echo "Deployed version verified: $deployed"
+              echo "Deployed version **$deployed** matches tag $EXPECTED_VERSION" >> "$GITHUB_STEP_SUMMARY"
+              echo '```json' >> "$GITHUB_STEP_SUMMARY"
+              echo "$response" | python3 -m json.tool >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+
+            echo "::warning::Attempt $attempt: version mismatch (deployed=$deployed, expected=$expected)"
+            [ "$attempt" -lt 3 ] && sleep 15
+          done
+
+          echo "::warning::Version not yet updated after 3 attempts (deployed=$deployed, expected=$expected). H2 signer may still be processing."
+          echo "Version not yet updated: deployed=$deployed, expected=$expected (H2 signer pending)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Cleanup SSH
         if: always()
