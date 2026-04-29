@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.90.15 - 2026-04-29
+#### Code Refactoring
+- replace flutter_inappwebview with url_launcher for legal pages - (57c41d1) - icd360sevofficial
+
+- - -
+
 ## v2.90.14 - 2026-04-29
 #### Bug Fixes
 - (**macos**) suppress deprecation warnings from flutter_inappwebview_macos - (76ea269) - icd360sevofficial
