@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.91.2 - 2026-04-29
+#### Bug Fixes
+- remove deprecated maxScale/minScale params from pdfrx 2.x PdfViewerParams - (4c4f8e5) - icd360sevofficial
+
+- - -
+
 ## v2.91.1 - 2026-04-29
 #### Bug Fixes
 - (**ci**) use RELEASE_PAT in update-lockfile workflow - (e57e928) - icd360sevofficial
