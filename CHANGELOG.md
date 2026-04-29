@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.90.11 - 2026-04-29
+#### Bug Fixes
+- (**ci**) repair cache detection, correct fpm license, eliminate last ${{ }} in run block - (e39f350) - icd360sevofficial
+
+- - -
+
 ## v2.90.10 - 2026-04-28
 #### Bug Fixes
 - (**ci**) switch DMG from HFS+ to APFS for macOS 26 Tahoe - (b14a486) - icd360sevofficial
