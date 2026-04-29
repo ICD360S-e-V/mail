@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.90.14 - 2026-04-29
+#### Bug Fixes
+- (**macos**) suppress deprecation warnings from flutter_inappwebview_macos - (76ea269) - icd360sevofficial
+
+- - -
+
 ## v2.90.13 - 2026-04-29
 #### Bug Fixes
 - (**ci**) use cache/restore for Android sodium hooks (eliminates 409 conflicts) - (5db6a0a) - icd360sevofficial
