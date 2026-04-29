@@ -442,8 +442,8 @@ jobs:
           } > android/key.properties
           chmod 600 android/key.properties
 
-      - name: Cache native build hooks (sodium)
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+      - name: Restore native build hooks (sodium)
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
         with:
           path: .dart_tool/hooks_runner/
           key: native-hooks-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pubspec.lock') }}
