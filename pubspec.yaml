@@ -2,7 +2,7 @@ name: icd360s_mail_client
 description: "ICD360S Mail Client - Modern email client with threat detection"
 publish_to: 'none'
 
-version: 2.90.15+1058
+version: 2.90.14+1056
 
 environment:
   sdk: ^3.6.1
@@ -68,7 +68,7 @@ dependencies:
   pdf: ^3.11.1  # PDF generation for printing images
 
   # PDF Viewer - native PDFium rendering (no WebView dependency)
-  pdfrx: ^1.0.100  # Native PDF viewer for Windows/macOS/Linux/Android/iOS
+  pdfrx: ^2.2.24  # Native PDF viewer for Windows/macOS/Linux/Android/iOS
 
   # Document Scanner — primary: uses VisionKit on iOS, ML Kit on Android
   # (ML Kit requires Google Play Services — works on standard Android).
@@ -100,7 +100,7 @@ msix_config:
   publisher_display_name: ICD360S e.V.
   publisher: CN=ICD360S
   identity_name: ICD360S.MailClient
-  msix_version: 2.90.15.1058
+  msix_version: 2.90.14.1056
   capabilities: internetClient
   protocol_activation: mailto
 

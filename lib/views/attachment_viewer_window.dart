@@ -169,7 +169,7 @@ class _AttachmentViewerWindowState extends State<AttachmentViewerWindow> {
           sourceName: widget.fileName,
           controller: _pdfController,
           params: PdfViewerParams(
-            enableTextSelection: true,
+            textSelectionParams: PdfTextSelectionParams(enabled: true),
             maxScale: 5.0,
             minScale: 0.5,
             scrollByMouseWheel: 1.0,
