@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.92.1 - 2026-05-01
+#### Performance Improvements
+- (**ci**) split Apple build into parallel iOS + macOS jobs - (0cdece9) - icd360sevofficial
+
+- - -
+
 ## v2.92.0 - 2026-05-01
 #### Features
 - (**ios**) migrate to UIScene lifecycle (Apple requirement) - (f571bd6) - icd360sevofficial
