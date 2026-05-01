@@ -112,15 +112,6 @@ begin
     Result := True;
 end;
 
-procedure CurStepChanged(CurStep: TSetupStep);
-var
-  ResultCode: Integer;
-begin
-  if CurStep = ssPostInstall then
-  begin
-    // Taskbar pinning removed — blocked by Windows 11+
-  end;
-end;
 
 
 
