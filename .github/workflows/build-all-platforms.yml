@@ -1009,7 +1009,7 @@ jobs:
           # - rsync can ONLY write to /var/www/html/downloads/mail/
           # - No shell, no port forwarding, no agent forwarding
           # - Even if the key is stolen, attacker can only push files to that directory
-          rsync -avz --delete --chmod=D755,F644 \
+          rsync -avz --delete --chmod=D755,F644 --protocol=31 \
             -e "ssh -i ~/.ssh/vps_deploy_key -p 36000 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=~/.ssh/known_hosts" \
             deploy/downloads/mail/ \
             mail-deploy@mail.icd360s.de:./
