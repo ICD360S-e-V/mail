@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.91.5 - 2026-05-01
+#### Bug Fixes
+- (**ci**) add rsync --protocol=31 for server compatibility - (78180b5) - icd360sevofficial
+
+- - -
+
 ## v2.91.4 - 2026-05-01
 #### Bug Fixes
 - unescape $ in DNS validation regex (was \$ — never matched) - (1fdedc0) - icd360sevofficial
