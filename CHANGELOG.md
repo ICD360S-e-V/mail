@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.93.4 - 2026-05-01
+#### Performance Improvements
+- (**ci**) cache VC++ Redistributable on Windows - (7d10a75) - icd360sevofficial
+
+- - -
+
 ## v2.93.3 - 2026-05-01
 #### Performance Improvements
 - (**ci**) add caching for Flutter SDK, Gradle, CocoaPods, pub deps - (5738e60) - icd360sevofficial
