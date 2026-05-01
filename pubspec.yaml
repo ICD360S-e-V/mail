@@ -5,7 +5,7 @@ publish_to: 'none'
 version: 2.92.2+1079
 
 environment:
-  sdk: ^3.7.0
+  sdk: ^3.10.0
 
 dependencies:
   flutter:
@@ -54,7 +54,7 @@ dependencies:
   window_manager: ^0.5.1  # Window control (maximize, minimize, etc.)
 
   # Notifications (cross-platform)
-  flutter_local_notifications: ^18.0.1  # Windows, macOS, Linux, Android, iOS
+  flutter_local_notifications: ^21.0.0  # Windows, macOS, Linux, Android, iOS
 
   # URL launcher (cross-platform)
   url_launcher: ^6.3.1  # Open URLs in external browser (all platforms)
