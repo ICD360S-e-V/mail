@@ -38,14 +38,14 @@ jobs:
         id: hashes
         run: |
           # Hash shared code (lib/, pubspec.*, assets/, enough_mail_fork/)
-          SHARED_HASH=$(find lib/ pubspec.yaml pubspec.lock assets/ enough_mail_fork/ -type f 2>/dev/null | sort | xargs cat 2>/dev/null | sha256sum | cut -d' ' -f1)
+          SHARED_HASH=$(find lib/ pubspec.yaml pubspec.lock assets/ enough_mail_fork/ -type f -print0 2>/dev/null | sort -z | xargs -0 cat 2>/dev/null | sha256sum | cut -d' ' -f1)
           echo "shared_hash=$SHARED_HASH" >> "$GITHUB_OUTPUT"
 
           # Hash platform-specific dirs
-          LINUX_HASH=$(find linux/ -type f | sort | xargs cat | sha256sum | cut -d' ' -f1)
-          ANDROID_HASH=$(find android/ -type f | sort | xargs cat | sha256sum | cut -d' ' -f1)
-          APPLE_HASH=$(find ios/ macos/ -type f | sort | xargs cat | sha256sum | cut -d' ' -f1)
-          WINDOWS_HASH=$(find windows/ -type f | sort | xargs cat | sha256sum | cut -d' ' -f1)
+          LINUX_HASH=$(find linux/ -type f -print0 | sort -z | xargs -0 cat | sha256sum | cut -d' ' -f1)
+          ANDROID_HASH=$(find android/ -type f -print0 | sort -z | xargs -0 cat | sha256sum | cut -d' ' -f1)
+          APPLE_HASH=$(find ios/ macos/ -type f -print0 | sort -z | xargs -0 cat | sha256sum | cut -d' ' -f1)
+          WINDOWS_HASH=$(find windows/ -type f -print0 | sort -z | xargs -0 cat | sha256sum | cut -d' ' -f1)
 
           echo "linux_hash=${SHARED_HASH:0:16}${LINUX_HASH:0:16}" >> "$GITHUB_OUTPUT"
           echo "android_hash=${SHARED_HASH:0:16}${ANDROID_HASH:0:16}" >> "$GITHUB_OUTPUT"
@@ -350,8 +350,8 @@ jobs:
         if: success()
         id: hashes
         run: |
-          SHARED_HASH=$(find lib/ pubspec.yaml pubspec.lock assets/ enough_mail_fork/ -type f 2>/dev/null | sort | xargs cat 2>/dev/null | sha256sum | cut -d' ' -f1)
-          LINUX_HASH=$(find linux/ -type f | sort | xargs cat | sha256sum | cut -d' ' -f1)
+          SHARED_HASH=$(find lib/ pubspec.yaml pubspec.lock assets/ enough_mail_fork/ -type f -print0 2>/dev/null | sort -z | xargs -0 cat 2>/dev/null | sha256sum | cut -d' ' -f1)
+          LINUX_HASH=$(find linux/ -type f -print0 | sort -z | xargs -0 cat | sha256sum | cut -d' ' -f1)
           echo "linux_hash=${SHARED_HASH:0:16}${LINUX_HASH:0:16}" >> "$GITHUB_OUTPUT"
 
       - name: Save cache marker
@@ -527,8 +527,8 @@ jobs:
       - name: Compute Android hash
         id: hashes
         run: |
-          SHARED_HASH=$(find lib/ pubspec.yaml pubspec.lock assets/ enough_mail_fork/ -type f 2>/dev/null | sort | xargs cat 2>/dev/null | sha256sum | cut -d' ' -f1)
-          ANDROID_HASH=$(find android/ -type f | sort | xargs cat | sha256sum | cut -d' ' -f1)
+          SHARED_HASH=$(find lib/ pubspec.yaml pubspec.lock assets/ enough_mail_fork/ -type f -print0 2>/dev/null | sort -z | xargs -0 cat 2>/dev/null | sha256sum | cut -d' ' -f1)
+          ANDROID_HASH=$(find android/ -type f -print0 | sort -z | xargs -0 cat | sha256sum | cut -d' ' -f1)
           echo "android_hash=${SHARED_HASH:0:16}${ANDROID_HASH:0:16}" >> "$GITHUB_OUTPUT"
 
       - name: Save cache marker
@@ -705,8 +705,8 @@ jobs:
           key: pods-macos-${{ hashFiles('macos/Podfile.lock') }}
           restore-keys: pods-macos-
 
-      - name: Cache native build hooks (sodium)
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+      - name: Restore native build hooks (sodium)
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
         with:
           path: .dart_tool/hooks_runner/
           key: native-hooks-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pubspec.lock') }}
@@ -767,8 +767,8 @@ jobs:
         if: success()
         id: hashes
         run: |
-          SHARED_HASH=$(find lib/ pubspec.yaml pubspec.lock assets/ enough_mail_fork/ -type f 2>/dev/null | sort | xargs cat 2>/dev/null | sha256sum | cut -d' ' -f1)
-          APPLE_HASH=$(find ios/ macos/ -type f | sort | xargs cat | sha256sum | cut -d' ' -f1)
+          SHARED_HASH=$(find lib/ pubspec.yaml pubspec.lock assets/ enough_mail_fork/ -type f -print0 2>/dev/null | sort -z | xargs -0 cat 2>/dev/null | sha256sum | cut -d' ' -f1)
+          APPLE_HASH=$(find ios/ macos/ -type f -print0 | sort -z | xargs -0 cat | sha256sum | cut -d' ' -f1)
           echo "apple_hash=${SHARED_HASH:0:16}${APPLE_HASH:0:16}" >> "$GITHUB_OUTPUT"
 
       - name: Save cache marker
@@ -897,8 +897,8 @@ jobs:
         id: hashes
         shell: bash
         run: |
-          SHARED_HASH=$(find lib/ pubspec.yaml pubspec.lock assets/ enough_mail_fork/ -type f 2>/dev/null | sort | xargs cat 2>/dev/null | sha256sum | cut -d' ' -f1)
-          WINDOWS_HASH=$(find windows/ -type f | sort | xargs cat | sha256sum | cut -d' ' -f1)
+          SHARED_HASH=$(find lib/ pubspec.yaml pubspec.lock assets/ enough_mail_fork/ -type f -print0 2>/dev/null | sort -z | xargs -0 cat 2>/dev/null | sha256sum | cut -d' ' -f1)
+          WINDOWS_HASH=$(find windows/ -type f -print0 | sort -z | xargs -0 cat | sha256sum | cut -d' ' -f1)
           echo "windows_hash=${SHARED_HASH:0:16}${WINDOWS_HASH:0:16}" >> "$GITHUB_OUTPUT"
 
       - name: Save cache marker
