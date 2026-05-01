@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.92.0 - 2026-05-01
+#### Features
+- (**ios**) migrate to UIScene lifecycle (Apple requirement) - (f571bd6) - icd360sevofficial
+
+- - -
+
 ## v2.91.6 - 2026-05-01
 #### Bug Fixes
 - (**ci**) revert rsync --protocol=31 (root cause was deploy user shell) - (2f2ea28) - icd360sevofficial
