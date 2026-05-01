@@ -534,18 +534,16 @@ jobs:
           key: build-success-android-${{ steps.hashes.outputs.android_hash }}
 
   # ============================================================
-  # Apple Build - iOS + macOS (on same runner)
+  # iOS Build
   # ============================================================
-  build-apple:
-    name: Apple (iOS + macOS)
+  build-ios:
+    name: iOS
     needs: detect-changes
     if: needs.detect-changes.outputs.apple_changed == 'true'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      # Install Flutter via official archive with SHA-256 verification.
-      # Avoids git clone tag-repointing attacks and macOS tar bugs.
       - name: Install Flutter (manual)
         env:
           FL_VER: ${{ env.FLUTTER_VERSION }}
@@ -569,7 +567,7 @@ jobs:
       - name: Flutter precache
         run: |
           export PATH="$HOME/flutter/bin:$PATH"
-          flutter precache --ios --macos
+          flutter precache --ios
           flutter doctor -v
 
       - name: Cache native build hooks (sodium)
@@ -596,6 +594,75 @@ jobs:
           cp -r build/ios/iphoneos/Runner.app build/ios/Payload/
           cd build/ios && zip -r ../icd360s-mail.ipa Payload/
 
+      - name: Upload iOS artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ios-build
+          path: build/icd360s-mail.ipa
+          retention-days: 30
+
+      - name: iOS build summary
+        if: always()
+        run: |
+          {
+            echo "## iOS Build Summary"
+            echo ""
+            if [ -f "build/icd360s-mail.ipa" ]; then
+              SIZE=$(du -h build/icd360s-mail.ipa | cut -f1)
+              echo "- ✅ icd360s-mail.ipa ($SIZE)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ============================================================
+  # macOS Build
+  # ============================================================
+  build-macos:
+    name: macOS
+    needs: detect-changes
+    if: needs.detect-changes.outputs.apple_changed == 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Flutter (manual)
+        env:
+          FL_VER: ${{ env.FLUTTER_VERSION }}
+        run: |
+          FLUTTER_ZIP="flutter_macos_${FL_VER}-stable.zip"
+          FLUTTER_URL="https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/${FLUTTER_ZIP}"
+          EXPECTED_SHA="05fd35d2e4c29def0acb02e08e4faa6853115c3d9cf05c4e30c7e687b51f746d"
+          curl -fsSL -o "$FLUTTER_ZIP" "$FLUTTER_URL"
+          ACTUAL_SHA=$(shasum -a 256 "$FLUTTER_ZIP" | cut -d' ' -f1)
+          if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
+            echo "::error::Flutter SDK integrity check FAILED!"
+            echo "Expected: $EXPECTED_SHA"
+            echo "Actual:   $ACTUAL_SHA"
+            exit 1
+          fi
+          echo "✓ Flutter SDK SHA-256 verified"
+          unzip -q "$FLUTTER_ZIP" -d "$HOME"
+          rm "$FLUTTER_ZIP"
+          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Flutter precache
+        run: |
+          export PATH="$HOME/flutter/bin:$PATH"
+          flutter precache --macos
+          flutter doctor -v
+
+      - name: Cache native build hooks (sodium)
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: .dart_tool/hooks_runner/
+          key: native-hooks-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: |
+            native-hooks-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Resolve Flutter dependencies
+        run: |
+          export PATH="$HOME/flutter/bin:$PATH"
+          flutter pub get --enforce-lockfile
+
       - name: Configure macOS signing for CI (manual, no team)
         run: |
           sed -i '' 's/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g' macos/Runner.xcodeproj/project.pbxproj
@@ -613,36 +680,14 @@ jobs:
 
       - name: Create macOS .dmg (with /Applications symlink)
         run: |
-          # Stage the .app alongside an /Applications symlink so the
-          # mounted DMG follows the standard "drag-here" macOS install
-          # convention. Without this, double-clicking the app from the
-          # mounted DMG triggers App Translocation (Gatekeeper Path
-          # Randomization, macOS Sierra+) which runs the binary from a
-          # randomized read-only `/private/var/folders/...` path. That
-          # breaks relative paths and `getApplicationSupportDirectory()`
-          # in unpredictable ways and was responsible for the v2.28.0
-          # "moves up and down + Application Not Responding" hang on
-          # first launch (rdar/no-public-API).
-          #
-          # https://lapcatsoftware.com/articles/app-translocation.html
           DMG_STAGING="$(mktemp -d)"
           cp -R build/macos/Build/Products/Release/icd360s_mail_client.app "$DMG_STAGING/"
           ln -s /Applications "$DMG_STAGING/Applications"
-
-          # Create APFS DMG (required for macOS 26 Tahoe — HFS+ DMGs fail to mount)
           hdiutil create -volname "ICD360S Mail Client" \
             -srcfolder "$DMG_STAGING" \
             -ov -format UDZO -fs APFS \
             build/icd360s-mail.dmg
-
           rm -rf "$DMG_STAGING"
-
-      - name: Upload iOS artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: ios-build
-          path: build/icd360s-mail.ipa
-          retention-days: 30
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -651,33 +696,16 @@ jobs:
           path: build/icd360s-mail.dmg
           retention-days: 30
 
-      - name: Apple build summary
+      - name: macOS build summary
         if: always()
         run: |
           {
-            echo "## 🍎 Apple Build Summary (iOS + macOS)"
+            echo "## macOS Build Summary"
             echo ""
-            echo "| Artifact | Size | Status |"
-            echo "|----------|-----:|:------:|"
-            if [ -f "build/icd360s-mail.ipa" ]; then
-              SIZE=$(du -h build/icd360s-mail.ipa | cut -f1)
-              echo "| \`icd360s-mail.ipa\` | $SIZE | ✅ |"
-            fi
             if [ -f "build/icd360s-mail.dmg" ]; then
               SIZE=$(du -h build/icd360s-mail.dmg | cut -f1)
-              echo "| \`icd360s-mail.dmg\` | $SIZE | ✅ |"
+              echo "- ✅ icd360s-mail.dmg ($SIZE)"
             fi
-            echo ""
-            echo "### iOS build steps"
-            echo "- ✅ Flutter precache (iOS engine)"
-            echo "- ✅ flutter build ios --release --no-codesign"
-            echo "- ✅ .ipa packaged from Runner.app"
-            echo ""
-            echo "### macOS build steps"
-            echo "- ✅ Manual signing configured (no Apple Developer team)"
-            echo "- ✅ flutter build macos --release"
-            echo "- ✅ Ad-hoc codesign applied"
-            echo "- ✅ .dmg created via hdiutil"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Compute Apple hash
@@ -829,7 +857,7 @@ jobs:
   # ============================================================
   deploy:
     name: Deploy to VPS
-    needs: [build-linux, build-android, android-cache-save, build-apple, build-windows]
+    needs: [build-linux, build-android, android-cache-save, build-ios, build-macos, build-windows]
     # SECURITY: Only deploy on tagged releases (v*), gated by 'production' environment
     # which requires manual approval from a designated reviewer (GitHub UI config).
     if: startsWith(github.ref, 'refs/tags/v') && !cancelled() && !failure()
@@ -1059,7 +1087,7 @@ jobs:
   # ============================================================
   release:
     name: Release
-    needs: [build-linux, build-android, android-cache-save, build-apple, build-windows]
+    needs: [build-linux, build-android, android-cache-save, build-ios, build-macos, build-windows]
     if: always() && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
