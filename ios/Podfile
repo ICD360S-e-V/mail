@@ -48,6 +48,13 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+
+    # Remove .xcprivacy from Compile Sources (fixes "no rule to process" warning)
+    target.build_phases.each do |phase|
+      if phase.is_a?(Xcodeproj::Project::Object::PBXSourcesBuildPhase)
+        phase.files.reject! { |file| file.file_ref&.path&.end_with?('.xcprivacy') }
+      end
+    end
   end
 end
 
