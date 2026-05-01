@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.93.5 - 2026-05-01
+#### Performance Improvements
+- (**ci**) skip flutter precache on cache hit (iOS/macOS) - (dd4943f) - icd360sevofficial
+
+- - -
+
 ## v2.93.4 - 2026-05-01
 #### Performance Improvements
 - (**ci**) cache VC++ Redistributable on Windows - (7d10a75) - icd360sevofficial
