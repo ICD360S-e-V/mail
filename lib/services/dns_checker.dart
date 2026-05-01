@@ -30,8 +30,8 @@ class DnsChecker {
   /// Look up TXT records for [domain].
   /// Tries our own DoH (mTLS-authenticated) first, falls back to Cloudflare.
 
-  static final _ldhLabel = RegExp(r'^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\$');
-  static final _underscoredLabel = RegExp(r'^_[a-zA-Z][a-zA-Z0-9-]{0,61}\$');
+  static final _ldhLabel = RegExp(r'^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$');
+  static final _underscoredLabel = RegExp(r'^_[a-zA-Z][a-zA-Z0-9-]{0,61}$');
 
   static void _validateDomain(String domain) {
     if (domain.codeUnits.any((c) => c < 0x20 || c == 0x7F)) {
