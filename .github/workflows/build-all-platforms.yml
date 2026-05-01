@@ -414,6 +414,15 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
+      - name: Cache Gradle
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
       # SECURITY (M7): Pass secrets via env vars so they are never interpolated
       # directly into the shell script body. A secret containing special chars,
       # a newline, or the heredoc marker itself cannot break out of the
@@ -544,7 +553,15 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Cache Flutter SDK
+        id: cache-flutter-ios
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: ~/flutter
+          key: flutter-${{ runner.os }}-${{ runner.arch }}-${{ env.FLUTTER_VERSION }}
+
       - name: Install Flutter (manual)
+        if: steps.cache-flutter-ios.outputs.cache-hit != 'true'
         env:
           FL_VER: ${{ env.FLUTTER_VERSION }}
         run: |
@@ -562,13 +579,28 @@ jobs:
           echo "✓ Flutter SDK SHA-256 verified"
           unzip -q "$FLUTTER_ZIP" -d "$HOME"
           rm "$FLUTTER_ZIP"
-          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Add Flutter to PATH
+        run: echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
 
       - name: Flutter precache
-        run: |
-          export PATH="$HOME/flutter/bin:$PATH"
-          flutter precache --ios
-          flutter doctor -v
+        run: flutter precache --ios
+
+      - name: Cache pub dependencies
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: pub-${{ runner.os }}-
+
+      - name: Cache CocoaPods
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: |
+            ios/Pods
+            ~/Library/Caches/CocoaPods
+          key: pods-ios-${{ hashFiles('ios/Podfile.lock') }}
+          restore-keys: pods-ios-
 
       - name: Cache native build hooks (sodium)
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
@@ -579,9 +611,7 @@ jobs:
             native-hooks-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Resolve Flutter dependencies
-        run: |
-          export PATH="$HOME/flutter/bin:$PATH"
-          flutter pub get --enforce-lockfile
+        run: flutter pub get --enforce-lockfile
 
       - name: Compile iOS Runner.app (no codesign)
         run: |
@@ -624,7 +654,15 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
+      - name: Cache Flutter SDK
+        id: cache-flutter-macos
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: ~/flutter
+          key: flutter-${{ runner.os }}-${{ runner.arch }}-${{ env.FLUTTER_VERSION }}
+
       - name: Install Flutter (manual)
+        if: steps.cache-flutter-macos.outputs.cache-hit != 'true'
         env:
           FL_VER: ${{ env.FLUTTER_VERSION }}
         run: |
@@ -642,13 +680,28 @@ jobs:
           echo "✓ Flutter SDK SHA-256 verified"
           unzip -q "$FLUTTER_ZIP" -d "$HOME"
           rm "$FLUTTER_ZIP"
-          echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Add Flutter to PATH
+        run: echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
 
       - name: Flutter precache
-        run: |
-          export PATH="$HOME/flutter/bin:$PATH"
-          flutter precache --macos
-          flutter doctor -v
+        run: flutter precache --macos
+
+      - name: Cache pub dependencies
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: pub-${{ runner.os }}-
+
+      - name: Cache CocoaPods
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: |
+            macos/Pods
+            ~/Library/Caches/CocoaPods
+          key: pods-macos-${{ hashFiles('macos/Podfile.lock') }}
+          restore-keys: pods-macos-
 
       - name: Cache native build hooks (sodium)
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
