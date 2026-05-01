@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.93.2 - 2026-05-01
+#### Bug Fixes
+- (**windows**) remove unused CurStepChanged procedure (RESULTCODE warning) - (2b323ef) - icd360sevofficial
+
+- - -
+
 ## v2.93.1 - 2026-05-01
 #### Bug Fixes
 - trigger lockfile resync for flutter_local_notifications 21 + xml 7 - (cbfc176) - icd360sevofficial
