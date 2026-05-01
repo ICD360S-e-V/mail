@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.93.7 - 2026-05-01
+#### Bug Fixes
+- (**ci**) concurrency group without ref (new build cancels previous) - (bfd66ca) - icd360sevofficial
+
+- - -
+
 ## v2.93.6 - 2026-05-01
 #### Bug Fixes
 - (**ci**) handle spaces in paths for hash computation + macOS sodium cache/restore - (d73a188) - icd360sevofficial
