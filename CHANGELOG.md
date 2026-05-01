@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.93.0 - 2026-05-01
+#### Features
+- upgrade flutter_local_notifications 18 to 21 - (6f34d76) - icd360sevofficial
+
+- - -
+
 ## v2.92.2 - 2026-05-01
 #### Bug Fixes
 - (**ios,macos**) remove xcprivacy from Compile Sources in Podfile - (bbbcc07) - icd360sevofficial
