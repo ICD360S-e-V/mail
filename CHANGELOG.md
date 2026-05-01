@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.91.4 - 2026-05-01
+#### Bug Fixes
+- unescape $ in DNS validation regex (was \$ — never matched) - (1fdedc0) - icd360sevofficial
+
+- - -
+
 ## v2.91.3 - 2026-04-29
 #### Bug Fixes
 - (**ci**) deploy verification now compares version.json against git tag - (232b4e1) - icd360sevofficial
