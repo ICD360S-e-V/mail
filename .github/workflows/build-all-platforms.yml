@@ -822,7 +822,15 @@ jobs:
       # Now we fetch it fresh from Microsoft and verify the SHA-256. If the hash
       # changes (Microsoft publishes a new build), this step fails — update the
       # hash here AFTER auditing the new binary.
+      - name: Cache VC++ Redistributable
+        id: cache-vcredist
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: windows/redist/vc_redist.x64.exe
+          key: vcredist-cc0ff0eb1dc3f5188ae6300faef32bf5beeba4bdd6e8e445a9184072096b713b
+
       - name: Download VC++ Redistributable (verified)
+        if: steps.cache-vcredist.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
           $expectedHash = "cc0ff0eb1dc3f5188ae6300faef32bf5beeba4bdd6e8e445a9184072096b713b"
