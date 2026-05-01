@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.91.6 - 2026-05-01
+#### Bug Fixes
+- (**ci**) revert rsync --protocol=31 (root cause was deploy user shell) - (2f2ea28) - icd360sevofficial
+
+- - -
+
 ## v2.91.5 - 2026-05-01
 #### Bug Fixes
 - (**ci**) add rsync --protocol=31 for server compatibility - (78180b5) - icd360sevofficial
