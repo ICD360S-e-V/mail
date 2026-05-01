@@ -27,7 +27,7 @@ dependencies:
   json_annotation: ^4.9.0
   pointycastle: ^4.0.0
   synchronized: ^3.4.0
-  xml: ">=6.0.0 <7.0.0"
+  xml: ">=6.0.0 <8.0.0"
 
 dependency_overrides:
   # http: ^1.4.0 # for dart_code_metrics
