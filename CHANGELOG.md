@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.103.0 - 2026-05-04
+#### Security Fixes
+- store mTLS cert/key as Uint8List with zeroing on lock - (95e0363) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.102.0 - 2026-05-04
 #### Security Fixes
 - remove PIN unlock entirely — master password only - (26bdc07) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
