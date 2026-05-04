@@ -292,13 +292,22 @@ class DnsChecker {
               return isTrustedLetsEncryptIssuer(cert.issuer);
             });
     } else {
-      // External DoH (Cloudflare, Quad9): use system trust store.
-      // PinnedSecurityContext (ISRG-only) would reject their DigiCert /
-      // Cloudflare certs, causing "Connection refused" on the ephemeral
-      // source port — the TLS failure surfaces as a SocketException.
       client = HttpClient()
         ..connectionTimeout = _timeout
-        ..idleTimeout = const Duration(seconds: 5);
+        ..idleTimeout = const Duration(seconds: 5)
+        ..badCertificateCallback = (cert, host, port) {
+          final issuer = cert.issuer;
+          if (host == 'cloudflare-dns.com' &&
+              (issuer.contains('Cloudflare') || issuer.contains('DigiCert'))) {
+            return true;
+          }
+          if (host == 'dns.quad9.net' && issuer.contains('DigiCert')) {
+            return true;
+          }
+          LoggerService.logWarning('DNS',
+              'External DoH cert rejected: host=$host issuer=$issuer');
+          return false;
+        };
     }
 
     try {
