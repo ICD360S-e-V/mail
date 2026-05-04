@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.93.11 - 2026-05-04
+#### Bug Fixes
+- prevent use-after-free crash in MasterVault SecureKey on macOS unlock - (39253bd) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.93.10 - 2026-05-04
 #### Bug Fixes
 - remove UCEPROTECT Level 2/3 from blacklist checks - (f268591) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
