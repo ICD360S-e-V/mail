@@ -1,7 +1,11 @@
 // SPDX-FileCopyrightText: 2024-2026 ICD360S e.V.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:window_manager/window_manager.dart';
 import '../utils/l10n_helper.dart';
 import '../services/master_password_service.dart';
@@ -12,6 +16,7 @@ import '../services/log_upload_service.dart';
 import '../services/notification_service.dart';
 import '../services/logger_service.dart';
 import '../services/platform_service.dart';
+import 'add_account_dialog.dart';
 import 'first_run_consent_dialog.dart';
 import 'master_password_dialog.dart';
 import 'pin_unlock_screen.dart';
@@ -84,11 +89,14 @@ class _AuthWrapperState extends State<AuthWrapper> {
     final hasPassword = await MasterPasswordService.hasMasterPassword();
 
     if (!hasPassword) {
-      // First-time setup — set master password, then offer PIN setup
+      // First-time setup — set master password → PIN → add first account
       if (mounted) {
         final result = await _showMasterPasswordDialog();
         if (result && mounted) {
           await _offerPinSetup();
+          if (mounted && await _hasNoAccounts()) {
+            await _showFirstAccountWizard();
+          }
         }
         if (mounted) {
           setState(() {
@@ -238,6 +246,29 @@ class _AuthWrapperState extends State<AuthWrapper> {
     }
 
     return result ?? false;
+  }
+
+  Future<bool> _hasNoAccounts() async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final file = File('${dir.path}/accounts.json');
+      if (!await file.exists()) return true;
+      final content = await file.readAsString();
+      final list = jsonDecode(content) as List<dynamic>;
+      return list.isEmpty;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  Future<void> _showFirstAccountWizard() async {
+    if (!mounted) return;
+    LoggerService.log('WIZARD', 'First-run: showing add account wizard');
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AddAccountDialog(),
+    );
   }
 
   @override
