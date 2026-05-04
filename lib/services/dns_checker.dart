@@ -90,15 +90,22 @@ class DnsChecker {
   /// `mail.icd360s.de` first (via system resolver), defeating the
   /// purpose.
   ///
-  /// Chain: Quad9 (Switzerland, RFC 8484 wireformat) → Cloudflare
-  /// (JSON API fallback). Two distinct providers, distinct protocols.
+  /// Chain: Cloudflare JSON API → Quad9 JSON API fallback.
+  /// Quad9 dropped HTTP/1.1 for DoH (2025-12-15), Dart HttpClient
+  /// only supports HTTP/1.1, so wireformat POST no longer works.
   static Future<List<String>> lookupServerA(String domain) async {
     try {
-      return await _queryDoHWireformat(_quad9Endpoint, domain, _qTypeA);
+      return await _queryDoH(_fallbackEndpoint, domain, 'A');
     } catch (ex) {
       LoggerService.logWarning('DNS',
-          'Quad9 DoH failed for $domain: $ex');
-      return [];
+          'Cloudflare DoH failed for $domain: $ex');
+      try {
+        return await _queryDoH(_quad9Endpoint, domain, 'A');
+      } catch (ex2) {
+        LoggerService.logWarning('DNS',
+            'Quad9 DoH also failed for $domain: $ex2');
+        return [];
+      }
     }
   }
 
