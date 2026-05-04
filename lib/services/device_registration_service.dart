@@ -389,7 +389,7 @@ class DeviceRegistrationService {
   static Future<String> _deviceName() async {
     try {
       if (Platform.isMacOS) {
-        final r = await Process.run('sysctl', ['-n', 'hw.model'])
+        final r = await Process.run('/usr/sbin/sysctl', ['-n', 'hw.model'])
             .timeout(const Duration(seconds: 2));
         if (r.exitCode == 0) {
           final model = (r.stdout as String).trim();
@@ -472,7 +472,7 @@ class DeviceRegistrationService {
     try {
       if (Platform.isMacOS) {
         final result =
-            await Process.run('sw_vers', ['-productVersion']).timeout(
+            await Process.run('/usr/bin/sw_vers', ['-productVersion']).timeout(
           const Duration(seconds: 2),
         );
         if (result.exitCode == 0) {
@@ -480,7 +480,7 @@ class DeviceRegistrationService {
           return 'macOS $v';
         }
       } else if (Platform.isLinux) {
-        final result = await Process.run('uname', ['-rs']).timeout(
+        final result = await Process.run('/usr/bin/uname', ['-rs']).timeout(
           const Duration(seconds: 2),
         );
         if (result.exitCode == 0) {

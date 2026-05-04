@@ -430,7 +430,7 @@ class PhishingDetector {
           // Restrict to owner-only (same pattern as PortableSecureStorage)
           try {
             if (!Platform.isWindows) {
-              await Process.run('chmod', ['600', binPath, sigPath]);
+              await Process.run('/bin/chmod', ['600', binPath, sigPath]);
             }
           } catch (_) {/* best-effort */}
         }

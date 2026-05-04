@@ -173,7 +173,7 @@ class PortableSecureStorage {
 
     // Fallback: hostname + user — weaker but still per-machine.
     try {
-      final hostResult = await Process.run('hostname', []);
+      final hostResult = await Process.run('/bin/hostname', []);
       final host = (hostResult.stdout as String).trim();
       final user = Platform.environment['USER'] ?? 'unknown';
       return 'fallback:$host:$user';
@@ -247,7 +247,7 @@ class PortableSecureStorage {
       await tmp.rename(path);
       // Tighten perms (user-only read/write)
       try {
-        await Process.run('chmod', ['600', path]);
+        await Process.run('/bin/chmod', ['600', path]);
       } catch (_) {}
     } catch (ex, st) {
       LoggerService.logError('PORTABLE_STORAGE',

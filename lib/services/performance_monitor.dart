@@ -55,7 +55,7 @@ class PerformanceMonitor {
 
   /// macOS: single ps call for both CPU and RSS (async)
   Future<void> _updateStatsMacOS() async {
-    final result = await Process.run('ps', [
+    final result = await Process.run('/bin/ps', [
       '-p', '$pid',
       '-o', '%cpu,rss',
     ]);
@@ -139,7 +139,7 @@ class PerformanceMonitor {
     }
 
     // CPU via single ps call
-    final result = await Process.run('ps', [
+    final result = await Process.run('/usr/bin/ps', [
       '-p', '$pid',
       '-o', '%cpu,rss',
       '--no-headers',

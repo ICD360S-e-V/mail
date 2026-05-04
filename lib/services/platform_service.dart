@@ -85,7 +85,7 @@ class PlatformService {
       return Platform.operatingSystem;
     } else if (Platform.isMacOS || Platform.isLinux) {
       try {
-        final result = Process.runSync('hostname', []);
+        final result = Process.runSync('/bin/hostname', []);
         if (result.exitCode == 0) {
           return (result.stdout as String).trim();
         }

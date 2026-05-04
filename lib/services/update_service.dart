@@ -564,7 +564,7 @@ class UpdateService {
 
     try {
       // 1. Mount DMG silently
-      final mountResult = await Process.run('hdiutil', [
+      final mountResult = await Process.run('/usr/bin/hdiutil', [
         'attach', updateFile.path, '-nobrowse',
       ]);
       if (mountResult.exitCode != 0) {
@@ -588,7 +588,7 @@ class UpdateService {
           .toList();
       if (apps.isEmpty) {
         LoggerService.log('UPDATE', '❌ No .app found in DMG');
-        await Process.run('hdiutil', ['detach', mountPoint, '-quiet']);
+        await Process.run('/usr/bin/hdiutil', ['detach', mountPoint, '-quiet']);
         return false;
       }
       final appSource = apps.first.path;
@@ -601,31 +601,31 @@ class UpdateService {
       LoggerService.log('UPDATE', 'Replacing: $currentApp');
 
       // 4. Remove old app and copy new one
-      final rmResult = await Process.run('rm', ['-rf', currentApp]);
+      final rmResult = await Process.run('/bin/rm', ['-rf', currentApp]);
       if (rmResult.exitCode != 0) {
         LoggerService.log('UPDATE', '❌ Failed to remove old app: ${rmResult.stderr}');
-        await Process.run('hdiutil', ['detach', mountPoint, '-quiet']);
+        await Process.run('/usr/bin/hdiutil', ['detach', mountPoint, '-quiet']);
         return false;
       }
 
-      final cpResult = await Process.run('cp', ['-R', appSource, currentApp]);
+      final cpResult = await Process.run('/bin/cp', ['-R', appSource, currentApp]);
       if (cpResult.exitCode != 0) {
         LoggerService.log('UPDATE', '❌ Failed to copy new app: ${cpResult.stderr}');
-        await Process.run('hdiutil', ['detach', mountPoint, '-quiet']);
+        await Process.run('/usr/bin/hdiutil', ['detach', mountPoint, '-quiet']);
         return false;
       }
 
       // 5. Remove quarantine flag (ad-hoc signed apps)
-      await Process.run('xattr', ['-dr', 'com.apple.quarantine', currentApp]);
+      await Process.run('/usr/bin/xattr', ['-dr', 'com.apple.quarantine', currentApp]);
 
       // 6. Unmount DMG and delete it
-      await Process.run('hdiutil', ['detach', mountPoint, '-quiet']);
+      await Process.run('/usr/bin/hdiutil', ['detach', mountPoint, '-quiet']);
       try { updateFile.deleteSync(); } catch (_) {}
 
       LoggerService.log('UPDATE', '✓ Update installed — relaunching');
 
       // 7. Relaunch the new app
-      await Process.run('open', [currentApp]);
+      await Process.run('/usr/bin/open', [currentApp]);
       await Future.delayed(const Duration(milliseconds: 500));
       exit(0);
     } catch (ex, st) {
@@ -663,7 +663,7 @@ class UpdateService {
       final tempPath = '$parentDir/.icd360s_update_${pid}.tmp';
       try {
         await updateFile.copy(tempPath);
-        await Process.run('chmod', ['+x', tempPath]);
+        await Process.run('/bin/chmod', ['+x', tempPath]);
         await File(tempPath).rename(appImagePath);
       } catch (ex) {
         // Clean up temp on failure
@@ -715,8 +715,8 @@ class UpdateService {
 
     // 4. Must be owned by current user
     try {
-      final fileUidResult = Process.runSync('stat', ['-c', '%u', canonical]);
-      final myUidResult = Process.runSync('id', ['-u']);
+      final fileUidResult = Process.runSync('/usr/bin/stat', ['-c', '%u', canonical]);
+      final myUidResult = Process.runSync('/usr/bin/id', ['-u']);
       final fileUid = int.tryParse(
           (fileUidResult.stdout as String).trim());
       final myUid = int.tryParse(

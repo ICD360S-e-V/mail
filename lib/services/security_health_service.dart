@@ -242,7 +242,7 @@ class SecurityHealthService {
     try {
       // Find the device backing the root filesystem.
       final findmnt = await Process.run(
-        'findmnt',
+        '/usr/bin/findmnt',
         ['-n', '-o', 'SOURCE', '/'],
       ).timeout(_commandTimeout);
       if (findmnt.exitCode != 0) {
@@ -261,7 +261,7 @@ class SecurityHealthService {
       var fsType = '';
       try {
         final lsblk = await Process.run(
-          'lsblk',
+          '/usr/bin/lsblk',
           ['-fn', '-o', 'FSTYPE', rootDev],
         ).timeout(_commandTimeout);
         fsType = (lsblk.stdout as String).trim();

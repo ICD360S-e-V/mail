@@ -386,7 +386,7 @@ class MasterVault {
       }
     } catch (_) {}
     try {
-      final hostResult = await Process.run('hostname', []);
+      final hostResult = await Process.run('/bin/hostname', []);
       final host = (hostResult.stdout as String).trim();
       final user = Platform.environment['USER'] ?? 'unknown';
       LoggerService.logWarning('MASTER_VAULT',
@@ -582,7 +582,7 @@ class MasterVault {
     final tmp = File('$path.tmp');
     await tmp.writeAsBytes(blob, flush: true);
     await tmp.rename(path);
-    try { await Process.run('chmod', ['600', path]); } catch (_) {}
+    try { await Process.run('/bin/chmod', ['600', path]); } catch (_) {}
   }
 
   Future<void> _createFreshVault(String pwd) async {
