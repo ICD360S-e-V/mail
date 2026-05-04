@@ -150,6 +150,7 @@ class ImapPool {
       serverIp,
       account.imapPort,
       isSecure: account.useSsl,
+      sniHost: 'mail.icd360s.de',
     );
 
     // Authenticate: same logic as MailService._authenticate

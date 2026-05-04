@@ -657,7 +657,8 @@ class MailService {
       await smtpClient.connectToServer(
         await resolveServer(),
         account.smtpPort,
-        isSecure: true, // Direct SSL/TLS (not STARTTLS) for mTLS
+        isSecure: true,
+        sniHost: allowedServer,
       );
       LoggerService.log('SMTP', '✓ Connected to SMTP server with direct SSL/TLS (mTLS)');
 
@@ -797,7 +798,8 @@ class MailService {
       await smtpClient.connectToServer(
         await resolveServer(),
         account.smtpPort,
-        isSecure: true, // Direct SSL/TLS (not STARTTLS) for mTLS
+        isSecure: true,
+        sniHost: allowedServer,
       );
       LoggerService.log('SMTP', '✓ Connected to SMTP server with direct SSL/TLS (mTLS)');
 
@@ -946,7 +948,8 @@ This is a read receipt (Lesebestätigung/MDN) confirming your message was opened
       await smtpClient.connectToServer(
         await resolveServer(),
         account.smtpPort,
-        isSecure: true, // Direct SSL/TLS for mTLS
+        isSecure: true,
+        sniHost: allowedServer,
       );
 
       await smtpClient.ehlo();

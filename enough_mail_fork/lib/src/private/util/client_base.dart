@@ -112,20 +112,33 @@ abstract class ClientBase {
     int port, {
     bool isSecure = true,
     Duration timeout = const Duration(seconds: 20),
+    String? sniHost,
   }) async {
+    final effectiveSni = sniHost ?? host;
     logApp(
       'connecting to server $host:$port - '
-      'secure: $isSecure, timeout: $timeout',
+      'secure: $isSecure, timeout: $timeout, sni: $effectiveSni',
     );
     connectionInfo = ConnectionInfo(host, port, isSecure: isSecure);
-    final socket = isSecure
-        ? await SecureSocket.connect(
+    Socket socket;
+    if (isSecure && sniHost != null) {
+      final raw = await Socket.connect(host, port).timeout(timeout);
+      socket = await SecureSocket.secure(
+        raw,
+        host: sniHost,
+        onBadCertificate: onBadCertificate,
+        context: securityContext,
+      );
+    } else if (isSecure) {
+      socket = await SecureSocket.connect(
             host,
             port,
             onBadCertificate: onBadCertificate,
             context: securityContext,
-          ).timeout(timeout)
-        : await Socket.connect(host, port).timeout(timeout);
+          ).timeout(timeout);
+    } else {
+      socket = await Socket.connect(host, port).timeout(timeout);
+    }
     _greetingsCompleter = Completer<ConnectionInfo>();
     _isServerGreetingDone = false;
     connect(socket);
