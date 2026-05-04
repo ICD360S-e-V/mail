@@ -304,7 +304,10 @@ class AccountService {
   /// Called from auto-lock and explicit logout.
   static void lockSession() {
     if (_sessionKey != null) {
-      // Best-effort zeroize
+      final r = Random.secure();
+      for (int i = 0; i < _sessionKey!.length; i++) {
+        _sessionKey![i] = r.nextInt(256);
+      }
       for (int i = 0; i < _sessionKey!.length; i++) {
         _sessionKey![i] = 0;
       }
