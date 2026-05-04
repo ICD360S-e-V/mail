@@ -57,6 +57,7 @@ class _MasterPasswordDialogState extends State<MasterPasswordDialog> {
   }
 
   Future<void> _submit() async {
+    if (_isLoading) return;
     final l10n = l10nOf(context);
 
     if (_passwordController.text.isEmpty) {

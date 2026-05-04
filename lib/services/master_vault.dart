@@ -70,7 +70,9 @@ class MasterVault {
   Map<String, String>? _cache;
   Uint8List? _argon2Salt;
   String? _filePath;
+  String? _machineSecretCache;
   bool _migrationDone = false;
+  bool _unlocking = false;
 
   // ── Legacy crypto handles (lazy, only for v0x03 migration) ──────
   old_crypto.Argon2id? _legacyArgon2;
@@ -84,6 +86,8 @@ class MasterVault {
   Future<void> unlock(String masterPassword) async {
     if (!Platform.isMacOS) return;
     if (isUnlocked) return;
+    if (_unlocking) return;
+    _unlocking = true;
     _assertSodium();
     LoggerService.log('MASTER_VAULT', 'Unlocking vault (format=v0x04, crypto=sodium)…');
     try {
@@ -139,12 +143,16 @@ class MasterVault {
       _argon2Salt = null;
       LoggerService.logError('MASTER_VAULT', ex, st);
       rethrow;
+    } finally {
+      _unlocking = false;
     }
   }
 
   Future<void> unlockWithKey(Uint8List masterKey) async {
     if (!Platform.isMacOS) return;
     if (isUnlocked) return;
+    if (_unlocking) return;
+    _unlocking = true;
     _assertSodium();
     try {
       final path = await _path();
@@ -172,6 +180,8 @@ class MasterVault {
       _argon2Salt = null;
       LoggerService.logError('MASTER_VAULT', ex, st);
       rethrow;
+    } finally {
+      _unlocking = false;
     }
   }
 
@@ -195,10 +205,12 @@ class MasterVault {
 
   void lock() {
     if (!Platform.isMacOS) return;
-    if (!isUnlocked) return;
+    if (!isUnlocked && !_unlocking) return;
+    _unlocking = false;
     _wipeKeys(wipeMasterKeyCache: true);
     _cache = null;
     _argon2Salt = null;
+    _machineSecretCache = null;
     _migrationDone = false;
     LoggerService.log('MASTER_VAULT', 'Vault locked, secure keys disposed');
   }
@@ -407,21 +419,24 @@ class MasterVault {
 
   Future<SecureKey> _deriveKEKFromSecureKey(SecureKey masterKey) async {
     final s = sodium!;
-    final machine = await _machineSecret();
-    final machineBytes = utf8.encode(machine);
     final mkBytes = masterKey.extractBytes();
+    _machineSecretCache ??= await _machineSecret();
+    final machineBytes = utf8.encode(_machineSecretCache!);
     final combined = Uint8List.fromList(mkBytes + machineBytes);
+    for (var i = 0; i < mkBytes.length; i++) mkBytes[i] = 0;
     final combinedKey = s.crypto.genericHash(
       message: combined,
       outLen: _hashLength,
     );
     for (var i = 0; i < combined.length; i++) combined[i] = 0;
+    final kdfMaster = s.secureCopy(combinedKey);
     final kek = s.crypto.kdf.deriveFromKey(
-      masterKey: s.secureCopy(combinedKey),
+      masterKey: kdfMaster,
       context: _kdfContextKek,
       subkeyId: BigInt.from(1),
       subkeyLen: _hashLength,
     );
+    kdfMaster.dispose();
     return kek;
   }
 

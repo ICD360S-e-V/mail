@@ -256,11 +256,21 @@ class _MainWindowState extends State<MainWindow> {
   /// Show master password dialog for unlock
   Future<bool> _showMasterPasswordDialog() async {
     final passwordController = TextEditingController();
+    var verifying = false;
     final result = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (context) {
         final l10n = l10nOf(context);
+        Future<void> submit() async {
+          if (verifying) return;
+          verifying = true;
+          final isValid = await MasterPasswordService.verifyMasterPassword(passwordController.text);
+          verifying = false;
+          if (context.mounted) {
+            Navigator.of(context).pop(isValid);
+          }
+        }
         return ContentDialog(
           title: Row(
             children: [
@@ -280,12 +290,7 @@ class _MainWindowState extends State<MainWindow> {
                 placeholder: l10n.mainWindowPlaceholderMasterPassword,
                 obscureText: true,
                 autofocus: true,
-                onSubmitted: (_) async {
-                  final isValid = await MasterPasswordService.verifyMasterPassword(passwordController.text);
-                  if (context.mounted) {
-                    Navigator.of(context).pop(isValid);
-                  }
-                },
+                onSubmitted: (_) => submit(),
               ),
             ],
           ),
@@ -296,12 +301,7 @@ class _MainWindowState extends State<MainWindow> {
             ),
             FilledButton(
               child: Text(l10n.mainWindowButtonUnlock),
-              onPressed: () async {
-                final isValid = await MasterPasswordService.verifyMasterPassword(passwordController.text);
-                if (context.mounted) {
-                  Navigator.of(context).pop(isValid);
-                }
-              },
+              onPressed: submit,
             ),
           ],
         );
