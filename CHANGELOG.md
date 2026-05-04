@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.108.0 - 2026-05-04
+#### Security Fixes
+- remove Cloudflare entirely, use Quad9-only for all DNS - (96423fd) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.107.0 - 2026-05-04
 #### Security Fixes
 - add cert validation for external DoH (Cloudflare/Quad9) - (d71fc6b) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
