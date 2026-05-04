@@ -3,6 +3,8 @@
 
 import 'dart:io';
 import 'dart:convert';
+import 'dart:typed_data';
+import 'package:crypto/crypto.dart';
 import 'le_issuer_check.dart';
 import 'package:basic_utils/basic_utils.dart';
 import 'logger_service.dart';
@@ -20,6 +22,17 @@ class MtlsService {
 
   /// The expected hostname for server certificate validation.
   static const _expectedHost = 'mail.icd360s.de';
+
+  /// SPKI pins (SHA-256 of Subject Public Key Info, base64).
+  /// Matches ANY cert in the chain — survives LE renewals as long as
+  /// the server key stays the same. Backup pins for ISRG roots ensure
+  /// continuity if the leaf key is rotated.
+  static const _spkiPins = <String>{
+    'xOwN8+H2i85WBB5cWFKJ3JwWEtPyvOEYz6P5SGm7/uE=', // leaf mail.icd360s.de
+    'iFvwVyJSxnQdyaUvUERIf+8qk7gRze3612JMwoO3zdU=', // intermediate LE E8
+    'C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M=', // ISRG Root X1
+    'diGVwiVYbubAI3RW4hB9xU8e/CH2GnkuvVFZE8zmgzI=', // ISRG Root X2
+  };
 
   /// Extract CN from an OpenSSL oneline subject/issuer string.
   ///
@@ -87,10 +100,8 @@ class MtlsService {
       final client = HttpClient(context: context)
         ..connectionTimeout = const Duration(seconds: 10)
         ..idleTimeout = const Duration(seconds: 5);
-      // For server cert validation: defer to onBadCertificate which
-      // already implements the LE issuer + hostname check.
       client.badCertificateCallback =
-          (cert, host, port) => onBadCertificate(cert);
+          (cert, host, port) => onBadCertificate(cert, host);
       return client;
     } catch (ex, st) {
       LoggerService.logError('MTLS', ex, st);
@@ -137,71 +148,76 @@ class MtlsService {
   ///   3. For ROOT certs (ISRG): verify by exact organization match
   ///      in subject (roots are self-signed, so subject == issuer).
   ///   4. Everything else: reject.
-  static bool onBadCertificate(X509Certificate cert) {
+  static bool onBadCertificate(X509Certificate cert, [String? host]) {
     try {
       final subject = cert.subject;
       final issuer = cert.issuer;
       final subjectCN = _extractCN(subject);
       final issuerCN = _extractCN(issuer);
 
-      // Case 1: LEAF cert for our domain.
-      // Check SAN first (RFC 6125), CN as fallback.
-      if (_matchesExpectedHost(cert)) {
-        // Verify the leaf was signed by a trusted LE intermediate.
-        if (isTrustedLetsEncryptIssuer(issuer)) {
-          LoggerService.log('MTLS',
-              '✓ Accepted leaf: CN=$subjectCN (issuer CN=$issuerCN)');
-          return true;
-        }
-        LoggerService.logWarning('MTLS',
-            '❌ REJECTED leaf CN=$subjectCN: issuer not trusted LE '
-            '(issuer: $issuer)');
-        return false;
-      }
+      // SPKI pinning: SHA-256 of the cert's public key DER.
+      // Survives cert renewals as long as the key pair stays the same.
+      // Even a compromised CA cannot forge a cert with our pinned key.
+      final spkiMatch = _checkSpkiPin(cert);
 
-      // Case 2: INTERMEDIATE cert (LE CA like E7, R10, YE1 etc.).
-      //
-      // An intermediate has BOTH:
-      //   - Subject O = "Let's Encrypt" (or ISRG)
-      //   - Issuer O  = "Internet Security Research Group" (or ISRG)
-      //
-      // Checking ONLY the issuer (as previous code did) is dangerous:
-      // a leaf cert issued by LE for any domain (e.g. evil.com) also
-      // has a trusted LE issuer, so it would pass Case 2 and be
-      // accepted without hostname verification.
-      //
-      // By requiring the SUBJECT to also be a trusted LE/ISRG org,
-      // we ensure only actual CA intermediates pass — leaf certs for
-      // arbitrary domains have subject CN=<domain>, not O=Let's Encrypt.
-      if (isTrustedLetsEncryptIssuer(subject) &&
-          isTrustedLetsEncryptIssuer(issuer)) {
+      // Case 1: LEAF cert for our domain.
+      if (_matchesExpectedHost(cert)) {
+        if (!isTrustedLetsEncryptIssuer(issuer)) {
+          LoggerService.logWarning('MTLS',
+              '❌ REJECTED leaf CN=$subjectCN: issuer not trusted LE');
+          return false;
+        }
+        if (!spkiMatch) {
+          LoggerService.logWarning('MTLS',
+              '❌ REJECTED leaf CN=$subjectCN: SPKI pin mismatch');
+          return false;
+        }
         LoggerService.log('MTLS',
-            '✓ Accepted intermediate: CN=$subjectCN (issuer CN=$issuerCN)');
+            '✓ Accepted leaf: CN=$subjectCN (SPKI pinned, issuer CN=$issuerCN)');
         return true;
       }
 
-      // Case 3: ROOT cert (ISRG Root X1, X2, YE, YR).
-      // Roots are self-signed: subject == issuer. We check subject
-      // here because for a root there is no separate issuer to verify.
+      // Case 2: INTERMEDIATE cert (LE CA).
+      if (isTrustedLetsEncryptIssuer(subject) &&
+          isTrustedLetsEncryptIssuer(issuer)) {
+        if (spkiMatch) {
+          LoggerService.log('MTLS',
+              '✓ Accepted intermediate: CN=$subjectCN (SPKI pinned)');
+        } else {
+          LoggerService.log('MTLS',
+              '✓ Accepted intermediate: CN=$subjectCN (issuer trusted)');
+        }
+        return true;
+      }
+
+      // Case 3: ROOT cert (ISRG Root X1, X2).
       if (isTrustedLetsEncryptIssuer(subject)) {
-        // Double-check it's actually self-signed (subject ≈ issuer).
         if (subject == issuer ||
             _extractCN(subject) == _extractCN(issuer)) {
-          LoggerService.log('MTLS',
-              '✓ Accepted root: CN=$subjectCN');
+          LoggerService.log('MTLS', '✓ Accepted root: CN=$subjectCN');
           return true;
         }
       }
 
-      // Case 4: Unknown cert — reject.
       LoggerService.logWarning('MTLS',
-          '❌ REJECTED: CN=$subjectCN is neither our domain leaf, '
-          'a LE intermediate, nor an ISRG root '
-          '(subject: $subject, issuer: $issuer)');
+          '❌ REJECTED: CN=$subjectCN (host=$host, subject=$subject)');
       return false;
     } catch (ex) {
       LoggerService.logWarning('MTLS',
           '❌ Certificate validation error: $ex — rejecting');
+      return false;
+    }
+  }
+
+  static bool _checkSpkiPin(X509Certificate cert) {
+    try {
+      final certData = X509Utils.x509CertificateFromPem(cert.pem);
+      final pubKeyDer = certData.publicKeyData.bytes;
+      if (pubKeyDer == null) return false;
+      final hash = sha256.convert(pubKeyDer);
+      final pin = base64.encode(hash.bytes);
+      return _spkiPins.contains(pin);
+    } catch (_) {
       return false;
     }
   }

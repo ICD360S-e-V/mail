@@ -10,6 +10,7 @@ import 'package:http/io_client.dart';
 import 'certificate_service.dart';
 import '../services/le_issuer_check.dart';
 import 'logger_service.dart';
+import 'mtls_service.dart';
 import 'pinned_security_context.dart';
 
 /// Status returned by the polling endpoint.
@@ -138,7 +139,7 @@ class DeviceApprovalService {
       ..connectionTimeout = const Duration(seconds: 10)
       ..idleTimeout = const Duration(seconds: 5);
     http.badCertificateCallback = (cert, host, port) =>
-        host == 'mail.icd360s.de' && isTrustedLetsEncryptIssuer(cert.issuer);
+        MtlsService.onBadCertificate(cert, host);
     return IOClient(http);
   }
 

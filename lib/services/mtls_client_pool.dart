@@ -110,7 +110,7 @@ class MtlsClientPool {
     // Server cert validation: defer to the same LE-issuer + hostname
     // logic used everywhere else.
     client.badCertificateCallback =
-        (cert, host, port) => MtlsService.onBadCertificate(cert);
+        (cert, host, port) => MtlsService.onBadCertificate(cert, host);
     return client;
   }
 
