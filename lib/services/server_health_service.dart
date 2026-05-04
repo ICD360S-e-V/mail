@@ -296,8 +296,6 @@ class ServerHealthService {
               'psbl.surriel.com',           // PSBL
               'dnsbl.dronebl.org',          // DroneBL
               'dnsbl-1.uceprotect.net',     // UCEPROTECT Level 1
-              'dnsbl-2.uceprotect.net',     // UCEPROTECT Level 2
-              'dnsbl-3.uceprotect.net',     // UCEPROTECT Level 3
               'ix.dnsbl.manitu.net',        // Manitu
               's5h.net',                    // S5H
               'all.s5h.net',                // S5H All
@@ -325,8 +323,6 @@ class ServerHealthService {
               'dnsbl.sorbs.net',         // SORBS - IPv6 support
               'ix.dnsbl.manitu.net',     // Manitu - IPv6-specific
               'ipv6.blacklist.woody.ch', // Woody - IPv6-specific
-              'dnsbl-2.uceprotect.net',  // UCEPROTECT Level 2 - IPv6
-              'dnsbl-3.uceprotect.net',  // UCEPROTECT Level 3 - IPv6
               'bl.mailspike.net',        // MailSpike - IPv6 support
               'backscatterer.spamrats.com', // SpamRATS Backscatterer - IPv6
               'noptr.spamrats.com',      // SpamRATS NoPtr - IPv6
