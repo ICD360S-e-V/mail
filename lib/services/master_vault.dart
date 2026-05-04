@@ -390,16 +390,23 @@ class MasterVault {
       }
     } catch (_) {}
     try {
-      final hostResult = await Process.run('/bin/hostname', []);
-      final host = (hostResult.stdout as String).trim();
-      final user = Platform.environment['USER'] ?? 'unknown';
-      LoggerService.logWarning('MASTER_VAULT',
-          'ioreg failed, using weak fallback: hostname:user');
-      return 'fallback:$host:$user';
-    } catch (_) {
-      throw StateError('Cannot determine machine secret — '
-          'both ioreg and hostname failed. Vault creation aborted.');
-    }
+      final spResult = await Process.run(
+        '/usr/sbin/system_profiler',
+        ['SPHardwareDataType'],
+      );
+      if (spResult.exitCode == 0) {
+        final out = spResult.stdout as String;
+        final uuidMatch =
+            RegExp(r'Hardware UUID:\s*([0-9A-Fa-f-]+)').firstMatch(out);
+        if (uuidMatch != null) {
+          LoggerService.logWarning('MASTER_VAULT',
+              'ioreg failed, using system_profiler fallback');
+          return uuidMatch.group(1)!;
+        }
+      }
+    } catch (_) {}
+    throw StateError('Cannot determine machine secret — '
+        'both ioreg and system_profiler failed. Vault creation aborted.');
   }
 
   // ── v0x04 KEK derivation (sodium BLAKE2b) ──────────────────────

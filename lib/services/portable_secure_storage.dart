@@ -171,15 +171,19 @@ class PortableSecureStorage {
       }
     } catch (_) {/* fall through */}
 
-    // Fallback: hostname + user — weaker but still per-machine.
     try {
-      final hostResult = await Process.run('/bin/hostname', []);
-      final host = (hostResult.stdout as String).trim();
-      final user = Platform.environment['USER'] ?? 'unknown';
-      return 'fallback:$host:$user';
-    } catch (_) {
-      return 'fallback:unknown';
-    }
+      final spResult = await Process.run(
+        '/usr/sbin/system_profiler',
+        ['SPHardwareDataType'],
+      );
+      if (spResult.exitCode == 0) {
+        final out = spResult.stdout as String;
+        final uuidMatch =
+            RegExp(r'Hardware UUID:\s*([0-9A-Fa-f-]+)').firstMatch(out);
+        if (uuidMatch != null) return uuidMatch.group(1)!;
+      }
+    } catch (_) {}
+    return 'fallback:unknown';
   }
 
   /// Extract IOPlatformSerialNumber from ioreg output, empty if absent.
