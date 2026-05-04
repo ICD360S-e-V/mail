@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.95.0 - 2026-05-04
+#### Security Fixes
+- add SPKI certificate pinning and fix hostname verification - (833cd71) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.94.0 - 2026-05-04
 #### Features
 - show add-account wizard on first install when no accounts exist - (5c7b31b) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
