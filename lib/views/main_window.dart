@@ -1405,11 +1405,51 @@ class _MainWindowState extends State<MainWindow> {
   Widget _buildEmailList(FluentThemeData theme, EmailProvider emailProvider) {
     final l10n = l10nOf(context);
 
-    return Column(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 600;
+        return Column(
       children: [
+        // Mobile folder selector (NavigationPane hidden on small screens)
+        if (isMobile && emailProvider.currentAccount != null &&
+            emailProvider.currentAccount!.folders.isNotEmpty)
+          Container(
+            height: 40,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            decoration: BoxDecoration(
+              color: theme.scaffoldBackgroundColor,
+              border: Border(
+                bottom: BorderSide(color: theme.inactiveBackgroundColor, width: 1),
+              ),
+            ),
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: emailProvider.currentAccount!.folders.map((folder) {
+                final isActive = folder == emailProvider.currentFolder;
+                final count = emailProvider.currentAccount!.folderCounts[folder] ?? 0;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+                  child: ToggleButton(
+                    checked: isActive,
+                    onChanged: (_) => emailProvider.selectFolder(
+                        emailProvider.currentAccount!, folder),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _getFolderIcon(folder),
+                        const SizedBox(width: 4),
+                        Text('$folder ($count)', style: const TextStyle(fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+
         // Header
         Container(
-          padding: const EdgeInsets.all(16.0),
+          padding: EdgeInsets.all(isMobile ? 10.0 : 16.0),
           decoration: BoxDecoration(
             color: theme.scaffoldBackgroundColor,
             border: Border(
@@ -1425,7 +1465,7 @@ class _MainWindowState extends State<MainWindow> {
                 emailProvider.currentFolder,
                 style: theme.typography.subtitle?.copyWith(
                   fontWeight: FontWeight.bold,
-                  fontSize: 18,
+                  fontSize: isMobile ? 14 : 18,
                 ),
               ),
               const Spacer(),
@@ -1506,6 +1546,8 @@ class _MainWindowState extends State<MainWindow> {
                     ),
         ),
       ],
+    );
+      },
     );
   }
 
