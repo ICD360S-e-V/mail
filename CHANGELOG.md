@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.96.0 - 2026-05-04
+#### Security Fixes
+- connect by IP with hostname SNI for native TLS verification - (8e87ed2) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.95.0 - 2026-05-04
 #### Security Fixes
 - add SPKI certificate pinning and fix hostname verification - (833cd71) - ICD360S e.V., *Claude Opus 4.6 (1M context)*

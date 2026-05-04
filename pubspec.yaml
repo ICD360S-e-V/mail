@@ -2,7 +2,7 @@ name: icd360s_mail_client
 description: "ICD360S Mail Client - Modern email client with threat detection"
 publish_to: 'none'
 
-version: 2.95.0+1122
+version: 2.96.0+1124
 
 environment:
   sdk: ^3.10.0
@@ -100,7 +100,7 @@ msix_config:
   publisher_display_name: ICD360S e.V.
   publisher: CN=ICD360S
   identity_name: ICD360S.MailClient
-  msix_version: 2.95.0.1122
+  msix_version: 2.96.0.1124
   capabilities: internetClient
   protocol_activation: mailto
 
