@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2024-2026 ICD360S e.V.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import 'dart:async';
 import 'dart:io';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
@@ -61,6 +62,9 @@ ${l10n.logViewerMetadataSeparator}
 ''';
     final allLogs = metadata + _logs.join('\n');
     Clipboard.setData(ClipboardData(text: allLogs));
+    Timer(const Duration(seconds: 30), () {
+      Clipboard.setData(const ClipboardData(text: ''));
+    });
 
     LoggerService.log('LOG_VIEWER', l10n.logViewerLogsCopied(_logs.length));
   }

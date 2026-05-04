@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2024-2026 ICD360S e.V.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import 'dart:async';
 import 'dart:io';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/gestures.dart';
@@ -39,6 +40,16 @@ class EmailViewer extends StatefulWidget {
 
 class _EmailViewerState extends State<EmailViewer> {
   final List<TapGestureRecognizer> _recognizers = [];
+  static Timer? _clipboardClearTimer;
+
+  static Future<void> _secureCopy(String text) async {
+    await Clipboard.setData(ClipboardData(text: text));
+    _clipboardClearTimer?.cancel();
+    _clipboardClearTimer = Timer(const Duration(seconds: 30), () {
+      Clipboard.setData(const ClipboardData(text: ''));
+      LoggerService.log('SECURITY', 'Clipboard auto-cleared after 30s');
+    });
+  }
 
   /// Whether the user has opted to load remote images for this email.
   bool _allowRemoteContent = false;
@@ -697,8 +708,8 @@ $cleanBody
 ${email.attachments.isNotEmpty ? '\nAttachments (${email.attachments.length}): ${email.attachments.map((a) => a.fileName).join(", ")}' : ''}
 ''';
 
-              await Clipboard.setData(ClipboardData(text: emailContent));
-              LoggerService.log('EMAIL_VIEWER', 'Email copied to clipboard');
+              await _secureCopy(emailContent);
+              LoggerService.log('EMAIL_VIEWER', 'Email copied to clipboard (auto-clear 30s)');
               if (!context.mounted) return;
               final l10nCopy = l10nOf(context);
               NotificationService.showSuccessToast(l10nCopy.successCopied, l10nCopy.successEmailCopiedToClipboard);
@@ -787,7 +798,7 @@ ${email.attachments.isNotEmpty ? '\nAttachments (${email.attachments.length}): $
         Expanded(
           child: GestureDetector(
             onDoubleTap: () async {
-              await Clipboard.setData(ClipboardData(text: value));
+              await _secureCopy(value);
               if (!mounted) return;
               final l10n = l10nOf(context);
               NotificationService.showSuccessToast(l10n.successCopied, value);
