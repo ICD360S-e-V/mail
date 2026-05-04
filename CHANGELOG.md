@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.102.0 - 2026-05-04
+#### Security Fixes
+- remove PIN unlock entirely — master password only - (26bdc07) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.101.0 - 2026-05-04
 #### Security Fixes
 - zero vault cache values and argon2 salt before dereferencing - (cd1b994) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
