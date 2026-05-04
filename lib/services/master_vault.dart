@@ -208,6 +208,10 @@ class MasterVault {
     if (!isUnlocked && !_unlocking) return;
     _unlocking = false;
     _wipeKeys(wipeMasterKeyCache: true);
+    if (_argon2Salt != null) {
+      for (var i = 0; i < _argon2Salt!.length; i++) _argon2Salt![i] = 0;
+    }
+    _cache?.updateAll((_, __) => '');
     _cache = null;
     _argon2Salt = null;
     _machineSecretCache = null;
