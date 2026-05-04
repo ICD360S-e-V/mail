@@ -285,7 +285,8 @@ class MasterVault {
 
   Future<Uint8List?> deriveMasterKeyFromCache() async {
     if (_cachedMasterKey == null) return null;
-    return Uint8List.fromList(_cachedMasterKey!.extractBytes());
+    final bytes = _cachedMasterKey!.extractBytes();
+    return Uint8List.fromList(bytes);
   }
 
   /// Derive auth hash via BLAKE2b-KDF (sodium).

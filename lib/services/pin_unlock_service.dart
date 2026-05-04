@@ -162,13 +162,13 @@ class PinUnlockService {
     data['last_used'] = DateTime.now().millisecondsSinceEpoch;
     await _writeBlob(data);
     LoggerService.log('PIN', 'PIN verified');
-    return Uint8List.fromList(masterKey);
+    return masterKey is Uint8List ? masterKey : Uint8List.fromList(masterKey);
   }
 
   /// Full unlock after PIN verification.
   static Future<void> unlockWithMasterKey(Uint8List masterKey) async {
     await MasterVault.instance.unlockWithKey(masterKey);
-    await AccountService.unlockSession(base64.encode(masterKey));
+    await AccountService.unlockSessionWithKey(masterKey);
     await CertificateService.restoreFromSecureStorage();
     LoggerService.log('PIN', 'App unlocked via PIN');
   }

@@ -279,6 +279,27 @@ class AccountService {
     LoggerService.log('ACCOUNTS', 'Credential session unlocked');
   }
 
+  /// Unlock session using raw key bytes (PIN unlock path).
+  /// Avoids converting master key to String (immutable, can't be wiped).
+  static Future<void> unlockSessionWithKey(Uint8List keyBytes) async {
+    if (_saltFilePath == null) {
+      final platform = PlatformService.instance;
+      final appDataPath = platform.appDataPath;
+      _saltFilePath = p.join(appDataPath, '.passwords.salt');
+      _passwordsFallbackPath = p.join(appDataPath, '.passwords');
+      final dir = Directory(appDataPath);
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+    }
+
+    final saltInfo = _loadOrCreateSaltAndIter();
+    final derivator = PBKDF2KeyDerivator(HMac(SHA256Digest(), 64))
+      ..init(Pbkdf2Parameters(saltInfo.salt, saltInfo.iterations, _pbkdf2KeyLength));
+    _sessionKey = derivator.process(keyBytes);
+    LoggerService.log('ACCOUNTS', 'Credential session unlocked (key-based)');
+  }
+
   /// Lock the credential session: wipe the AES key from memory.
   /// Called from auto-lock and explicit logout.
   static void lockSession() {
