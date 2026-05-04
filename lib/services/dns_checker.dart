@@ -18,18 +18,16 @@ import 'le_issuer_check.dart';
 /// forwarded to Quad9/DNS0.eu/Mullvad via DNS-over-TLS — all
 /// non-Five-Eyes, zero-logging, unfiltered).
 ///
-/// Fallback: Cloudflare DoH (in case our server is unreachable).
+/// Fallback: Quad9 DoH JSON API (non-Five-Eyes, Switzerland, zero-logging).
 class DnsChecker {
   static const _primaryEndpoint = 'https://mail.icd360s.de/dns-query';
-  static const _fallbackEndpoint = 'https://cloudflare-dns.com/dns-query';
-  // Quad9: non-Five-Eyes (Switzerland), zero-logging, DNSSEC-validating.
-  static const _quad9Endpoint = 'https://dns.quad9.net/dns-query';
+  static const _fallbackEndpoint = 'https://dns.quad9.net/dns-query';
   static const _quad9DotHost = 'dns.quad9.net';
   static const _quad9DotPort = 853;
   static const _timeout = Duration(seconds: 10);
 
   /// Look up TXT records for [domain].
-  /// Tries our own DoH (mTLS-authenticated) first, falls back to Cloudflare.
+  /// Tries our own DoH (mTLS-authenticated) first, falls back to Quad9.
 
   static final _ldhLabel = RegExp(r'^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$');
   static final _underscoredLabel = RegExp(r'^_[a-zA-Z][a-zA-Z0-9-]{0,61}$');
@@ -93,7 +91,7 @@ class DnsChecker {
   ///
   /// Uses Quad9 DNS-over-TLS (RFC 7858) on port 853. No HTTP involved,
   /// so unaffected by Quad9's HTTP/1.1 deprecation. Falls back to
-  /// Cloudflare JSON DoH if DoT fails.
+  /// Quad9 JSON DoH if DoT fails.
   static Future<List<String>> lookupServerA(String domain) async {
     try {
       return await _queryDoT(_quad9DotHost, _quad9DotPort, domain, _qTypeA);
@@ -104,7 +102,7 @@ class DnsChecker {
         return await _queryDoH(_fallbackEndpoint, domain, 'A');
       } catch (ex2) {
         LoggerService.logWarning('DNS',
-            'Cloudflare DoH fallback also failed for $domain: $ex2');
+            'Quad9 DoH fallback also failed for $domain: $ex2');
         return [];
       }
     }
@@ -267,8 +265,7 @@ class DnsChecker {
   /// For the primary endpoint (mail.icd360s.de), authenticates via mTLS
   /// client certificate — no hardcoded API key needed. The per-user cert
   /// is available after login (when threat intelligence lookups happen).
-  /// For external endpoints (Cloudflare, Quad9), uses the OS system trust
-  /// store — these providers use DigiCert/Cloudflare certs, NOT Let's
+  /// For Quad9 fallback, verifies DigiCert issuer. NOT Let's
   /// Encrypt, so the ISRG-pinned context must NOT be used for them.
   static Future<List<String>> _queryDoH(
     String endpoint,
@@ -282,7 +279,7 @@ class DnsChecker {
     });
 
     // Use mTLS client for our own server; plain system-trust client for
-    // external DoH providers (Cloudflare, Quad9 use non-ISRG certs).
+    // Quad9 fallback uses DigiCert certs, not ISRG.
     final isOwnServer = endpoint.contains('mail.icd360s.de');
     HttpClient client;
     if (isOwnServer) {
@@ -296,16 +293,12 @@ class DnsChecker {
         ..connectionTimeout = _timeout
         ..idleTimeout = const Duration(seconds: 5)
         ..badCertificateCallback = (cert, host, port) {
-          final issuer = cert.issuer;
-          if (host == 'cloudflare-dns.com' &&
-              (issuer.contains('Cloudflare') || issuer.contains('DigiCert'))) {
-            return true;
-          }
-          if (host == 'dns.quad9.net' && issuer.contains('DigiCert')) {
+          if (host == 'dns.quad9.net' &&
+              cert.issuer.contains('DigiCert')) {
             return true;
           }
           LoggerService.logWarning('DNS',
-              'External DoH cert rejected: host=$host issuer=$issuer');
+              'Quad9 DoH cert rejected: host=$host issuer=${cert.issuer}');
           return false;
         };
     }
