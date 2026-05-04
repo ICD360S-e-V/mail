@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.115.0 - 2026-05-04
+#### Security Fixes
+- harden factory reset with MasterVault wipe, retry, error tracking - (c619aec) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.114.0 - 2026-05-04
 #### Security Fixes
 - replace weak hostname:user fallback with system_profiler UUID - (08928d2) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
