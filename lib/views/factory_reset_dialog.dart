@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import '../services/account_service.dart';
 import '../services/logger_service.dart';
+import '../services/master_vault.dart';
 import '../services/platform_service.dart';
 import '../services/portable_secure_storage.dart';
 
@@ -92,19 +93,30 @@ class FactoryResetDialog {
   static Future<void> _performReset(List<String> accountUsernames) async {
     final platform = PlatformService.instance;
     final appDataPath = platform.appDataPath;
+    final errors = <String>[];
+
+    // 0. Wipe MasterVault (cert/key/PGP data in encrypted vault)
+    try {
+      MasterVault.instance.lock();
+      LoggerService.log('RESET', '✓ MasterVault locked and wiped');
+    } catch (ex) {
+      errors.add('MasterVault: $ex');
+    }
 
     // 1. SCOPE-LIMITED secure storage deletion — only delete keys we own.
-    //    NOT FlutterSecureStorage.deleteAll() because that can affect other
-    //    keys in shared namespaces on some platforms.
-    // PortableSecureStorage uses native storage on iOS/Android/Windows/
-    // Linux and AES-GCM file backend on macOS (no Keychain calls).
     final storage = PortableSecureStorage.instance;
     for (final username in accountUsernames) {
-      try {
-        await storage.delete(key: 'icd360s_mail_password_$username');
-        LoggerService.log('RESET', '✓ Deleted secure storage key for $username');
-      } catch (ex) {
-        LoggerService.log('RESET', '⚠ Could not delete key for $username: $ex');
+      for (var attempt = 0; attempt < 2; attempt++) {
+        try {
+          await storage.delete(key: 'icd360s_mail_password_$username');
+          LoggerService.log('RESET', '✓ Deleted secure storage key for $username');
+          break;
+        } catch (ex) {
+          if (attempt == 1) {
+            errors.add('secure_storage($username): $ex');
+            LoggerService.log('RESET', '⚠ Could not delete key for $username after 2 attempts: $ex');
+          }
+        }
       }
     }
 
@@ -141,8 +153,14 @@ class FactoryResetDialog {
         await appFolder.delete(recursive: true);
         LoggerService.log('RESET', '✓ Deleted app data folder');
       } catch (ex) {
+        errors.add('app_data_folder: $ex');
         LoggerService.log('RESET', '⚠ Could not delete app data folder: $ex');
       }
+    }
+
+    if (errors.isNotEmpty) {
+      LoggerService.logWarning('RESET',
+          '⚠ Factory reset completed with ${errors.length} errors: ${errors.join(", ")}');
     }
   }
 }
