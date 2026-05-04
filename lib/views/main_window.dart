@@ -768,22 +768,7 @@ class _MainWindowState extends State<MainWindow> {
               ),
             ),
 
-            // Source Code (AGPL-3.0 Section 13)
-            Padding(
-              padding: const EdgeInsets.only(right: 8.0),
-              child: Tooltip(
-                message: 'Source code',
-                child: IconButton(
-                  icon: const Icon(FluentIcons.code, size: 16),
-                  onPressed: () async {
-                    final uri = Uri.parse('https://github.com/ICD360S-e-V/mail');
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(uri, mode: LaunchMode.externalApplication);
-                    }
-                  },
-                ),
-              ),
-            ),
+            // (Source Code → moved to Rechtliches dialog)
 
             // Settings button — notification privacy + PIN management
             Padding(
