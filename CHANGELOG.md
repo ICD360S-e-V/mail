@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.107.0 - 2026-05-04
+#### Security Fixes
+- add cert validation for external DoH (Cloudflare/Quad9) - (d71fc6b) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.106.0 - 2026-05-04
 #### Security Fixes
 - add certificate validation to Quad9 DNS-over-TLS connection - (00f96d0) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
