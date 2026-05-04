@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.98.0 - 2026-05-04
+#### Security Fixes
+- auto-clear clipboard after 30 seconds - (659a43a) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.97.0 - 2026-05-04
 #### Security Fixes
 - eliminate master key String leak on heap (OWASP MASTG-TEST-0011) - (a3b03ff) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
