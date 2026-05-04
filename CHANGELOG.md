@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.112.0 - 2026-05-04
+#### Security Fixes
+- cap style attribute at 4KB to prevent CSS unescape DoS - (e4b7f6f) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.111.0 - 2026-05-04
 #### Security Fixes
 - clear secure mail password on encryption error path - (e2b4e40) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
