@@ -255,6 +255,7 @@ class DeviceApprovalService {
   }) async* {
     final deadline = DateTime.now().add(maxDuration);
     var consecutiveFailures = 0;
+    String? _usedToken;
     while (true) {
       if (DateTime.now().isAfter(deadline)) {
         LoggerService.log('APPROVAL', 'Polling deadline reached, expiring');
@@ -262,13 +263,22 @@ class DeviceApprovalService {
         return;
       }
       final poll = await _pollOnce(requestId);
+      if (poll.status == ApprovalStatus.approved &&
+          poll.oneTimeToken != null) {
+        if (_usedToken == poll.oneTimeToken) {
+          LoggerService.logWarning('APPROVAL',
+              '❌ REJECTED: duplicate one_time_token (replay?)');
+          yield StatusPoll(ApprovalStatus.expired);
+          return;
+        }
+        _usedToken = poll.oneTimeToken;
+      }
       yield poll;
       switch (poll.status) {
         case ApprovalStatus.approved:
         case ApprovalStatus.rejected:
         case ApprovalStatus.expired:
         case ApprovalStatus.notFound:
-          // Terminal — caller will react and stop the stream.
           return;
         case ApprovalStatus.unknown:
           consecutiveFailures++;
@@ -290,9 +300,10 @@ class DeviceApprovalService {
   static Future<StatusPoll> _pollOnce(String requestId) async {
     final client = _newClient();
     try {
+      final nonce = DateTime.now().millisecondsSinceEpoch;
       final response = await client
           .get(Uri.parse(
-              '$_baseUrl/check-device-status.php?request_id=$requestId'))
+              '$_baseUrl/check-device-status.php?request_id=$requestId&_t=$nonce'))
           .timeout(_httpTimeout);
       if (response.statusCode == 404) {
         return StatusPoll(ApprovalStatus.notFound);
