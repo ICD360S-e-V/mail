@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.105.0 - 2026-05-04
+#### Security Fixes
+- add replay protection to device approval polling - (4f1908a) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.104.0 - 2026-05-04
 #### Security Fixes
 - overwrite session key with random data before zeroing (OWASP) - (14178b2) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
