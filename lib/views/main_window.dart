@@ -711,77 +711,7 @@ class _MainWindowState extends State<MainWindow> {
               },
             ),
 
-            // Log Viewer button
-            Tooltip(
-              message: 'Log Viewer',
-              child: Padding(
-                padding: const EdgeInsets.only(right: 4.0),
-                child: Tooltip(
-                  message: 'View logs',
-                  child: IconButton(
-                    icon: const Icon(FluentIcons.code, size: 16),
-                    onPressed: _showLogViewer,
-                  ),
-                ),
-              ),
-            ),
-
-            // Security Health button
-            Tooltip(
-              message: 'Security Health',
-              child: Padding(
-                padding: const EdgeInsets.only(right: 4.0),
-                child: Tooltip(
-                  message: 'Security health',
-                  child: IconButton(
-                    icon: const Icon(FluentIcons.shield, size: 16),
-                    onPressed: _showSecurityHealth,
-                  ),
-                ),
-              ),
-            ),
-
-            // Update check button
-            Tooltip(
-              message: _manualUpdateChecking
-                  ? 'Checking for updates...'
-                  : 'Check for updates',
-              child: Padding(
-                padding: const EdgeInsets.only(right: 4.0),
-                child: Tooltip(
-                  message: 'Check for updates',
-                  child: IconButton(
-                    icon: _manualUpdateChecking
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: ProgressRing(strokeWidth: 2),
-                          )
-                        : const Icon(FluentIcons.cloud_download, size: 16),
-                    onPressed:
-                        _manualUpdateChecking ? null : _checkForUpdatesManual,
-                  ),
-                ),
-              ),
-            ),
-
-            // Server Info button
-            Tooltip(
-              message: 'Informații Server',
-              child: Padding(
-                padding: const EdgeInsets.only(right: 8.0),
-                child: IconButton(
-                  icon: const Icon(FluentIcons.server, size: 16),
-                  onPressed: () {
-                    _resetAutoLockTimer();
-                    showDialog(
-                      context: context,
-                      builder: (_) => const ServerInfoDialog(),
-                    );
-                  },
-                ),
-              ),
-            ),
+            // (Log Viewer, Security Health, Update, Server Info → moved to footer)
 
             // Switch Account button — opens account picker dialog
             Padding(
@@ -870,22 +800,7 @@ class _MainWindowState extends State<MainWindow> {
               ),
             ),
 
-            // Factory Reset button (requires typed "DELETE" confirmation).
-            // SECURITY (M6): Only accessible post-login, not on the lock screen.
-            Padding(
-              padding: const EdgeInsets.only(right: 8.0),
-              child: Tooltip(
-                message: 'Factory reset',
-                child: IconButton(
-                  icon: const Icon(FluentIcons.delete, size: 16),
-                  onPressed: () async {
-                    LoggerService.log('SECURITY', 'User clicked factory reset button');
-                  _resetAutoLockTimer();
-                    await FactoryResetDialog.show(context);
-                  },
-                ),
-              ),
-            ),
+            // (Factory Reset → moved to Settings dialog)
 
             // Add Account Button
             Padding(
@@ -1176,6 +1091,30 @@ class _MainWindowState extends State<MainWindow> {
                       );
                     },
                   ),
+
+                const SizedBox(height: 20),
+                // ── Factory Reset ──────────────────────────────
+                Text('Danger Zone',
+                    style: FluentTheme.of(dialogCtx).typography.bodyStrong?.copyWith(
+                      color: Colors.red,
+                    )),
+                const SizedBox(height: 8),
+                Button(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(FluentIcons.delete, size: 14, color: Colors.red),
+                      const SizedBox(width: 6),
+                      Text('Factory Reset', style: TextStyle(color: Colors.red)),
+                    ],
+                  ),
+                  onPressed: () async {
+                    Navigator.pop(dialogCtx);
+                    LoggerService.log('SECURITY', 'User clicked factory reset from settings');
+                    _resetAutoLockTimer();
+                    await FactoryResetDialog.show(ctx);
+                  },
+                ),
               ],
             ),
             actions: [
@@ -2190,6 +2129,58 @@ class _MainWindowState extends State<MainWindow> {
           quotaWidget,
 
           const Spacer(),
+
+          // Log Viewer
+          Tooltip(
+            message: 'Log Viewer',
+            child: IconButton(
+              icon: Icon(FluentIcons.code, size: 11, color: theme.inactiveColor),
+              onPressed: _showLogViewer,
+            ),
+          ),
+
+          const SizedBox(width: 4),
+
+          // Security Health
+          Tooltip(
+            message: 'Security Health',
+            child: IconButton(
+              icon: Icon(FluentIcons.shield, size: 11, color: theme.inactiveColor),
+              onPressed: _showSecurityHealth,
+            ),
+          ),
+
+          const SizedBox(width: 4),
+
+          // Server Info
+          Tooltip(
+            message: 'Server Info',
+            child: IconButton(
+              icon: Icon(FluentIcons.server, size: 11, color: theme.inactiveColor),
+              onPressed: () {
+                _resetAutoLockTimer();
+                showDialog(
+                  context: context,
+                  builder: (_) => const ServerInfoDialog(),
+                );
+              },
+            ),
+          ),
+
+          const SizedBox(width: 4),
+
+          // Check for updates
+          Tooltip(
+            message: _manualUpdateChecking ? 'Checking...' : 'Check for updates',
+            child: IconButton(
+              icon: _manualUpdateChecking
+                  ? const SizedBox(width: 11, height: 11, child: ProgressRing(strokeWidth: 2))
+                  : Icon(FluentIcons.cloud_download, size: 11, color: theme.inactiveColor),
+              onPressed: _manualUpdateChecking ? null : _checkForUpdatesManual,
+            ),
+          ),
+
+          const SizedBox(width: 8),
 
           // Rechtliches
           Tooltip(
