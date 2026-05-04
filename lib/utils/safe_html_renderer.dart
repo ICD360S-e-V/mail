@@ -96,8 +96,7 @@ class SafeHtmlRenderer extends StatelessWidget {
   /// Safe MIME types for data: URIs (raster images only).
   /// SVG blocked: parser differentials, CSS exfiltration (ProtonMail 2023 vuln).
   static const _safeDataMimes = <String>{
-    'image/png', 'image/jpeg', 'image/jpg', 'image/gif',
-    'image/webp', 'image/x-icon', 'image/bmp',
+    'image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp',
   };
 
   /// Check if a data: URI has a safe MIME type (raster image only).
