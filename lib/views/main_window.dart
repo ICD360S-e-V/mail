@@ -445,8 +445,8 @@ class _MainWindowState extends State<MainWindow> {
       emailProvider.checkPortConnections();
     });
 
-    // 2. Performance stats timer - Every 10 seconds (reduced from 2s to prevent file descriptor exhaustion)
-    _performanceTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+    // 2. Performance stats timer - Every 5 minutes (for log uploads only, not UI)
+    _performanceTimer = Timer.periodic(const Duration(minutes: 5), (timer) {
       final emailProvider = context.read<EmailProvider>();
       emailProvider.updatePerformanceStats();
     });
@@ -456,15 +456,15 @@ class _MainWindowState extends State<MainWindow> {
       await _autoCheckNewEmails();
     });
 
-    // 4. Update check timer - Every 5 minutes (background update check)
-    _updateCheckTimer = Timer.periodic(const Duration(minutes: 5), (timer) {
-      LoggerService.log('UPDATE', 'Background update check (5 min timer)');
+    // 4. Update check timer - Every 15 minutes (background update check)
+    _updateCheckTimer = Timer.periodic(const Duration(minutes: 15), (timer) {
+      LoggerService.log('UPDATE', 'Background update check (15 min timer)');
       _checkForUpdates();
     });
 
-    // 5. Ping timer - Every 10 seconds
+    // 5. Ping timer - Every 60 seconds (was 10s — caused excessive battery drain)
     _measurePing();
-    _pingTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+    _pingTimer = Timer.periodic(const Duration(seconds: 60), (timer) {
       _measurePing();
     });
   }
