@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.93.17 - 2026-05-04
+#### Bug Fixes
+- add mobile folder selector for phones where NavigationPane is hidden - (1b07f85) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.93.16 - 2026-05-04
 #### Code Refactoring
 - remove Source Code button from header (already in Rechtliches) - (836b83e) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
