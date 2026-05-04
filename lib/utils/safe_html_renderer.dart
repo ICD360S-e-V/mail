@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2024-2026 ICD360S e.V.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:html/parser.dart' as html_parser;
@@ -99,7 +101,7 @@ class SafeHtmlRenderer extends StatelessWidget {
     'image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp',
   };
 
-  /// Check if a data: URI has a safe MIME type (raster image only).
+  /// Check if a data: URI has a safe MIME type AND valid magic bytes.
   static bool _isSafeDataUri(String uri) {
     if (!uri.startsWith('data:')) return false;
     final mimeEnd = uri.indexOf(';');
@@ -107,7 +109,21 @@ class SafeHtmlRenderer extends StatelessWidget {
     final end = (mimeEnd > 0 && mimeEnd < commaEnd) ? mimeEnd : commaEnd;
     if (end < 0) return false;
     final mime = uri.substring(5, end).trim().toLowerCase();
-    return _safeDataMimes.contains(mime);
+    if (!_safeDataMimes.contains(mime)) return false;
+    if (!uri.contains(';base64,')) return false;
+    final b64Start = uri.indexOf(';base64,') + 8;
+    if (b64Start >= uri.length) return false;
+    try {
+      final bytes = base64.decode(uri.substring(b64Start, min(b64Start + 16, uri.length)));
+      if (bytes.length < 4) return false;
+      if (bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47) return true; // PNG
+      if (bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF) return true; // JPEG
+      if (bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x38) return true; // GIF
+      if (bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46) return true; // WebP
+      return false;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Allowed URL schemes for `src` attributes (images, embedded content).
