@@ -183,8 +183,7 @@ class SafeHtmlRenderer extends StatelessWidget {
   /// 4. Allow `url(data:…)` and `url(cid:…)` for inline images
   /// 5. Block `position: absolute/fixed/sticky`
   static String _sanitizeStyleValue(String style) {
-    // Step 1: Recursive unescape (CSS hex + HTML entities) — up to 5
-    // rounds to defeat multi-layer encoding like `\26#117;rl(…)`.
+    if (style.length > 4096) return '';
     var decoded = style;
     for (var i = 0; i < 5; i++) {
       final prev = decoded;
