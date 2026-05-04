@@ -23,8 +23,9 @@ class DnsChecker {
   static const _primaryEndpoint = 'https://mail.icd360s.de/dns-query';
   static const _fallbackEndpoint = 'https://cloudflare-dns.com/dns-query';
   // Quad9: non-Five-Eyes (Switzerland), zero-logging, DNSSEC-validating.
-  // Uses RFC 8484 wireformat (binary), NOT JSON API.
   static const _quad9Endpoint = 'https://dns.quad9.net/dns-query';
+  static const _quad9DotHost = 'dns.quad9.net';
+  static const _quad9DotPort = 853;
   static const _timeout = Duration(seconds: 10);
 
   /// Look up TXT records for [domain].
@@ -83,27 +84,27 @@ class DnsChecker {
     }
   }
 
-  /// Resolve the mail server's own hostname via EXTERNAL DoH only.
+  /// Resolve the mail server's own hostname via EXTERNAL DNS only.
   ///
   /// This avoids the circular dependency: resolving `mail.icd360s.de`
   /// via `mail.icd360s.de/dns-query` would require resolving
   /// `mail.icd360s.de` first (via system resolver), defeating the
   /// purpose.
   ///
-  /// Chain: Cloudflare JSON API → Quad9 JSON API fallback.
-  /// Quad9 dropped HTTP/1.1 for DoH (2025-12-15), Dart HttpClient
-  /// only supports HTTP/1.1, so wireformat POST no longer works.
+  /// Uses Quad9 DNS-over-TLS (RFC 7858) on port 853. No HTTP involved,
+  /// so unaffected by Quad9's HTTP/1.1 deprecation. Falls back to
+  /// Cloudflare JSON DoH if DoT fails.
   static Future<List<String>> lookupServerA(String domain) async {
     try {
-      return await _queryDoH(_fallbackEndpoint, domain, 'A');
+      return await _queryDoT(_quad9DotHost, _quad9DotPort, domain, _qTypeA);
     } catch (ex) {
       LoggerService.logWarning('DNS',
-          'Cloudflare DoH failed for $domain: $ex');
+          'Quad9 DoT failed for $domain: $ex');
       try {
-        return await _queryDoH(_quad9Endpoint, domain, 'A');
+        return await _queryDoH(_fallbackEndpoint, domain, 'A');
       } catch (ex2) {
         LoggerService.logWarning('DNS',
-            'Quad9 DoH also failed for $domain: $ex2');
+            'Cloudflare DoH fallback also failed for $domain: $ex2');
         return [];
       }
     }
@@ -342,6 +343,43 @@ class DnsChecker {
     }
     final result = buffer.toString();
     return result.isNotEmpty ? result : raw.replaceAll('"', '');
+  }
+
+  // ────────────────────────────────────────────────────────────────
+  //  RFC 7858 DNS-over-TLS (DoT) for Quad9
+  // ────────────────────────────────────────────────────────────────
+
+  static Future<List<String>> _queryDoT(
+    String host, int port, String domain, int qtype,
+  ) async {
+    final query = _buildDnsQuery(domain, qtype);
+    final lenPrefix = Uint8List(2)
+      ..[0] = (query.length >> 8) & 0xFF
+      ..[1] = query.length & 0xFF;
+
+    final socket = await SecureSocket.connect(host, port,
+        timeout: _timeout, supportedProtocols: null);
+    try {
+      socket.add(lenPrefix);
+      socket.add(query);
+      await socket.flush();
+
+      final response = BytesBuilder();
+      int? expectedLen;
+      await for (final chunk in socket.timeout(_timeout)) {
+        response.add(chunk);
+        final buf = response.toBytes();
+        expectedLen ??= (buf.length >= 2) ? (buf[0] << 8 | buf[1]) + 2 : null;
+        if (expectedLen != null && buf.length >= expectedLen) break;
+      }
+
+      final raw = response.toBytes();
+      if (raw.length < 4) throw DnsException('DoT: empty response', -1);
+      final dnsData = Uint8List.sublistView(raw, 2);
+      return _parseARecords(dnsData);
+    } finally {
+      await socket.close();
+    }
   }
 
   // ────────────────────────────────────────────────────────────────
