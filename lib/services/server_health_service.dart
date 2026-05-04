@@ -82,19 +82,19 @@ class ServerHealthService {
   /// Check DKIM record via DoH (works on all platforms including mobile)
   Future<HealthCheckResult> _checkDkimAsync() async {
     try {
-      final dkim = await DnsChecker.lookupDkim(domain);
+      final dkim = await DnsChecker.lookupDkim(domain, selector: 'ed202505');
       if (dkim != null) {
         LoggerService.log('HEALTH', 'DKIM record found for $domain');
         return HealthCheckResult(checkedAt: DateTime.now(), 
           status: 'OK',
           color: 'Green',
-          message: 'DKIM record exists for default._domainkey.$domain',
+          message: 'DKIM dual signing: Ed25519 (ed202505) + RSA (rsa202505).$domain',
         );
       }
       return HealthCheckResult(checkedAt: DateTime.now(), 
         status: 'MISSING',
         color: 'Orange',
-        message: 'No DKIM record found for default._domainkey.$domain',
+        message: 'No DKIM record found for ed202505._domainkey.$domain',
       );
     } catch (ex) {
       return HealthCheckResult(checkedAt: DateTime.now(), 
