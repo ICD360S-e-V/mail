@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.110.0 - 2026-05-04
+#### Security Fixes
+- validate data: URI with base64 requirement + magic bytes check - (e1476f3) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.109.0 - 2026-05-04
 #### Security Fixes
 - remove BMP and ICO from allowed data: URI MIME types - (de348d8) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
