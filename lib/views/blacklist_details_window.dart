@@ -24,8 +24,8 @@ class BlacklistDetailsWindow extends StatelessWidget {
 
     // Determine IP address based on type
     final ipAddress = ipType == 'IPv4'
-        ? '49.13.174.172 (mail.icd360s.de)'
-        : '2a01:4f8:c0c:fd22::1 (mail.icd360s.de)';
+        ? '51.77.64.160 (mail.icd360s.de)'
+        : '2001:41d0:700:22a0::1 (mail.icd360s.de)';
 
     final providerCount = ipType == 'IPv4' ? 29 : 14;
 
