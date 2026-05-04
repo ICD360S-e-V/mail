@@ -859,6 +859,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
           LoggerService.log('SECURE_MAIL',
               '✓ Encrypted and uploaded, sending notification link');
         } catch (ex) {
+          _securePasswordController.clear();
           NotificationService.showErrorToast(
               'Secure mail failed', ex.toString());
           setState(() { _isSending = false; _sendingStatus = ''; });
