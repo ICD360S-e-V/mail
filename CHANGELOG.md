@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.93.10 - 2026-05-04
+#### Bug Fixes
+- remove UCEPROTECT Level 2/3 from blacklist checks - (f268591) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.93.9 - 2026-05-04
 #### Bug Fixes
 - update DKIM health check to use ed202505 selector - (1e3c926) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
