@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.93.13 - 2026-05-04
+#### Bug Fixes
+- use Quad9 DNS-over-TLS instead of deprecated HTTP/1.1 DoH - (7b604a0) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.93.12 - 2026-05-04
 #### Bug Fixes
 - replace Quad9 wireformat DoH with Cloudflare JSON API - (a1b97c2) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
