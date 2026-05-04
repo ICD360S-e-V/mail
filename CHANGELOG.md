@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.93.8 - 2026-05-04
+#### Bug Fixes
+- update server IP addresses after OVH migration - (8c72084) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.93.7 - 2026-05-01
 #### Bug Fixes
 - (**ci**) concurrency group without ref (new build cancels previous) - (bfd66ca) - icd360sevofficial
