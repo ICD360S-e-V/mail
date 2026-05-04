@@ -3,6 +3,7 @@
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:http/io_client.dart';
 import 'certificate_expiry_monitor.dart';
 import 'le_issuer_check.dart';
@@ -26,9 +27,9 @@ class CertificateService {
   // Keychain, Windows DPAPI Credential Manager, macOS Keychain,
   // Linux libsecret) so it survives process restarts without ever
   // being touched by the public filesystem.
-  static String? _clientCert;
-  static String? _clientKey;
-  static String? _caCert;
+  static Uint8List? _clientCert;
+  static Uint8List? _clientKey;
+  static Uint8List? _caCert;
   static String? _currentUsername;
 
   // Storage backend for cert/key/CA: MasterVault on macOS (B5,
@@ -145,14 +146,14 @@ class CertificateService {
   /// Whether network was detected as down
   static bool get isNetworkDown => _networkDown;
 
-  /// Get downloaded client certificate (or null if not downloaded)
-  static String? get clientCert => _clientCert;
+  /// Get downloaded client certificate bytes (or null if not downloaded)
+  static Uint8List? get clientCert => _clientCert;
 
-  /// Get downloaded client key (or null if not downloaded)
-  static String? get clientKey => _clientKey;
+  /// Get downloaded client key bytes (or null if not downloaded)
+  static Uint8List? get clientKey => _clientKey;
 
-  /// Get downloaded CA certificate (or null if not downloaded)
-  static String? get caCert => _caCert;
+  /// Get downloaded CA certificate bytes (or null if not downloaded)
+  static Uint8List? get caCert => _caCert;
 
   /// Get current username for downloaded certificate
   static String? get currentUsername => _currentUsername;
@@ -179,9 +180,9 @@ class CertificateService {
     await _secureStorage.write(
         key: _kStorageCaCertFor(username), value: caCert);
     await _registerKnownUser(username);
-    _clientCert = clientCert;
-    _clientKey = clientKey;
-    _caCert = caCert;
+    _clientCert = Uint8List.fromList(utf8.encode(clientCert));
+    _clientKey = Uint8List.fromList(utf8.encode(clientKey));
+    _caCert = Uint8List.fromList(utf8.encode(caCert));
     _currentUsername = username;
     // Persist real expiry parsed from the cert PEM.
     try {
@@ -204,6 +205,15 @@ class CertificateService {
   static void lockCache() {
     if (_clientCert == null && _clientKey == null && _caCert == null) {
       return;
+    }
+    if (_clientKey != null) {
+      for (var i = 0; i < _clientKey!.length; i++) _clientKey![i] = 0;
+    }
+    if (_clientCert != null) {
+      for (var i = 0; i < _clientCert!.length; i++) _clientCert![i] = 0;
+    }
+    if (_caCert != null) {
+      for (var i = 0; i < _caCert!.length; i++) _caCert![i] = 0;
     }
     _clientCert = null;
     _clientKey = null;
@@ -313,9 +323,9 @@ class CertificateService {
       if (cert == null || key == null || ca == null) {
         return false;
       }
-      _clientCert = cert;
-      _clientKey = key;
-      _caCert = ca;
+      _clientCert = Uint8List.fromList(utf8.encode(cert));
+      _clientKey = Uint8List.fromList(utf8.encode(key));
+      _caCert = Uint8List.fromList(utf8.encode(ca));
       _currentUsername = username;
       // Restore persisted expiry dates (parsed from PEM at download time)
       await CertificateExpiryMonitor.loadPersistedExpiry();

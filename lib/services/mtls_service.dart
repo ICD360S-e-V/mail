@@ -64,13 +64,17 @@ class MtlsService {
       final context = PinnedSecurityContext.create();
 
       // STEP 1: Add private key (unique per user)
-      context.usePrivateKeyBytes(utf8.encode(CertificateService.clientKey!));
+      context.usePrivateKeyBytes(CertificateService.clientKey!);
       LoggerService.log('MTLS', '✓ Per-user private key loaded');
 
       // STEP 2: Add certificate chain (unique per user)
-      final fullChain =
-          '${CertificateService.clientCert!}\n${CertificateService.caCert!}';
-      context.useCertificateChainBytes(utf8.encode(fullChain));
+      final certBytes = CertificateService.clientCert!;
+      final caBytes = CertificateService.caCert!;
+      final fullChain = Uint8List(certBytes.length + 1 + caBytes.length)
+        ..setAll(0, certBytes)
+        ..[certBytes.length] = 0x0A // newline
+        ..setAll(certBytes.length + 1, caBytes);
+      context.useCertificateChainBytes(fullChain);
       LoggerService.log('MTLS', '✓ Per-user certificate chain loaded');
 
       LoggerService.log('MTLS', '✓ SecurityContext ready for mTLS (per-user mode)');

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2024-2026 ICD360S e.V.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import 'dart:convert';
 import 'package:basic_utils/basic_utils.dart';
 import 'certificate_service.dart';
 import 'logger_service.dart';
@@ -121,7 +122,7 @@ class CertificateExpiryMonitor {
     final cert = CertificateService.clientCert;
     if (cert != null) {
       try {
-        final certData = X509Utils.x509CertificateFromPem(cert);
+        final certData = X509Utils.x509CertificateFromPem(utf8.decode(cert));
         final validity = certData.tbsCertificate?.validity;
         if (validity == null) {
           LoggerService.logWarning('CERT-EXPIRY',
