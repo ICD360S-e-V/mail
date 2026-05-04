@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.93.16 - 2026-05-04
+#### Code Refactoring
+- remove Source Code button from header (already in Rechtliches) - (836b83e) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.93.15 - 2026-05-04
 #### Code Refactoring
 - move Log/Health/Server/Update to footer, Factory Reset to Settings - (ba58054) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
