@@ -136,13 +136,9 @@ class MailService {
       await smtpClient.authenticateWithExternal();
       return;
     }
-    LoggerService.log(
-        'SMTP', 'Auth: PLAIN (server does not advertise AUTH EXTERNAL)');
-    await smtpClient.authenticate(
-      _getAuthUsername(account.username),
-      account.password ?? '',
-      AuthMechanism.plain,
-    );
+    throw StateError(
+        'SMTP server does not advertise AUTH EXTERNAL — '
+        'password auth is disabled for security');
   }
 
   /// Authenticate to an already-connected IMAP client, preferring SASL
@@ -172,8 +168,9 @@ class MailService {
       await client.authenticateWithExternal();
       return;
     }
-    LoggerService.log('IMAP', 'Auth: LOGIN (server does not advertise AUTH=EXTERNAL)');
-    await client.login(user, account.password ?? '');
+    throw StateError(
+        'IMAP server does not advertise AUTH=EXTERNAL — '
+        'password auth is disabled for security');
   }
 
   /// Quote a string for use in an IMAP command (RFC 3501 quoted-string).

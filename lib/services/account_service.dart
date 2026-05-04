@@ -596,7 +596,7 @@ class AccountService {
 
         // Load passwords (secure storage with fallback)
         for (final account in accounts) {
-          account.password = await _loadPassword(account.username);
+          // mTLS only — no password loading needed
         }
 
         // AUTO-MIGRATION: Update ports for mTLS strict enforcement
@@ -680,11 +680,6 @@ class AccountService {
       ));
     }
 
-    // Save password to secure storage + fallback
-    if (account.password != null && account.password!.isNotEmpty) {
-      await _savePassword(account.username, account.password!);
-    }
-
     accounts.add(account);
     await saveAccountsAsync();
     LoggerService.log('ACCOUNTS', '✓ Account added: ${account.username}');
@@ -712,11 +707,6 @@ class AccountService {
       LoggerService.log('ACCOUNTS',
           '✗ BLOCKED: Invalid ports IMAP:${account.imapPort} SMTP:${account.smtpPort}');
       throw Exception('Security Error: Only secure ports (IMAP:10993, SMTP:465) are allowed.');
-    }
-
-    // Update password if changed
-    if (account.password != null && account.password!.isNotEmpty) {
-      await _savePassword(account.username, account.password!);
     }
 
     await saveAccountsAsync();

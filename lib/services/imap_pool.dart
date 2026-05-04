@@ -160,7 +160,9 @@ class ImapPool {
     if (client.serverInfo.supports('AUTH=EXTERNAL')) {
       await client.authenticateWithExternal();
     } else {
-      await client.login(user, account.password ?? '');
+      throw StateError(
+          'IMAP server does not advertise AUTH=EXTERNAL — '
+          'password auth is disabled for security');
     }
 
     return client;

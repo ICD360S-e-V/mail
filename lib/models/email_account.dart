@@ -32,9 +32,6 @@ class EmailAccount {
   // Folder message counts (not serialized, loaded dynamically)
   Map<String, int> folderCounts;
 
-  // Password loaded from secure storage (not serialized)
-  String? password;
-
   // Connection status (not serialized, updated dynamically)
   AccountConnectionStatus connectionStatus;
   String? connectionError; // Error message if connection failed
@@ -55,7 +52,6 @@ class EmailAccount {
     this.inboxCount = 0,
     List<String>? folders,
     Map<String, int>? folderCounts,
-    this.password,
     this.connectionStatus = AccountConnectionStatus.unknown,
     this.connectionError,
   })  : folders = folders ?? [],
@@ -102,7 +98,6 @@ class EmailAccount {
     int? inboxCount,
     List<String>? folders,
     Map<String, int>? folderCounts,
-    String? password,
     AccountConnectionStatus? connectionStatus,
     String? connectionError,
   }) {
@@ -117,7 +112,6 @@ class EmailAccount {
       inboxCount: inboxCount ?? this.inboxCount,
       folders: folders ?? List.from(this.folders),
       folderCounts: folderCounts ?? Map.from(this.folderCounts),
-      password: password ?? this.password,
       connectionStatus: connectionStatus ?? this.connectionStatus,
       connectionError: connectionError ?? this.connectionError,
     );

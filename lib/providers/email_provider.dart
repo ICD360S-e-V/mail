@@ -499,8 +499,6 @@ class EmailProvider with ChangeNotifier {
   /// register-device rejection sets, so the UI shows the same dialog.
   Future<void> _checkForLockedOut(EmailAccount account) async {
     final username = account.username;
-    final password = account.password;
-    if (password == null || password.isEmpty) return;
 
     // Increment consecutive failure counter
     final count = (_consecutiveAuthFailures[username] ?? 0) + 1;
@@ -566,9 +564,6 @@ class EmailProvider with ChangeNotifier {
   /// never block the connection flow.
   Future<void> _registerDeviceForAccount(EmailAccount account) async {
     final username = account.username;
-    final password = account.password;
-    if (password == null || password.isEmpty) return;
-
     // Skip if we already registered in this session — heartbeat will
     // keep the last_seen fresh. We re-register on app restart.
     if (_devicesRegisteredThisSession.contains(username)) {
