@@ -11,7 +11,6 @@ import '../services/device_registration_service.dart';
 import '../services/log_upload_service.dart';
 import '../services/pgp_key_service.dart';
 import '../services/update_service.dart';
-import '../services/pin_unlock_service.dart';
 import '../services/master_vault.dart';
 import '../utils/pii_redactor.dart';
 
@@ -651,10 +650,6 @@ class EmailProvider with ChangeNotifier {
     _devicesRegisteredThisSession.clear();
     // Wipe mTLS certificate + private key
     await CertificateService.clearCertificates();
-    // Wipe PIN
-    try {
-      await PinUnlockService.invalidatePin();
-    } catch (_) {}
     // Wipe RAM session cache
     wipeSessionCache();
     // Lock vault (zeros KEK, dataKey, cache in memory)

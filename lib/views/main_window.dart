@@ -25,8 +25,6 @@ import '../services/imap_pool.dart';
 import '../services/mtls_client_pool.dart';
 import '../services/mail_status_service.dart';
 import '../services/pgp_key_service.dart';
-import '../services/pin_unlock_service.dart';
-import 'pin_unlock_screen.dart';
 import '../services/trash_tracker_service.dart';
 import '../services/connection_monitor.dart';
 import '../utils/l10n_helper.dart';
@@ -211,18 +209,7 @@ class _MainWindowState extends State<MainWindow> {
     setState(() => _isLocked = true);
     LoggerService.log('SECURITY', 'Application locked');
 
-    // Lock/auto-lock → PIN first (quick unlock), master password as fallback
-    bool unlocked = false;
-    final hasPin = await PinUnlockService.hasPinConfigured();
-
-    if (hasPin) {
-      unlocked = await _showPinUnlockForLock();
-      // PIN failed (3 attempts) → fallback to master password
-    }
-
-    if (!unlocked) {
-      unlocked = await _showMasterPasswordDialog();
-    }
+    final unlocked = await _showMasterPasswordDialog();
 
     if (unlocked) {
       setState(() => _isLocked = false);
@@ -950,39 +937,10 @@ class _MainWindowState extends State<MainWindow> {
     );
   }
 
-  /// Show PIN unlock screen for lock/auto-lock. Returns true if unlocked.
-  Future<bool> _showPinUnlockForLock() async {
-    final result = await Navigator.of(context).push<bool>(
-      FluentPageRoute(
-        builder: (_) => PinUnlockScreen(
-          onPinSubmitted: (pin) async {
-            final masterKey = await PinUnlockService.verifyPin(pin);
-            if (masterKey == null) return false;
-            try {
-              await PinUnlockService.unlockWithMasterKey(masterKey);
-              for (var i = 0; i < masterKey.length; i++) masterKey[i] = 0;
-              if (mounted) Navigator.of(context).pop(true);
-              return true;
-            } catch (ex, st) {
-              LoggerService.logError('PIN_UNLOCK', ex, st);
-              for (var i = 0; i < masterKey.length; i++) masterKey[i] = 0;
-              return false;
-            }
-          },
-          onFallbackToPassword: () {
-            if (mounted) Navigator.of(context).pop(false);
-          },
-        ),
-      ),
-    );
-    return result ?? false;
-  }
-
-  /// Settings dialog — notification privacy + PIN management.
+  /// Settings dialog — notification privacy.
   Future<void> _showSettingsDialog(BuildContext ctx) async {
     LoggerService.log('UI_CLICK', 'Footer: Settings button clicked');
     var privacyLevel = await SettingsService.getNotificationPrivacyLevel();
-    final hasPin = await PinUnlockService.hasPinConfigured();
 
     if (!ctx.mounted) return;
     await showDialog(
@@ -1022,60 +980,6 @@ class _MainWindowState extends State<MainWindow> {
                     }
                   },
                 ),
-
-                const SizedBox(height: 20),
-                // ── PIN Management ─────────────────────────────
-                Text('PIN Unlock',
-                    style: FluentTheme.of(dialogCtx).typography.bodyStrong),
-                const SizedBox(height: 8),
-                if (hasPin)
-                  Button(
-                    child: const Text('Disable PIN'),
-                    onPressed: () async {
-                      await PinUnlockService.invalidatePin();
-                      if (dialogCtx.mounted) {
-                        Navigator.pop(dialogCtx);
-                        NotificationService.showSuccessToast(
-                            'PIN disabled', 'Master password required on next unlock');
-                      }
-                    },
-                  )
-                else
-                  Button(
-                    child: const Text('Set up PIN'),
-                    onPressed: () async {
-                      Navigator.pop(dialogCtx);
-                      // Navigate to PIN setup — need masterKey from vault
-                      final vault = MasterVault.instance;
-                      final masterKey = await vault.deriveMasterKeyFromCache();
-                      if (masterKey == null || !ctx.mounted) return;
-                      await Navigator.of(ctx).push(
-                        FluentPageRoute(
-                          builder: (_) => PinUnlockScreen(
-                            isSetup: true,
-                            onPinSubmitted: (pin) async {
-                              try {
-                                await PinUnlockService.setupPin(
-                                    pin: pin, masterKey: masterKey);
-                                for (var i = 0; i < masterKey.length; i++) {
-                                  masterKey[i] = 0;
-                                }
-                                if (ctx.mounted) Navigator.of(ctx).pop();
-                                NotificationService.showSuccessToast(
-                                    'PIN set', 'Quick unlock enabled');
-                                return true;
-                              } catch (ex) {
-                                return false;
-                              }
-                            },
-                            onFallbackToPassword: () {
-                              if (ctx.mounted) Navigator.of(ctx).pop();
-                            },
-                          ),
-                        ),
-                      );
-                    },
-                  ),
 
                 const SizedBox(height: 20),
                 // ── Factory Reset ──────────────────────────────
