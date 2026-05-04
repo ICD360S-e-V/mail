@@ -358,7 +358,19 @@ class DnsChecker {
       ..[1] = query.length & 0xFF;
 
     final socket = await SecureSocket.connect(host, port,
-        timeout: _timeout, supportedProtocols: null);
+        timeout: _timeout,
+        supportedProtocols: null,
+        onBadCertificate: (cert) {
+          final subject = cert.subject;
+          final issuer = cert.issuer;
+          if (subject.contains('CN=dns.quad9.net') &&
+              issuer.contains('DigiCert')) {
+            return true;
+          }
+          LoggerService.logWarning('DNS',
+              'DoT cert rejected: subject=$subject issuer=$issuer');
+          return false;
+        });
     try {
       socket.add(lenPrefix);
       socket.add(query);
