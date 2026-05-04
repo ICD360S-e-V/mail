@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.99.0 - 2026-05-04
+#### Security Fixes
+- remove password field entirely, enforce mTLS-only auth - (0e506d9) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.98.0 - 2026-05-04
 #### Security Fixes
 - auto-clear clipboard after 30 seconds - (659a43a) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
