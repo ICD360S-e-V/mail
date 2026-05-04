@@ -61,8 +61,8 @@ class PgpSyncService {
   /// MUST differ from every other HKDF label in the codebase.
   static const _hkdfInfo = 'pgp-blob-kek-v1';
 
-  /// HKDF salt label (same scheme as MasterVault, no separate secret needed).
-  static const _hkdfSalt = 'icd360s.macos.v2.master-vault.salt';
+  /// HKDF salt — distinct from MasterVault's salt for domain separation.
+  static const _hkdfSalt = 'icd360s.pgp-sync.v1.salt';
 
   static const _gcmNonceBytes = 12;
   static const _versionBytes = 4;
