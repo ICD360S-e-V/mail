@@ -12,6 +12,7 @@
 /// `support@bank.com` to the user.
 ///
 /// Stripped codepoints (Unicode bidi controls):
+/// - `U+061C` ALM (Arabic Letter Mark — bidi influence)
 /// - `U+200E` LRM, `U+200F` RLM (left/right marks)
 /// - `U+202A` LRE, `U+202B` RLE, `U+202C` PDF
 /// - `U+202D` LRO, `U+202E` RLO (overrides — the dangerous ones)
@@ -23,7 +24,7 @@
 /// reply/forward content (would corrupt the user's own message).
 String sanitizeBidi(String input) {
   return input.replaceAll(
-    RegExp(r'[\u200E\u200F\u202A-\u202E\u2066-\u2069]'),
+    RegExp(r'[\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]'),
     '',
   );
 }
