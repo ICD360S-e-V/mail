@@ -1146,11 +1146,33 @@ jobs:
         run: rm -f ~/.ssh/vps_deploy_key ~/.ssh/known_hosts
 
   # ============================================================
+  # SBOM - Generate CycloneDX Software Bill of Materials
+  # ============================================================
+  sbom:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Generate CycloneDX SBOM from pubspec.lock
+        uses: CycloneDX/gh-dart-generate-sbom@v1
+        with:
+          path: .
+          output: sbom.cdx.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sbom-cyclonedx
+          path: sbom.cdx.json
+
+  # ============================================================
   # Release - Create GitHub Release on tags v*
   # ============================================================
   release:
     name: Release
-    needs: [build-linux, build-android, android-cache-save, build-ios, build-macos, build-windows]
+    needs: [build-linux, build-android, android-cache-save, build-ios, build-macos, build-windows, sbom]
     if: always() && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -1221,6 +1243,11 @@ jobs:
           if [ -d "artifacts/windows-build" ]; then
             EXE=$(find "artifacts/windows-build" -name "*.exe" | head -1)
             [ -n "$EXE" ] && cp "$EXE" "release/ICD360S-Mail-Client-Setup-${VERSION}.exe"
+          fi
+
+          # SBOM (CycloneDX)
+          if [ -d "artifacts/sbom-cyclonedx" ]; then
+            cp artifacts/sbom-cyclonedx/sbom.cdx.json "release/sbom-${VERSION}.cdx.json"
           fi
 
           echo "## Release artifacts:" >> "$GITHUB_STEP_SUMMARY"
