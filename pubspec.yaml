@@ -85,7 +85,7 @@ dependencies:
   # Screenshot/screen recording prevention (Android FLAG_SECURE already set
   # natively; this adds iOS secure text field trick + Windows
   # SetWindowDisplayAffinity + macOS NSWindow.sharingType)
-  no_screenshot: ^0.6.0
+  no_screenshot: ^1.1.0
 
   # Root/jailbreak detection (mobile only, no external telemetry)
   safe_device: ^1.1.0
