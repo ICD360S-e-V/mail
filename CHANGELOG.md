@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.124.0 - 2026-05-05
+#### Security Fixes
+- add basic Frida/hooking detection via /proc/self/maps - (5fb56c4) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.123.0 - 2026-05-05
 #### Security Fixes
 - use kernel32 IsDebuggerPresent via FFI for Windows detection - (4d2fb98) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
