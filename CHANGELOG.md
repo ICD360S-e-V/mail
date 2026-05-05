@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.120.0 - 2026-05-05
+#### Security Fixes
+- harden download URL validation against parsing edge cases - (dd9db6a) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.119.0 - 2026-05-05
 #### Security Fixes
 - add U+061C Arabic Letter Mark to bidi sanitization - (cc6e958) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
