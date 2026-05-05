@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.119.0 - 2026-05-05
+#### Security Fixes
+- add U+061C Arabic Letter Mark to bidi sanitization - (cc6e958) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.118.0 - 2026-05-05
 #### Security Fixes
 - add cross-platform screenshot/recording prevention (no_screenshot) - (29028e2) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
