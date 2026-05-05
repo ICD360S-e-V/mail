@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.123.0 - 2026-05-05
+#### Security Fixes
+- use kernel32 IsDebuggerPresent via FFI for Windows detection - (4d2fb98) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.122.0 - 2026-05-05
 #### Security Fixes
 - add Windows debugger/hooking DLL detection - (5a79d39) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
