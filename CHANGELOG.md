@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.121.0 - 2026-05-05
+#### Security Fixes
+- add device integrity checks (root/jailbreak/SIP/debugger) - (abc8f4c) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.120.0 - 2026-05-05
 #### Security Fixes
 - harden download URL validation against parsing edge cases - (dd9db6a) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
