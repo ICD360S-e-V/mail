@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.124.8 - 2026-05-05
+#### Bug Fixes
+- upgrade no_screenshot to v1.1.0 (Linux build fix) - (f2a7ebe) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.124.7 - 2026-05-05
 #### Bug Fixes
 - notify listeners after quota fetch so footer updates - (28d180a) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
