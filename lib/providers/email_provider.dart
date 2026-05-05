@@ -414,6 +414,8 @@ class EmailProvider with ChangeNotifier {
       LoggerService.log('PROVIDER', 'Final account.folders: ${account.folders}');
       LoggerService.log('PROVIDER', 'Final account.folderCounts: ${account.folderCounts}');
 
+      if (!_disposed) notifyListeners();
+
       // Reset the consecutive auth-fail counter on successful auth.
       _consecutiveAuthFailures.remove(account.username);
 
