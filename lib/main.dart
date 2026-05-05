@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'dart:async';
+import 'dart:ffi';
 import 'dart:io';
 import 'package:cryptography_flutter/cryptography_flutter.dart';
 import 'package:no_screenshot/no_screenshot.dart';
@@ -131,16 +132,12 @@ Future<void> _checkDeviceIntegrity() async {
         }
       }
     } else if (Platform.isWindows) {
-      final result = await Process.run('powershell', [
-        '-NoProfile', '-Command',
-        r"(Get-Process -Id $PID).Modules | Where-Object {$_.ModuleName -match 'dbg|frida'} | Measure-Object | Select-Object -ExpandProperty Count",
-      ]).timeout(const Duration(seconds: 3));
-      if (result.exitCode == 0) {
-        final count = int.tryParse((result.stdout as String).trim()) ?? 0;
-        if (count > 0) {
-          LoggerService.logWarning('INTEGRITY',
-              '⚠ Debugger/hooking DLL detected ($count suspicious modules)');
-        }
+      final kernel32 = DynamicLibrary.open('kernel32.dll');
+      final isDebuggerPresent = kernel32
+          .lookupFunction<Int32 Function(), int Function()>('IsDebuggerPresent');
+      if (isDebuggerPresent() != 0) {
+        LoggerService.logWarning('INTEGRITY',
+            '⚠ Debugger attached (IsDebuggerPresent=true)');
       }
     } else if (Platform.isLinux) {
       final file = File('/proc/self/status');
