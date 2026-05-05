@@ -1156,10 +1156,10 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Generate CycloneDX SBOM from pubspec.lock
-        uses: CycloneDX/gh-dart-generate-sbom@v1
-        with:
-          path: .
-          output: sbom.cdx.json
+        run: |
+          npm install -g @cyclonedx/cdxgen
+          cdxgen -t dart -o sbom.cdx.json .
+          echo "✓ SBOM generated ($(wc -l < sbom.cdx.json) lines)"
 
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
