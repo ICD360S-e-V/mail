@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.124.5 - 2026-05-05
+#### Bug Fixes
+- remove last password reference in _registerDeviceForAccount - (9f3d6a3) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.124.4 - 2026-05-05
 #### Bug Fixes
 - resolve build errors — dart:ffi Size conflict, removed password refs - (a819c81) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
