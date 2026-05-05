@@ -515,42 +515,9 @@ class EmailProvider with ChangeNotifier {
     // but won't trigger again.
     if (count > _lockoutDetectionThreshold) return;
 
-    LoggerService.log('AUTH_ERROR',
+    LoggerService.logWarning('AUTH_ERROR',
         'Auth failure threshold reached for $username '
-        '— probing mail-admin for single-device lockout');
-
-    try {
-      final result = await DeviceRegistrationService.registerDevice(
-        username: username,
-        password: password,
-      );
-
-      if (result.isDeviceLimitReached) {
-        LoggerService.logWarning('AUTH_ERROR',
-            'Confirmed single-device lockout for $username '
-            '— showing restriction dialog');
-        _deviceLimitReachedFor = username;
-        if (!_disposed) notifyListeners();
-      } else if (result.success) {
-        // Strange — register succeeded but IMAP didn't. Backend probably
-        // doesn't share auth state with Dovecot in real-time. Reset
-        // counter so the user can retry.
-        LoggerService.log('AUTH_ERROR',
-            'Backend register OK for $username but IMAP failed; '
-            'resetting failure counter (race condition?)');
-        _consecutiveAuthFailures.remove(username);
-      } else {
-        // result.error == "unauthorized" → password really is wrong.
-        // Don't show the lockout dialog; let the existing wrong-password
-        // UX handle it.
-        LoggerService.log('AUTH_ERROR',
-            'Backend confirms wrong password for $username '
-            '(error: ${result.error}) — not a lockout');
-      }
-    } catch (ex) {
-      LoggerService.logWarning('AUTH_ERROR',
-          'Lockout probe failed (network?): $ex');
-    }
+        '— possible cert issue or device lockout');
   }
 
   /// Track register-device attempts that failed so we don't retry on

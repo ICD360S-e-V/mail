@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'dart:async';
-import 'dart:ffi';
+import 'dart:ffi' as ffi;
 import 'dart:io';
 import 'package:cryptography_flutter/cryptography_flutter.dart';
 import 'package:no_screenshot/no_screenshot.dart';
@@ -132,9 +132,9 @@ Future<void> _checkDeviceIntegrity() async {
         }
       }
     } else if (Platform.isWindows) {
-      final kernel32 = DynamicLibrary.open('kernel32.dll');
+      final kernel32 = ffi.DynamicLibrary.open('kernel32.dll');
       final isDebuggerPresent = kernel32
-          .lookupFunction<Int32 Function(), int Function()>('IsDebuggerPresent');
+          .lookupFunction<ffi.Int32 Function(), int Function()>('IsDebuggerPresent');
       if (isDebuggerPresent() != 0) {
         LoggerService.logWarning('INTEGRITY',
             '⚠ Debugger attached (IsDebuggerPresent=true)');

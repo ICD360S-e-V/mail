@@ -134,7 +134,6 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
           // because auth is via cert (SASL EXTERNAL) from now on.
           final account = EmailAccount(
             username: email,
-            password: null,
             mailServer: _allowedServer,
             imapPort: _imapPort,
             smtpPort: _smtpPort,
