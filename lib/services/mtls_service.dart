@@ -215,14 +215,54 @@ class MtlsService {
 
   static bool _checkSpkiPin(X509Certificate cert) {
     try {
-      final certData = X509Utils.x509CertificateFromPem(cert.pem);
-      final pubKeyDer = certData.publicKeyData.bytes;
-      if (pubKeyDer == null) return false;
-      final hash = sha256.convert(pubKeyDer);
+      final pem = cert.pem;
+      final derCert = base64.decode(
+          pem.replaceAll('-----BEGIN CERTIFICATE-----', '')
+             .replaceAll('-----END CERTIFICATE-----', '')
+             .replaceAll(RegExp(r'\s'), ''));
+      final spkiDer = _extractSpkiFromDer(derCert);
+      if (spkiDer == null) return false;
+      final hash = sha256.convert(spkiDer);
       final pin = base64.encode(hash.bytes);
       return _spkiPins.contains(pin);
     } catch (_) {
       return false;
+    }
+  }
+
+  static Uint8List? _extractSpkiFromDer(Uint8List certDer) {
+    try {
+      var offset = 0;
+      int readTag() => certDer[offset++];
+      int readLength() {
+        var len = certDer[offset++];
+        if (len & 0x80 != 0) {
+          final numBytes = len & 0x7F;
+          len = 0;
+          for (var i = 0; i < numBytes; i++) {
+            len = (len << 8) | certDer[offset++];
+          }
+        }
+        return len;
+      }
+      void skipTlv() { readTag(); final l = readLength(); offset += l; }
+
+      readTag(); readLength(); // outer SEQUENCE
+      readTag(); readLength(); // tbsCertificate SEQUENCE
+      // version [0] (if present)
+      if (certDer[offset] == 0xA0) { readTag(); final l = readLength(); offset += l; }
+      skipTlv(); // serialNumber
+      skipTlv(); // signature
+      skipTlv(); // issuer
+      skipTlv(); // validity
+      skipTlv(); // subject
+      // subjectPublicKeyInfo SEQUENCE — this is SPKI
+      final spkiStart = offset;
+      readTag();
+      final spkiBodyLen = readLength();
+      return Uint8List.sublistView(certDer, spkiStart, offset + spkiBodyLen);
+    } catch (_) {
+      return null;
     }
   }
 }
