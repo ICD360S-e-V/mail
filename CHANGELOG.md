@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.118.0 - 2026-05-05
+#### Security Fixes
+- add cross-platform screenshot/recording prevention (no_screenshot) - (29028e2) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.117.0 - 2026-05-05
 #### Security Fixes
 - reduce max session duration from 8h to 1h - (191a32b) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
