@@ -82,6 +82,11 @@ dependencies:
   # NOTE: pdfrx uses PDFium natively, works on RDP sessions unlike WebView
   # Other storage uses pure Dart file I/O (hardcoded %APPDATA% paths)
 
+  # Screenshot/screen recording prevention (Android FLAG_SECURE already set
+  # natively; this adds iOS secure text field trick + Windows
+  # SetWindowDisplayAffinity + macOS NSWindow.sharingType)
+  no_screenshot: ^0.6.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

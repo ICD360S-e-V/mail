@@ -4,6 +4,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:cryptography_flutter/cryptography_flutter.dart';
+import 'package:no_screenshot/no_screenshot.dart';
 import 'package:sodium/sodium_sumo.dart';
 import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:fluent_ui/fluent_ui.dart';
@@ -119,6 +120,14 @@ Future<void> _appMain() async {
 
   // Initialize libsodium on all platforms (SecureKey, pwhash).
   MasterVault.sodium = await SodiumSumoInit.init();
+
+  // SECURITY: Prevent screenshots and screen recording on all platforms.
+  // Android: FLAG_SECURE (also set natively in MainActivity.kt)
+  // iOS: UITextField isSecureTextEntry layer trick
+  // Windows: SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)
+  // macOS: NSWindow.sharingType = .none
+  final noScreenshot = NoScreenshot.instance;
+  await noScreenshot.screenshotOff();
 
   // One-time macOS bundle ID migration (com.example.icd360sMailClient
   // → de.icd360s.mailclient, introduced in v2.25.0). MUST run before
