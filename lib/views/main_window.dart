@@ -67,7 +67,7 @@ class _MainWindowState extends State<MainWindow> {
   // Lock state
   bool _isLocked = false;
   DateTime? _sessionStartedAt;
-  static const Duration _maxSessionDuration = Duration(hours: 8);
+  static const Duration _maxSessionDuration = Duration(hours: 1);
 
   // Track whether we've already shown the "device limit reached" dialog
   // for the current EmailProvider state, to avoid re-opening on each
