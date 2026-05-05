@@ -130,6 +130,18 @@ Future<void> _checkDeviceIntegrity() async {
               '⚠ macOS SIP is disabled — system integrity compromised');
         }
       }
+    } else if (Platform.isWindows) {
+      final result = await Process.run('powershell', [
+        '-NoProfile', '-Command',
+        r"(Get-Process -Id $PID).Modules | Where-Object {$_.ModuleName -match 'dbg|frida'} | Measure-Object | Select-Object -ExpandProperty Count",
+      ]).timeout(const Duration(seconds: 3));
+      if (result.exitCode == 0) {
+        final count = int.tryParse((result.stdout as String).trim()) ?? 0;
+        if (count > 0) {
+          LoggerService.logWarning('INTEGRITY',
+              '⚠ Debugger/hooking DLL detected ($count suspicious modules)');
+        }
+      }
     } else if (Platform.isLinux) {
       final file = File('/proc/self/status');
       if (await file.exists()) {
