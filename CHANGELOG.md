@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.124.3 - 2026-05-05
+#### Bug Fixes
+- upgrade SBOM upload-artifact from v4 to v7 (Node.js 20 deprecated) - (2f80de1) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.124.2 - 2026-05-05
 #### Bug Fixes
 - use cdxgen CLI for SBOM generation (CycloneDX action doesn't exist for Dart) - (1c2bd6c) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
