@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.124.4 - 2026-05-05
+#### Bug Fixes
+- resolve build errors — dart:ffi Size conflict, removed password refs - (a819c81) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.124.3 - 2026-05-05
 #### Bug Fixes
 - upgrade SBOM upload-artifact from v4 to v7 (Node.js 20 deprecated) - (2f80de1) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
