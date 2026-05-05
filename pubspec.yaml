@@ -87,6 +87,9 @@ dependencies:
   # SetWindowDisplayAffinity + macOS NSWindow.sharingType)
   no_screenshot: ^0.6.0
 
+  # Root/jailbreak detection (mobile only, no external telemetry)
+  safe_device: ^1.1.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

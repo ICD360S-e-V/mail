@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:cryptography_flutter/cryptography_flutter.dart';
 import 'package:no_screenshot/no_screenshot.dart';
+import 'package:safe_device/safe_device.dart';
 import 'package:sodium/sodium_sumo.dart';
 import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:fluent_ui/fluent_ui.dart';
@@ -107,6 +108,44 @@ void main() async {
   });
 }
 
+Future<void> _checkDeviceIntegrity() async {
+  try {
+    if (Platform.isAndroid || Platform.isIOS) {
+      final isRooted = await SafeDevice.isJailBroken;
+      final isEmulator = await SafeDevice.isRealDevice == false;
+      if (isRooted) {
+        LoggerService.logWarning('INTEGRITY',
+            '⚠ Device is rooted/jailbroken — increased risk of key extraction');
+      }
+      if (isEmulator) {
+        LoggerService.logWarning('INTEGRITY',
+            '⚠ Running on emulator — not a physical device');
+      }
+    } else if (Platform.isMacOS) {
+      final result = await Process.run('/usr/bin/csrutil', ['status']);
+      if (result.exitCode == 0) {
+        final output = (result.stdout as String).trim();
+        if (output.contains('disabled')) {
+          LoggerService.logWarning('INTEGRITY',
+              '⚠ macOS SIP is disabled — system integrity compromised');
+        }
+      }
+    } else if (Platform.isLinux) {
+      final file = File('/proc/self/status');
+      if (await file.exists()) {
+        final content = await file.readAsString();
+        final tracerMatch = RegExp(r'TracerPid:\s*(\d+)').firstMatch(content);
+        if (tracerMatch != null && tracerMatch.group(1) != '0') {
+          LoggerService.logWarning('INTEGRITY',
+              '⚠ Debugger attached (TracerPid=${tracerMatch.group(1)})');
+        }
+      }
+    }
+  } catch (e) {
+    LoggerService.log('INTEGRITY', 'Device integrity check skipped: $e');
+  }
+}
+
 Future<void> _appMain() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -128,6 +167,11 @@ Future<void> _appMain() async {
   // macOS: NSWindow.sharingType = .none
   final noScreenshot = NoScreenshot.instance;
   await noScreenshot.screenshotOff();
+
+  // SECURITY: Device integrity check (root/jailbreak on mobile,
+  // SIP/debugger on desktop). Warn but don't block — user may have
+  // legitimate reasons (developer device, pentesting).
+  await _checkDeviceIntegrity();
 
   // One-time macOS bundle ID migration (com.example.icd360sMailClient
   // → de.icd360s.mailclient, introduced in v2.25.0). MUST run before
