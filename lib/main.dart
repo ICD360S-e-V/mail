@@ -140,13 +140,24 @@ Future<void> _checkDeviceIntegrity() async {
             '⚠ Debugger attached (IsDebuggerPresent=true)');
       }
     } else if (Platform.isLinux) {
-      final file = File('/proc/self/status');
-      if (await file.exists()) {
-        final content = await file.readAsString();
+      final statusFile = File('/proc/self/status');
+      if (await statusFile.exists()) {
+        final content = await statusFile.readAsString();
         final tracerMatch = RegExp(r'TracerPid:\s*(\d+)').firstMatch(content);
         if (tracerMatch != null && tracerMatch.group(1) != '0') {
           LoggerService.logWarning('INTEGRITY',
               '⚠ Debugger attached (TracerPid=${tracerMatch.group(1)})');
+        }
+      }
+    }
+    // Frida detection on Android/Linux (requires /proc filesystem)
+    if (Platform.isAndroid || Platform.isLinux) {
+      final mapsFile = File('/proc/self/maps');
+      if (await mapsFile.exists()) {
+        final maps = await mapsFile.readAsString();
+        if (maps.contains('frida') || maps.contains('gadget')) {
+          LoggerService.logWarning('INTEGRITY',
+              '⚠ Frida/hooking framework detected in process memory maps');
         }
       }
     }
