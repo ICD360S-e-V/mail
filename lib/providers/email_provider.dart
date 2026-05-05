@@ -551,34 +551,19 @@ class EmailProvider with ChangeNotifier {
     }
 
     try {
-      final result = await DeviceRegistrationService.registerDevice(
+      final hbResult = await DeviceRegistrationService.sendHeartbeat(
         username: username,
-        password: password,
       );
-
-      if (result.success) {
-        _devicesRegisteredThisSession.add(username);
-        _registerFailedAt.remove(username);
-        // Start heartbeat timer if not already running
-        _ensureHeartbeatTimer();
-      } else if (result.isDeviceLimitReached) {
-        _deviceLimitReachedFor = username;
-        // Mark as "tried" so we don't keep retrying — the user has
-        // to acknowledge the dialog and retry manually.
-        _registerFailedAt[username] = DateTime.now();
-        if (!_disposed) notifyListeners();
-        LoggerService.logWarning('PROVIDER',
-            'Device limit reached for $username — UI should show '
-            'restriction dialog');
-      } else {
-        // Any other failure (unauthorized, network, http_5xx, etc.)
-        // — record cooldown so we don't spam the endpoint on every
-        // folder fetch. Will retry after _registerRetryCooldown.
-        _registerFailedAt[username] = DateTime.now();
+      if (hbResult == HeartbeatResult.revoked) {
+        _onDeviceRevoked(username);
+        return;
       }
+      _devicesRegisteredThisSession.add(username);
+      _registerFailedAt.remove(username);
+      _ensureHeartbeatTimer();
     } catch (ex) {
       LoggerService.logWarning('PROVIDER',
-          'Device registration error (non-fatal): $ex');
+          'Heartbeat error (non-fatal): $ex');
       _registerFailedAt[username] = DateTime.now();
     }
   }
