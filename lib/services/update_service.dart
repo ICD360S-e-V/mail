@@ -204,9 +204,15 @@ class UpdateService {
   /// after download (and APK cert verification on Android, see H4), this
   /// makes the update path defense-in-depth secure.
   static bool _isAllowedDownloadUrl(String url) {
+    if (url.contains('\x00') || url.contains('@') || url.contains('\\')) {
+      return false;
+    }
     try {
       final uri = Uri.parse(url);
-      return uri.scheme == 'https' && uri.host == 'mail.icd360s.de';
+      return uri.scheme == 'https' &&
+          uri.host == 'mail.icd360s.de' &&
+          (uri.port == 443 || uri.port == 0) &&
+          uri.userInfo.isEmpty;
     } catch (_) {
       return false;
     }
