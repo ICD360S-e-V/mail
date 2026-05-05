@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.124.6 - 2026-05-05
+#### Bug Fixes
+- extract SPKI from cert DER directly instead of publicKeyData.bytes - (b296d93) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.124.5 - 2026-05-05
 #### Bug Fixes
 - remove last password reference in _registerDeviceForAccount - (9f3d6a3) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
