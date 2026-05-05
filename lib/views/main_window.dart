@@ -66,6 +66,8 @@ class _MainWindowState extends State<MainWindow> {
 
   // Lock state
   bool _isLocked = false;
+  DateTime? _sessionStartedAt;
+  static const Duration _maxSessionDuration = Duration(hours: 8);
 
   // Track whether we've already shown the "device limit reached" dialog
   // for the current EmailProvider state, to avoid re-opening on each
@@ -98,7 +100,8 @@ class _MainWindowState extends State<MainWindow> {
       // Start auto-refresh timers after initialization
       _startTimers();
 
-      // Start auto-lock timer (15 minutes)
+      // Start auto-lock timer + session clock
+      _sessionStartedAt = DateTime.now();
       _startAutoLockTimer();
 
       // Check for updates on startup
@@ -161,6 +164,13 @@ class _MainWindowState extends State<MainWindow> {
   void _resetAutoLockTimer() {
     if (_isLocked) return;
     final now = DateTime.now();
+    if (_sessionStartedAt != null &&
+        now.difference(_sessionStartedAt!) > _maxSessionDuration) {
+      LoggerService.log('SECURITY',
+          'Maximum session duration (${_maxSessionDuration.inHours}h) reached — forcing lock');
+      _lockApp();
+      return;
+    }
     if (_lastResetAt != null &&
         now.difference(_lastResetAt!) < _resetThrottle) {
       return;
@@ -212,6 +222,7 @@ class _MainWindowState extends State<MainWindow> {
     final unlocked = await _showMasterPasswordDialog();
 
     if (unlocked) {
+      _sessionStartedAt = DateTime.now();
       setState(() => _isLocked = false);
       LoggerService.log('SECURITY', 'Application unlocked');
 
