@@ -206,6 +206,10 @@ class DnsChecker {
 
   /// Check if DNSSEC is active for [domain] by verifying the AD
   /// (Authenticated Data) flag in the DNS response via DoH.
+  ///
+  /// The AD flag is trustworthy here because our resolvers (own server
+  /// via SPKI-pinned TLS, Quad9 via DigiCert-validated DoT) perform
+  /// DNSSEC validation themselves, and the transport is authenticated.
   static Future<bool> checkDnssec(String domain) async {
     for (final endpoint in [_primaryEndpoint, _fallbackEndpoint]) {
       try {
