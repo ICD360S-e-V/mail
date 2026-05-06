@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.124.11 - 2026-05-06
+#### Bug Fixes
+- refresh footer every 30s so sync time updates in real-time - (d9c70a6) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.124.10 - 2026-05-06
 #### Bug Fixes
 - make read receipt optional, remove DSN headers (spam score impact) - (3ed635e) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
