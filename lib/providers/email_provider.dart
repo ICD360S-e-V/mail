@@ -903,6 +903,7 @@ class EmailProvider with ChangeNotifier {
     int? draftUid,
     void Function(int bytesSent, int totalBytes)? onSendProgress,
     Map<String, String>? preEncodedBase64,
+    bool requestReadReceipt = false,
   }) async {
     _isLoading = true;
     _error = null;
@@ -914,6 +915,7 @@ class EmailProvider with ChangeNotifier {
         draftUid: draftUid,
         onSendProgress: onSendProgress,
         preEncodedBase64: preEncodedBase64,
+        requestReadReceipt: requestReadReceipt,
       );
       _error = null;
       LoggerService.log('PROVIDER', '✓ Email sent from ${piiEmail(account.username)} to:${to.split(',').length} cc:${cc.isEmpty ? 0 : cc.split(',').length} bcc:${bcc.isEmpty ? 0 : bcc.split(',').length} attachments:${attachments.length}');

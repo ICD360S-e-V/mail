@@ -96,6 +96,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
 
   // Password-protected email for external recipients
   bool _secureMailEnabled = false;
+  bool _requestReadReceipt = false;
   final TextEditingController _securePasswordController = TextEditingController();
   int _secureExpiryDays = 7;
 
@@ -882,6 +883,7 @@ class _ComposeWindowState extends State<ComposeWindow> {
         _bodyController.text,
         _attachments.map((a) => a.file).toList(),
         draftUid: _lastDraftUid,
+        requestReadReceipt: _requestReadReceipt,
         onSendProgress: (bytesSent, totalBytes) {
           if (!mounted) return;
           final percent = totalBytes > 0 ? (bytesSent * 100 ~/ totalBytes) : 0;
@@ -1274,6 +1276,12 @@ class _ComposeWindowState extends State<ComposeWindow> {
                       checked: _secureMailEnabled,
                       onChanged: (v) => setState(() => _secureMailEnabled = v),
                       content: const Text('Password-protected email'),
+                    ),
+                    const SizedBox(height: 8),
+                    Checkbox(
+                      checked: _requestReadReceipt,
+                      onChanged: (v) => setState(() => _requestReadReceipt = v ?? false),
+                      content: const Text('Lesebestätigung anfordern'),
                     ),
                     if (_secureMailEnabled) ...[
                       const SizedBox(height: 8),

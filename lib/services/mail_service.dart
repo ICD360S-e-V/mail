@@ -476,6 +476,7 @@ class MailService {
     int? draftUid,
     void Function(int bytesSent, int totalBytes)? onSendProgress,
     Map<String, String>? preEncodedBase64,
+    bool requestReadReceipt = false,
   }) async {
     // SECURITY: Validate server before connecting
     _validateAccount(account);
@@ -630,14 +631,11 @@ class MailService {
         }
       }
 
-      // Add read-receipt and DSN headers to the OUTER message
-      // (after encryption, so they don't pollute the inner MIME body).
-      mimeMessage.addHeader('Disposition-Notification-To', account.username);
-      mimeMessage.addHeader('Return-Receipt-To', account.username);
-      mimeMessage.addHeader('X-Confirm-Reading-To', account.username);
-      mimeMessage.addHeader('Return-Path', account.username);
-      mimeMessage.addHeader('Delivery-Status-Notification-To', account.username);
-      mimeMessage.addHeader('X-Delivery-Status-Notification', 'SUCCESS,FAILURE,DELAY');
+      if (requestReadReceipt) {
+        mimeMessage.addHeader('Disposition-Notification-To', account.username);
+        mimeMessage.addHeader('Return-Receipt-To', account.username);
+        mimeMessage.addHeader('X-Confirm-Reading-To', account.username);
+      }
 
       // Calculate total message size
       final messageSizeKB = (mimeMessage.toString().length / 1024).round();
@@ -750,6 +748,7 @@ class MailService {
     String subject,
     String body, {
     int? draftUid,
+    bool requestReadReceipt = false,
   }) async {
     // SECURITY: Validate server before connecting
     _validateAccount(account);
@@ -772,15 +771,11 @@ class MailService {
       messageBuilder.subject = subject;
       messageBuilder.addTextPlain(body, transferEncoding: TransferEncoding.eightBit);
 
-      // Request read receipt (MDN - Lesebestätigung)
-      messageBuilder.setHeader('Disposition-Notification-To', account.username);
-      messageBuilder.setHeader('Return-Receipt-To', account.username);
-      messageBuilder.setHeader('X-Confirm-Reading-To', account.username);
-
-      // Request delivery status notification (DSN)
-      messageBuilder.setHeader('Return-Path', account.username);
-      messageBuilder.setHeader('Delivery-Status-Notification-To', account.username);
-      messageBuilder.setHeader('X-Delivery-Status-Notification', 'SUCCESS,FAILURE,DELAY');
+      if (requestReadReceipt) {
+        messageBuilder.setHeader('Disposition-Notification-To', account.username);
+        messageBuilder.setHeader('Return-Receipt-To', account.username);
+        messageBuilder.setHeader('X-Confirm-Reading-To', account.username);
+      }
 
       final mimeMessage = messageBuilder.buildMimeMessage();
 
