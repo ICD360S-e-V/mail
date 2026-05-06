@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.124.9 - 2026-05-06
+#### Bug Fixes
+- trigger rebuild after lockfile sync for no_screenshot v1.1.0 - (aefd1dc) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.124.8 - 2026-05-05
 #### Bug Fixes
 - upgrade no_screenshot to v1.1.0 (Linux build fix) - (f2a7ebe) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
