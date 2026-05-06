@@ -60,6 +60,7 @@ class _MainWindowState extends State<MainWindow> {
   Timer? _emailCheckTimer;
   Timer? _autoLockTimer;
   Timer? _updateCheckTimer;
+  Timer? _footerRefreshTimer;
 
   // Track selected email for keyboard shortcuts
   Email? _selectedEmail;
@@ -187,6 +188,7 @@ class _MainWindowState extends State<MainWindow> {
     _emailCheckTimer?.cancel();
     _updateCheckTimer?.cancel();
     _pingTimer?.cancel();
+    _footerRefreshTimer?.cancel();
     LoggerService.log('SECURITY', 'All timers stopped (app locked)');
 
     // SECURITY (M4): Wipe the in-memory AES key used for fallback credential
@@ -431,6 +433,7 @@ class _MainWindowState extends State<MainWindow> {
     _autoLockTimer?.cancel();
     _updateCheckTimer?.cancel();
     _pingTimer?.cancel();
+    _footerRefreshTimer?.cancel();
     super.dispose();
   }
 
@@ -460,7 +463,12 @@ class _MainWindowState extends State<MainWindow> {
       _checkForUpdates();
     });
 
-    // 5. Ping timer - Every 60 seconds (was 10s — caused excessive battery drain)
+    // 5. Footer refresh - Every 30 seconds (updates relative time "Synced Xm ago")
+    _footerRefreshTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      if (mounted && !_isLocked) setState(() {});
+    });
+
+    // 6. Ping timer - Every 60 seconds (was 10s — caused excessive battery drain)
     _measurePing();
     _pingTimer = Timer.periodic(const Duration(seconds: 60), (timer) {
       _measurePing();
