@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.124.19 - 2026-05-07
+#### Bug Fixes
+- remove PGP crypto diagnostics from uploaded logs - (342379e) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.124.18 - 2026-05-07
 #### Bug Fixes
 - remove legacy XOR decryption code (v2.5.x and v2.17.x) - (79165c8) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
