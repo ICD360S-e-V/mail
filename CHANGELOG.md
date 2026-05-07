@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.125.0 - 2026-05-07
+#### Features
+- switch log upload from automatic to manual (privacy-first) - (a819acd) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.124.20 - 2026-05-07
 #### Bug Fixes
 - reduce log upload frequency from 2min to 5min - (9880128) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
