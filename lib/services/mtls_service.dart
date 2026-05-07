@@ -188,8 +188,8 @@ class MtlsService {
           LoggerService.log('MTLS',
               '✓ Accepted intermediate: CN=$subjectCN (SPKI pinned)');
         } else {
-          LoggerService.log('MTLS',
-              '✓ Accepted intermediate: CN=$subjectCN (issuer trusted)');
+          LoggerService.logWarning('MTLS',
+              '⚠ Accepted intermediate: CN=$subjectCN (issuer trusted, SPKI not pinned — key rotated?)');
         }
         return true;
       }

@@ -26,6 +26,19 @@ class DnsChecker {
   static const _quad9DotPort = 853;
   static const _timeout = Duration(seconds: 10);
 
+  // Exact issuer CN for Quad9's DigiCert intermediate
+  static const _quad9IssuerCN = 'DigiCert Global G3 TLS ECC SHA384 2020 CA1';
+
+  static bool _isQuad9Cert(X509Certificate cert, [String? expectedHost]) {
+    final subject = cert.subject;
+    final issuer = cert.issuer;
+    final hostOk = expectedHost == null || subject.contains('CN=$expectedHost');
+    final issuerCN = RegExp(r'CN=([^/,]+)').firstMatch(issuer)?.group(1)?.trim();
+    if (hostOk && issuerCN == _quad9IssuerCN) return true;
+    if (hostOk && issuer.contains('DigiCert Global Root G3')) return true;
+    return false;
+  }
+
   /// Look up TXT records for [domain].
   /// Tries our own DoH (mTLS-authenticated) first, falls back to Quad9.
 
@@ -297,8 +310,7 @@ class DnsChecker {
         ..connectionTimeout = _timeout
         ..idleTimeout = const Duration(seconds: 5)
         ..badCertificateCallback = (cert, host, port) {
-          if (host == 'dns.quad9.net' &&
-              cert.issuer.contains('DigiCert')) {
+          if (host == 'dns.quad9.net' && _isQuad9Cert(cert, 'dns.quad9.net')) {
             return true;
           }
           LoggerService.logWarning('DNS',
@@ -367,14 +379,11 @@ class DnsChecker {
         timeout: _timeout,
         supportedProtocols: null,
         onBadCertificate: (cert) {
-          final subject = cert.subject;
-          final issuer = cert.issuer;
-          if (subject.contains('CN=dns.quad9.net') &&
-              issuer.contains('DigiCert')) {
+          if (_isQuad9Cert(cert, 'dns.quad9.net')) {
             return true;
           }
           LoggerService.logWarning('DNS',
-              'DoT cert rejected: subject=$subject issuer=$issuer');
+              'DoT cert rejected: subject=${cert.subject} issuer=${cert.issuer}');
           return false;
         });
     try {
