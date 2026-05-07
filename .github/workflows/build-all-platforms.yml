@@ -126,11 +126,32 @@ jobs:
           fi
 
   # ============================================================
+  # Static Analysis - catch type errors and lint warnings early
+  # ============================================================
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Run flutter analyze
+        run: flutter analyze --no-fatal-infos
+
+  # ============================================================
   # Linux Build - .deb, .rpm, AppImage
   # ============================================================
   build-linux:
     name: Linux
-    needs: detect-changes
+    needs: [detect-changes, analyze]
     if: needs.detect-changes.outputs.linux_changed == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -372,7 +393,7 @@ jobs:
   # ============================================================
   build-android:
     name: Android (${{ matrix.flavor }}${{ matrix.format == 'aab' && ' AAB' || '' }})
-    needs: detect-changes
+    needs: [detect-changes, analyze]
     if: needs.detect-changes.outputs.android_changed == 'true'
     runs-on: ubuntu-latest
     strategy:
@@ -547,7 +568,7 @@ jobs:
   # ============================================================
   build-ios:
     name: iOS
-    needs: detect-changes
+    needs: [detect-changes, analyze]
     if: needs.detect-changes.outputs.apple_changed == 'true'
     runs-on: macos-latest
     steps:
@@ -649,7 +670,7 @@ jobs:
   # ============================================================
   build-macos:
     name: macOS
-    needs: detect-changes
+    needs: [detect-changes, analyze]
     if: needs.detect-changes.outputs.apple_changed == 'true'
     runs-on: macos-latest
     steps:
@@ -789,7 +810,7 @@ jobs:
   # ============================================================
   build-windows:
     name: Windows
-    needs: detect-changes
+    needs: [detect-changes, analyze]
     if: needs.detect-changes.outputs.windows_changed == 'true'
     runs-on: windows-latest
     steps:
