@@ -667,10 +667,9 @@ class PgpKeyService {
         '✓ Native encryption completed in ${stopwatch.elapsedMilliseconds}ms '
         '(${(utf8.encode(innerMimeBody).length / 1024).round()} KB plaintext)');
 
-    // RFC 2047 encode subject if non-ASCII
-    final encodedSubject = _rfc2047Encode(subject);
-
     // Build outer wrapper with CRLF line endings (RFC 5321)
+    // RFC 9788: outer Subject is obscured; real Subject is inside
+    // the encrypted payload so only the recipient can read it.
     final boundary = 'pgp-${DateTime.now().millisecondsSinceEpoch}';
     final buf = StringBuffer()
       ..write('MIME-Version: 1.0\r\n')
@@ -681,7 +680,7 @@ class PgpKeyService {
     if (cc.isNotEmpty) buf.write('Cc: $cc\r\n');
     // BCC intentionally omitted — SMTP envelope handles delivery
     buf
-      ..write('Subject: $encodedSubject\r\n')
+      ..write('Subject: [...]\r\n')
       ..write('Content-Type: multipart/encrypted;\r\n')
       ..write('\tprotocol="application/pgp-encrypted";\r\n')
       ..write('\tboundary="$boundary"\r\n')

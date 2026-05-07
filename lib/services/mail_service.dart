@@ -354,6 +354,23 @@ class MailService {
                 }
                 email.body = body ?? decryptedRaw;
                 email.isEncrypted = true;
+                // RFC 9788: extract protected Subject from decrypted payload
+                final subjectMatch = RegExp(
+                  r'^Subject:\s*(.+)$', multiLine: true,
+                ).firstMatch(decryptedRaw);
+                if (subjectMatch != null && (email.subject == '[...]' || email.subject.isEmpty)) {
+                  var protectedSubject = subjectMatch.group(1)!.trim();
+                  // Decode RFC 2047 if needed
+                  if (protectedSubject.startsWith('=?')) {
+                    try {
+                      final m = RegExp(r'=\?([^?]+)\?([BbQq])\?([^?]+)\?=').firstMatch(protectedSubject);
+                      if (m != null && m.group(2)!.toUpperCase() == 'B') {
+                        protectedSubject = utf8.decode(base64.decode(m.group(3)!));
+                      }
+                    } catch (_) {}
+                  }
+                  email.subject = protectedSubject;
+                }
                 LoggerService.log('PGP',
                     '✓ Decrypted E2EE email from ${email.from}');
               } catch (ex) {
@@ -577,7 +594,12 @@ class MailService {
                 : renderedFull;
             final contentType = mimeMessage.getHeaderValue('content-type') ?? '';
             final mimeVersion = mimeMessage.getHeaderValue('mime-version') ?? '1.0';
+            // RFC 9788: include protected Subject inside encrypted payload
+            final encodedSubject = subject.contains(RegExp(r'[^\x20-\x7E]'))
+                ? '=?UTF-8?B?${base64.encode(utf8.encode(subject))}?='
+                : subject;
             final innerMime = 'MIME-Version: $mimeVersion\r\n'
+                'Subject: $encodedSubject\r\n'
                 'Content-Type: $contentType\r\n'
                 '\r\n'
                 '$mimeBody';
