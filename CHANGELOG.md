@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.124.13 - 2026-05-07
+#### Bug Fixes
+- correct misleading comment about deploy approval gate - (5b435b7) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.124.12 - 2026-05-07
 #### Bug Fixes
 - harden Quad9 DoT/DoH cert validation with exact issuer CN match - (9b32b24) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
