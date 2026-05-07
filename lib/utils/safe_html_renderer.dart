@@ -226,11 +226,13 @@ class SafeHtmlRenderer extends StatelessWidget {
       // Handle url() calls: allow only data: and cid: schemes.
       if (_cssUrlCall.hasMatch(value)) {
         value = value.replaceAllMapped(_cssUrlCall, (m) {
-          final url = (m.group(2) ?? '').trim().toLowerCase();
-          if (url.startsWith('data:') || url.startsWith('cid:')) {
-            return m.group(0)!; // safe — inline image
+          final url = (m.group(2) ?? '').trim();
+          final urlLower = url.toLowerCase();
+          if (urlLower.startsWith('cid:')) return m.group(0)!;
+          if (urlLower.startsWith('data:') && _isSafeDataUri(urlLower)) {
+            return m.group(0)!;
           }
-          return 'none'; // external URL → neutralize
+          return 'none'; // external URL or unsafe data URI → neutralize
         });
       }
 
