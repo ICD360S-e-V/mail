@@ -181,9 +181,8 @@ class AccountService {
 
   /// Re-encrypt all entries in `.passwords` from `oldKey` to `newKey`.
   ///
-  /// Entries that cannot be decrypted with `oldKey` (e.g. legacy XOR
-  /// formats handled by `_decryptLegacyXor`) are preserved untouched
-  /// and will be migrated lazily on next access.
+  /// Entries that cannot be decrypted with `oldKey` are preserved
+  /// untouched.
   static Future<void> _migrateFallbackPasswords(
       Uint8List oldKey, Uint8List newKey) async {
     if (_passwordsFallbackPath == null) return;
@@ -373,57 +372,6 @@ class AccountService {
     }
   }
 
-  /// Decrypt legacy XOR-encrypted entries (for migration of existing installs).
-  /// The legacy format had no version byte. Used only during one-shot migration.
-  String? _decryptLegacyXor(String encoded) {
-    try {
-      // Legacy format (v2.17.x): random key from .enc_key
-      final keyFile = File(p.join(p.dirname(_passwordsFallbackPath!), '.enc_key'));
-      if (!keyFile.existsSync()) return null;
-      final keyStr = keyFile.readAsStringSync().trim();
-      final key = sha256.convert(utf8.encode(keyStr)).bytes;
-      final encrypted = base64Decode(encoded);
-      final decrypted = List<int>.generate(
-        encrypted.length,
-        (i) => encrypted[i] ^ key[i % key.length],
-      );
-      return utf8.decode(decrypted);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// Decrypt the OLDEST legacy format (v2.5.0 and earlier): XOR with a key
-  /// derived from the host's computer name and OS user name. This format
-  /// was replaced in v2.17.x by `_decryptLegacyXor` (random key) and then
-  /// in v2.20.0 by AES-GCM (`_decrypt`).
-  ///
-  /// Without this final fallback, users upgrading directly from v2.5.x
-  /// to v2.20.0 lose access to all stored passwords because their existing
-  /// .passwords file is encrypted with this oldest scheme.
-  String? _decryptVeryLegacyHostnameXor(String encoded) {
-    try {
-      final platform = PlatformService.instance;
-      final seed = '${platform.computerName}-${platform.username}-icd360s-key';
-      final key = sha256.convert(utf8.encode(seed)).bytes;
-      final encrypted = base64Decode(encoded);
-      final decrypted = List<int>.generate(
-        encrypted.length,
-        (i) => encrypted[i] ^ key[i % key.length],
-      );
-      final result = utf8.decode(decrypted);
-      // Sanity check: a successful decryption should produce printable
-      // ASCII (or at least valid UTF-8 with no control chars). Garbage
-      // bytes from the wrong key will usually contain control characters.
-      if (result.contains('\x00') ||
-          result.runes.any((r) => r < 0x20 && r != 0x09 && r != 0x0a && r != 0x0d)) {
-        return null;
-      }
-      return result;
-    } catch (_) {
-      return null;
-    }
-  }
 
   // ==========================================================================
   // PASSWORD STORAGE (fallback file)
@@ -477,25 +425,8 @@ class AccountService {
         return password;
       }
 
-      // Migration #1: try v2.17.x XOR (random key from .enc_key)
-      password = _decryptLegacyXor(stored);
-      if (password != null && _sessionKey != null) {
-        LoggerService.log('ACCOUNTS',
-            'Migrating $username password from v2.17 XOR to AES-GCM');
-        passwords[username] = _encrypt(password);
-        await _atomicWriteString(file.path, jsonEncode(passwords));
-        return password;
-      }
-
-      // Migration #2: try v2.5.x XOR (key derived from hostname + username)
-      password = _decryptVeryLegacyHostnameXor(stored);
-      if (password != null && _sessionKey != null) {
-        LoggerService.log('ACCOUNTS',
-            'Migrating $username password from v2.5 hostname-XOR to AES-GCM');
-        passwords[username] = _encrypt(password);
-        await _atomicWriteString(file.path, jsonEncode(passwords));
-        return password;
-      }
+      // Legacy XOR formats (v2.5.x, v2.17.x) removed in v2.125.
+      // All users are on AES-GCM since v2.20.0+.
 
       LoggerService.log('ACCOUNTS',
           '⚠ Could not decrypt fallback password for $username (session locked or data corrupt)');
