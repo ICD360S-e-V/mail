@@ -183,7 +183,8 @@ class PortableSecureStorage {
         if (uuidMatch != null) return uuidMatch.group(1)!;
       }
     } catch (_) {}
-    return 'fallback:unknown';
+    throw StateError('Cannot determine machine secret — '
+        'both ioreg and system_profiler failed.');
   }
 
   /// Extract IOPlatformSerialNumber from ioreg output, empty if absent.
