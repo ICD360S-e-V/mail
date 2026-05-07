@@ -356,9 +356,9 @@ class DeviceApprovalService {
     final client = _newClient();
     try {
       final response = await client
-          .get(Uri.parse('$_baseUrl/download-cert.php'
-              '?request_id=$requestId'
-              '&token=$oneTimeToken'))
+          .post(Uri.parse('$_baseUrl/download-cert.php'),
+              headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+              body: 'request_id=$requestId&token=$oneTimeToken')
           .timeout(_httpTimeout);
       if (response.statusCode != 200) {
         LoggerService.logWarning('APPROVAL',
