@@ -357,17 +357,8 @@ class MailService {
                 LoggerService.log('PGP',
                     '✓ Decrypted E2EE email from ${email.from}');
               } catch (ex) {
-                final errStr = ex.toString().toLowerCase();
-                String diagnosis = '';
-                if (errStr.contains('mac check') || errStr.contains('ocb')) {
-                  diagnosis = ' | DIAGNOSIS: AEAD/OCB corruption — sender used v6 key with SEIPD v2';
-                } else if (errStr.contains('session key') || errStr.contains('decrypt')) {
-                  diagnosis = ' | DIAGNOSIS: wrong key or unsupported PKESK version';
-                } else if (errStr.contains('checksum')) {
-                  diagnosis = ' | DIAGNOSIS: key checksum failure';
-                }
                 LoggerService.logWarning('PGP',
-                    'Decryption failed for ${email.messageId}: $ex$diagnosis');
+                    'Decryption failed for ${email.messageId}');
                 email.body = '[Encrypted email — decryption failed]';
                 email.isEncrypted = true;
               }
