@@ -7,6 +7,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 import '../utils/l10n_helper.dart';
 import '../services/logger_service.dart';
+import '../services/log_upload_service.dart';
 import '../services/update_service.dart';
 
 /// Log viewer window for debugging
@@ -20,6 +21,7 @@ class LogViewerWindow extends StatefulWidget {
 class _LogViewerWindowState extends State<LogViewerWindow> {
   late List<String> _logs;
   final ScrollController _scrollController = ScrollController();
+  bool _uploading = false;
 
   @override
   void initState() {
@@ -46,6 +48,23 @@ class _LogViewerWindowState extends State<LogViewerWindow> {
         duration: const Duration(milliseconds: 100),
         curve: Curves.easeOut,
       );
+    }
+  }
+
+  Future<void> _sendLogs(BuildContext context) async {
+    setState(() => _uploading = true);
+    try {
+      final ok = await LogUploadService.uploadLogs();
+      if (mounted) {
+        await displayInfoBar(context, builder: (context, close) {
+          return InfoBar(
+            title: Text(ok ? 'Log gesendet' : 'Senden fehlgeschlagen'),
+            severity: ok ? InfoBarSeverity.success : InfoBarSeverity.error,
+          );
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _uploading = false);
     }
   }
 
@@ -153,6 +172,23 @@ ${l10n.logViewerMetadataSeparator}
               ),
               const SizedBox(width: 6),
               Text(l10n.logViewerButtonCopyAll),
+            ],
+          ),
+        ),
+        Button(
+          onPressed: _uploading ? null : () => _sendLogs(context),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_uploading)
+                const SizedBox(width: 14, height: 14, child: ProgressRing(strokeWidth: 2))
+              else
+                const Tooltip(
+                  message: 'Send logs to server',
+                  child: Icon(FluentIcons.upload, size: 14),
+                ),
+              const SizedBox(width: 6),
+              Text(_uploading ? 'Senden...' : 'Log senden'),
             ],
           ),
         ),

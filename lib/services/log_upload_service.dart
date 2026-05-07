@@ -108,28 +108,11 @@ class LogUploadService {
     }
   }
 
-  /// Auto-upload logs periodically (if enabled)
-  static Timer? _uploadTimer;
+  /// Manual-only upload. No automatic periodic uploads — the user
+  /// triggers this explicitly from the Log Viewer (privacy-first,
+  /// same approach as Signal/ProtonMail/Tuta).
+  @Deprecated('Use uploadLogs() directly from the UI')
+  static void startAutoUpload() {}
 
-  static void startAutoUpload() {
-    if (!_loggingEnabled) return;
-
-    // Cancel existing timer first to prevent duplicates
-    _uploadTimer?.cancel();
-
-    // Upload logs immediately on startup
-    uploadLogs();
-
-    _uploadTimer = Timer.periodic(const Duration(minutes: 5), (timer) {
-      uploadLogs();
-    });
-
-    LoggerService.log('LOG_UPLOAD', 'Auto-upload started (every 5 minutes)');
-  }
-
-  static void stopAutoUpload() {
-    _uploadTimer?.cancel();
-    _uploadTimer = null;
-    LoggerService.log('LOG_UPLOAD', 'Auto-upload stopped');
-  }
+  static void stopAutoUpload() {}
 }
