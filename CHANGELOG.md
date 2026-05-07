@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.124.17 - 2026-05-07
+#### Bug Fixes
+- use atomic write for accounts.json and passwords fallback - (481e474) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.124.16 - 2026-05-07
 #### Bug Fixes
 - move one_time_token from URL query to POST body (CWE-598) - (bc113af) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
