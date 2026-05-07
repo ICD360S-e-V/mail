@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.124.15 - 2026-05-07
+#### Bug Fixes
+- validate magic bytes on CSS data URIs to block SVG payloads - (ae094ac) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.124.14 - 2026-05-07
 #### Bug Fixes
 - throw instead of predictable fallback when machine secret fails - (c205249) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
