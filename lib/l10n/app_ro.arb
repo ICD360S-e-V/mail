@@ -152,7 +152,7 @@
   "mainWindowNotificationUpdateInProgress": "Actualizare în curs",
   "mainWindowUnreadCount": "{count} necitite",
   "masterPasswordDialogTitle": "Parolă Master",
-  "masterPasswordDialogAppTitle": "Client Mail",
+  "masterPasswordDialogAppTitle": "ICD360S Mail",
   "masterPasswordDialogFirstTimeMessage": "Aceasta este prima utilizare a ICD360S Mail Client.\nTe rog setează o parolă master pentru a-ți proteja conturile email.",
   "masterPasswordDialogLoginMessage": "Introdu parola master pentru acces la conturile email.",
   "masterPasswordLabelPassword": "Parolă:",

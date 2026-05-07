@@ -339,7 +339,7 @@
     }
   },
   "masterPasswordDialogTitle": "Master Password",
-  "masterPasswordDialogAppTitle": "Client Mail",
+  "masterPasswordDialogAppTitle": "ICD360S Mail",
   "masterPasswordDialogFirstTimeMessage": "This is your first time using ICD360S Mail Client.\nPlease set a master password to protect your email accounts.",
   "masterPasswordDialogLoginMessage": "Enter your master password to access email accounts.",
   "masterPasswordLabelPassword": "Password:",
