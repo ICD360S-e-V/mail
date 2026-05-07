@@ -451,7 +451,7 @@ class AccountService {
       }
 
       passwords[username] = _encrypt(password);
-      await file.writeAsString(jsonEncode(passwords));
+      await _atomicWriteString(file.path, jsonEncode(passwords));
       LoggerService.log('ACCOUNTS', '✓ Password saved to fallback for $username (AES-GCM)');
     } catch (ex, stackTrace) {
       LoggerService.logError('ACCOUNTS_FALLBACK', ex, stackTrace);
@@ -483,7 +483,7 @@ class AccountService {
         LoggerService.log('ACCOUNTS',
             'Migrating $username password from v2.17 XOR to AES-GCM');
         passwords[username] = _encrypt(password);
-        await file.writeAsString(jsonEncode(passwords));
+        await _atomicWriteString(file.path, jsonEncode(passwords));
         return password;
       }
 
@@ -493,7 +493,7 @@ class AccountService {
         LoggerService.log('ACCOUNTS',
             'Migrating $username password from v2.5 hostname-XOR to AES-GCM');
         passwords[username] = _encrypt(password);
-        await file.writeAsString(jsonEncode(passwords));
+        await _atomicWriteString(file.path, jsonEncode(passwords));
         return password;
       }
 
@@ -514,7 +514,7 @@ class AccountService {
         final content = await file.readAsString();
         final passwords = jsonDecode(content) as Map<String, dynamic>;
         passwords.remove(username);
-        await file.writeAsString(jsonEncode(passwords));
+        await _atomicWriteString(file.path, jsonEncode(passwords));
       }
     } catch (ex, stackTrace) {
       LoggerService.logError('ACCOUNTS_FALLBACK', ex, stackTrace);
@@ -649,8 +649,7 @@ class AccountService {
       }).toList();
 
       final jsonString = const JsonEncoder.withIndent('  ').convert(accountsToSave);
-      final file = File(_accountsFilePath!);
-      await file.writeAsString(jsonString);
+      await _atomicWriteString(_accountsFilePath!, jsonString);
 
       LoggerService.log('ACCOUNTS', 'Saved ${accounts.length} accounts to JSON');
     } catch (ex, stackTrace) {
