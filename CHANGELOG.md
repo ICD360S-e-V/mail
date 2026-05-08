@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.128.0 - 2026-05-08
+#### Features
+- full-screen login with 10 features and member-only badge - (7709132) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.127.1 - 2026-05-08
 #### Bug Fixes
 - add missing dart:convert import, fix sync icon name, remove unused _rfc2047Encode - (7ea50a9) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
