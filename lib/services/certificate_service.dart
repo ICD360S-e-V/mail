@@ -4,12 +4,9 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
-import 'package:http/io_client.dart';
 import 'certificate_expiry_monitor.dart';
-import 'le_issuer_check.dart';
 import 'logger_service.dart';
 import 'master_vault.dart';
-import 'pinned_security_context.dart';
 
 /// Service for downloading per-user certificates from server
 /// Eliminates hardcoded certificates vulnerability
@@ -121,14 +118,6 @@ class CertificateService {
 
   /// Track if network is down to avoid spamming all accounts
   static bool _networkDown = false;
-
-  /// Validate server certificate — only accept trusted Let's Encrypt issuers.
-  /// Uses the shared `isTrustedLetsEncryptIssuer` helper which parses the
-  /// slash-format DN that Dart returns from X509Certificate.issuer.
-  static bool _validateCertificate(X509Certificate cert, String host, int port) {
-    if (host != 'mail.icd360s.de') return false;
-    return isTrustedLetsEncryptIssuer(cert.issuer);
-  }
 
   /// Check if network/DNS is working before batch operations
   static Future<bool> isNetworkAvailable() async {

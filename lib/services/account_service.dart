@@ -5,7 +5,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
-import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 import 'package:pointycastle/api.dart';
 import 'package:pointycastle/block/aes.dart';
@@ -452,53 +451,6 @@ class AccountService {
     }
   }
 
-  /// Save password (secure storage + fallback)
-  Future<void> _savePassword(String username, String password) async {
-    // Always save to fallback (guaranteed to work)
-    await _saveFallbackPassword(username, password);
-
-    // Also try secure storage (Keychain/Credential Manager)
-    try {
-      final passwordKey = _getPasswordKey(username);
-      await _secureStorage.write(key: passwordKey, value: password);
-      LoggerService.log('ACCOUNTS', '✓ Password saved for $username (secure storage)');
-    } catch (ex, stackTrace) {
-      LoggerService.log('ACCOUNTS', 'Secure storage write failed for $username, using fallback');
-      LoggerService.logError('ACCOUNTS_SECURE', ex, stackTrace);
-    }
-  }
-
-  /// Load password (try secure storage first, then fallback)
-  Future<String?> _loadPassword(String username) async {
-    // Try secure storage first
-    try {
-      final passwordKey = _getPasswordKey(username);
-      final password = await _secureStorage.read(key: passwordKey);
-      if (password != null && password.isNotEmpty) {
-        LoggerService.log('ACCOUNTS', 'Loaded password for $username: YES (secure storage)');
-        return password;
-      }
-    } catch (ex, stackTrace) {
-      LoggerService.log('ACCOUNTS', 'Secure storage read failed for $username, trying fallback');
-      LoggerService.logError('ACCOUNTS_SECURE', ex, stackTrace);
-    }
-
-    // Fallback to local file
-    final fallbackPassword = await _loadFallbackPassword(username);
-    if (fallbackPassword != null) {
-      // Try to migrate back to secure storage
-      try {
-        final passwordKey = _getPasswordKey(username);
-        await _secureStorage.write(key: passwordKey, value: fallbackPassword);
-        LoggerService.log('ACCOUNTS', 'Migrated $username password back to secure storage');
-      } catch (_) {}
-      return fallbackPassword;
-    }
-
-    LoggerService.log('ACCOUNTS', 'No password found for $username');
-    return null;
-  }
-
   /// Delete password from all storage
   Future<void> _deletePassword(String username) async {
     await _deleteFallbackPassword(username);
@@ -527,11 +479,6 @@ class AccountService {
             .toList();
 
         LoggerService.log('ACCOUNTS', 'Loaded ${accounts.length} accounts from JSON');
-
-        // Load passwords (secure storage with fallback)
-        for (final account in accounts) {
-          // mTLS only — no password loading needed
-        }
 
         // AUTO-MIGRATION: Update ports for mTLS strict enforcement
         bool migrationNeeded = false;

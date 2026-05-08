@@ -22,7 +22,6 @@ class CertificateExpiryMonitor {
   static const _kNotBefore = 'client_cert_not_before_utc';
 
   static DateTime? _certNotAfter;
-  static DateTime? _certNotBefore;
 
   /// Parse the real expiry from a PEM certificate string and persist it.
   ///
@@ -55,7 +54,6 @@ class CertificateExpiryMonitor {
 
     // ── Step 2: Update in-memory cache (always succeeds) ──
     _certNotAfter = notAfter;
-    _certNotBefore = notBefore;
     LoggerService.log('CERT-EXPIRY',
         'Parsed certificate validity: '
         '${notBefore.toIso8601String()} to ${notAfter.toIso8601String()} '
@@ -93,9 +91,6 @@ class CertificateExpiryMonitor {
       if (notAfterStr != null) {
         _certNotAfter = DateTime.parse(notAfterStr);
       }
-      if (notBeforeStr != null) {
-        _certNotBefore = DateTime.parse(notBeforeStr);
-      }
     } catch (ex) {
       LoggerService.logWarning('CERT-EXPIRY',
           'Could not load persisted expiry: $ex');
@@ -130,7 +125,6 @@ class CertificateExpiryMonitor {
           return null;
         }
         _certNotAfter = validity.notAfter;
-        _certNotBefore = validity.notBefore;
 
         final daysLeft =
             _certNotAfter!.difference(DateTime.now().toUtc()).inDays;
@@ -180,7 +174,6 @@ class CertificateExpiryMonitor {
   /// Clear persisted expiry (call on logout/cert wipe).
   static Future<void> clearExpiry() async {
     _certNotAfter = null;
-    _certNotBefore = null;
     await _storage.delete(key: _kNotAfter);
     await _storage.delete(key: _kNotBefore);
   }

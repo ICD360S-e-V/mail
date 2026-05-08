@@ -247,9 +247,9 @@ class _ServerInfoDialogState extends State<ServerInfoDialog> {
       FluentThemeData theme, String protocol, int port, PortStatus? port_status) {
     final isChecked = port_status != null && port_status.status != 'UNKNOWN';
     final isOpen = port_status?.isConnected ?? false;
-    final statusText = isChecked ? port_status!.status : 'Unknown';
+    final statusText = isChecked ? port_status.status : 'Unknown';
     final dotColor = isChecked
-        ? (isOpen ? Colors.green : _colorFromString(port_status!.color, theme))
+        ? (isOpen ? Colors.green : _colorFromString(port_status.color, theme))
         : theme.inactiveColor;
 
     return Padding(
@@ -324,9 +324,9 @@ class _ServerInfoDialogState extends State<ServerInfoDialog> {
       IconData icon, HealthCheckResult? result) {
     final hasResult = result != null && result.status.isNotEmpty;
     final dotColor = hasResult
-        ? _colorFromString(result!.color, theme)
+        ? _colorFromString(result.color, theme)
         : theme.inactiveColor;
-    final statusText = hasResult ? result!.status : 'Pending';
+    final statusText = hasResult ? result.status : 'Pending';
     final checkedAt = result?.checkedAt;
     final checkedText = checkedAt != null
         ? '${checkedAt.year}-${checkedAt.month.toString().padLeft(2, '0')}-${checkedAt.day.toString().padLeft(2, '0')} '

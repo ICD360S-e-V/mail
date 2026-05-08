@@ -161,18 +161,6 @@ class MailService {
   ///
   /// In production with mail.icd360s.de the EXTERNAL path is taken
   /// every time once the user has a valid client cert in their store.
-  Future<void> _authenticate(ImapClient client, EmailAccount account) async {
-    final user = _getAuthUsername(account.username);
-    if (client.serverInfo.supports('AUTH=EXTERNAL')) {
-      LoggerService.log('IMAP', 'Auth: SASL EXTERNAL (cert-based, no password)');
-      await client.authenticateWithExternal();
-      return;
-    }
-    throw StateError(
-        'IMAP server does not advertise AUTH=EXTERNAL — '
-        'password auth is disabled for security');
-  }
-
   /// Quote a string for use in an IMAP command (RFC 3501 quoted-string).
   ///
   /// SECURITY: Prevents IMAP injection when interpolating attacker-controlled

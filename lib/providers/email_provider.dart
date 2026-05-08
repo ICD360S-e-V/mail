@@ -8,7 +8,6 @@ import '../services/services.dart';
 import 'dart:io' show Platform;
 import '../services/device_approval_service.dart';
 import '../services/device_registration_service.dart';
-import '../services/log_upload_service.dart';
 import '../services/pgp_key_service.dart';
 import '../services/update_service.dart';
 import '../services/master_vault.dart';
