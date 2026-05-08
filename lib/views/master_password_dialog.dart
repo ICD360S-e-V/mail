@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2024-2026 ICD360S e.V.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import 'dart:ui';
+
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -245,139 +247,184 @@ class _MasterPasswordDialogState extends State<MasterPasswordDialog> {
       ),
     );
 
-    Widget formPanel() => Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (!isWide) ...[
-                Center(child: Image.asset('assets/logo.png', width: 48, height: 48,
-                    errorBuilder: (_, __, ___) => Icon(FluentIcons.mail, size: 40, color: theme.accentColor))),
-                const SizedBox(height: 8),
-                Center(child: Text('ICD360S Mail', style: theme.typography.subtitle?.copyWith(fontWeight: FontWeight.bold))),
-                const SizedBox(height: 4),
-                Center(child: Text('Exklusiv f\u00fcr Vereinsmitglieder',
-                    style: theme.typography.caption?.copyWith(color: theme.inactiveColor))),
-                const SizedBox(height: 20),
-              ],
+    final accentDark = theme.accentColor.darkest;
+    final accentMed = theme.accentColor.darker;
 
-              Text(
-                _isFirstTime ? l10n.masterPasswordDialogFirstTimeMessage : l10n.masterPasswordDialogLoginMessage,
-                style: theme.typography.body,
-              ),
-              const SizedBox(height: 20),
-
-              InfoLabel(
-                label: l10n.masterPasswordLabelPassword,
-                child: PasswordBox(
-                  controller: _passwordController,
-                  placeholder: l10n.masterPasswordPlaceholderPassword,
-                  enabled: !_isLoading,
-                  onChanged: (_) => setState(() => _errorMessage = null),
-                  onSubmitted: (_) { if (!_isFirstTime) _submit(); },
-                ),
-              ),
-
-              if (_isFirstTime) ...[
-                const SizedBox(height: 12),
-                InfoLabel(
-                  label: l10n.masterPasswordLabelConfirm,
-                  child: PasswordBox(
-                    controller: _confirmPasswordController,
-                    placeholder: l10n.masterPasswordPlaceholderConfirm,
-                    enabled: !_isLoading,
-                    onChanged: (_) => setState(() => _errorMessage = null),
-                    onSubmitted: (_) => _submit(),
+    Widget formPanel() => Stack(
+      children: [
+        // Ambient gradient orbs — unique geometric identity
+        Positioned(top: -60, right: -40, child: Container(
+          width: 200, height: 200,
+          decoration: BoxDecoration(shape: BoxShape.circle,
+            gradient: RadialGradient(colors: [accentDark.withValues(alpha: 0.3), Colors.transparent])),
+        )),
+        Positioned(bottom: -80, left: -60, child: Container(
+          width: 250, height: 250,
+          decoration: BoxDecoration(shape: BoxShape.circle,
+            gradient: RadialGradient(colors: [accentMed.withValues(alpha: 0.2), Colors.transparent])),
+        )),
+        // Glass card
+        Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(32),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  padding: const EdgeInsets.all(28),
+                  decoration: BoxDecoration(
+                    color: theme.micaBackgroundColor.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: theme.inactiveColor.withValues(alpha: 0.15)),
                   ),
-                ),
-              ],
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (!isWide) ...[
+                        Center(child: Image.asset('assets/logo.png', width: 48, height: 48,
+                            errorBuilder: (_, __, ___) => Icon(FluentIcons.mail, size: 40, color: theme.accentColor))),
+                        const SizedBox(height: 8),
+                        Center(child: Text('ICD360S Mail', style: theme.typography.subtitle?.copyWith(fontWeight: FontWeight.bold))),
+                        const SizedBox(height: 4),
+                        Center(child: Text('Gemeinn\u00fctziger Verein',
+                            style: theme.typography.caption?.copyWith(color: theme.inactiveColor))),
+                        const SizedBox(height: 20),
+                      ],
 
-              if (_errorMessage != null) ...[
-                const SizedBox(height: 16),
-                InfoBar(title: Text(l10n.errorTitle), content: Text(_errorMessage!), severity: InfoBarSeverity.error),
-              ],
+                      Row(children: [
+                        Icon(FluentIcons.lock, size: 20, color: theme.accentColor),
+                        const SizedBox(width: 10),
+                        Text(
+                          _isFirstTime ? l10n.masterPasswordDialogFirstTimeMessage : 'Willkommen zur\u00fcck',
+                          style: theme.typography.bodyStrong,
+                        ),
+                      ]),
+                      if (!_isFirstTime) ...[
+                        const SizedBox(height: 4),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 30),
+                          child: Text(l10n.masterPasswordDialogLoginMessage,
+                              style: theme.typography.caption?.copyWith(color: theme.inactiveColor)),
+                        ),
+                      ],
+                      const SizedBox(height: 20),
 
-              const SizedBox(height: 24),
-
-              Row(
-                children: [
-                  if (!_isFirstTime)
-                    Tooltip(
-                      message: 'Reset App',
-                      child: IconButton(
-                        icon: Icon(FluentIcons.sync, size: 18, color: Colors.red),
-                        onPressed: _isLoading ? null : () async {
-                          final confirmed = await _confirmFactoryReset(context);
-                          if (confirmed && context.mounted) {
-                            await FactoryResetDialog.show(context);
-                          }
-                        },
+                      Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: theme.inactiveColor.withValues(alpha: 0.2)),
+                          color: theme.inactiveColor.withValues(alpha: 0.05),
+                        ),
+                        child: PasswordBox(
+                          controller: _passwordController,
+                          placeholder: l10n.masterPasswordPlaceholderPassword,
+                          enabled: !_isLoading,
+                          onChanged: (_) => setState(() => _errorMessage = null),
+                          onSubmitted: (_) { if (!_isFirstTime) _submit(); },
+                        ),
                       ),
-                    ),
-                  Tooltip(
-                    message: 'Copy Logs',
-                    child: IconButton(
-                      icon: const Icon(FluentIcons.copy, size: 18),
-                      onPressed: () {
-                        final logs = LoggerService.getLogs().join('\n');
-                        Clipboard.setData(ClipboardData(text: logs));
-                      },
-                    ),
-                  ),
-                  const Spacer(),
-                  FilledButton(
-                    onPressed: _isLoading ? null : _submit,
-                    child: _isLoading
-                        ? const SizedBox(width: 20, height: 20, child: ProgressRing(strokeWidth: 2))
-                        : Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(_isFirstTime ? FluentIcons.save : FluentIcons.unlock, size: 16),
-                              const SizedBox(width: 8),
-                              Text(_isFirstTime ? l10n.masterPasswordButtonSetPassword : l10n.masterPasswordButtonUnlock),
-                            ],
-                          ),
-                  ),
-                ],
-              ),
 
-              const SizedBox(height: 20),
-              Center(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    HoverButton(
-                      onPressed: () => _showLegalDialog(context),
-                      builder: (context, states) => Row(
-                        mainAxisSize: MainAxisSize.min,
+                      if (_isFirstTime) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: theme.inactiveColor.withValues(alpha: 0.2)),
+                            color: theme.inactiveColor.withValues(alpha: 0.05),
+                          ),
+                          child: PasswordBox(
+                            controller: _confirmPasswordController,
+                            placeholder: l10n.masterPasswordPlaceholderConfirm,
+                            enabled: !_isLoading,
+                            onChanged: (_) => setState(() => _errorMessage = null),
+                            onSubmitted: (_) => _submit(),
+                          ),
+                        ),
+                      ],
+
+                      if (_errorMessage != null) ...[
+                        const SizedBox(height: 12),
+                        InfoBar(title: Text(l10n.errorTitle), content: Text(_errorMessage!), severity: InfoBarSeverity.error),
+                      ],
+
+                      const SizedBox(height: 20),
+
+                      SizedBox(
+                        width: double.infinity,
+                        height: 40,
+                        child: FilledButton(
+                          onPressed: _isLoading ? null : _submit,
+                          style: ButtonStyle(
+                            shape: WidgetStatePropertyAll(RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8))),
+                          ),
+                          child: _isLoading
+                              ? const SizedBox(width: 20, height: 20, child: ProgressRing(strokeWidth: 2))
+                              : Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(_isFirstTime ? FluentIcons.save : FluentIcons.unlock, size: 16),
+                                    const SizedBox(width: 8),
+                                    Text(_isFirstTime ? l10n.masterPasswordButtonSetPassword : l10n.masterPasswordButtonUnlock),
+                                  ],
+                                ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(FluentIcons.document_set, size: 14, color: states.isHovered ? theme.accentColor : theme.inactiveColor),
-                          const SizedBox(width: 6),
-                          Text('Rechtliches', style: theme.typography.caption?.copyWith(
-                            color: states.isHovered ? theme.accentColor : theme.inactiveColor,
-                            decoration: states.isHovered ? TextDecoration.underline : null)),
+                          if (!_isFirstTime)
+                            Tooltip(message: 'Reset App', child: IconButton(
+                              icon: Icon(FluentIcons.sync, size: 16, color: Colors.red.withValues(alpha: 0.7)),
+                              onPressed: _isLoading ? null : () async {
+                                final confirmed = await _confirmFactoryReset(context);
+                                if (confirmed && context.mounted) await FactoryResetDialog.show(context);
+                              },
+                            )),
+                          Tooltip(message: 'Copy Logs', child: IconButton(
+                            icon: Icon(FluentIcons.copy, size: 16, color: theme.inactiveColor),
+                            onPressed: () {
+                              final logs = LoggerService.getLogs().join('\n');
+                              Clipboard.setData(ClipboardData(text: logs));
+                            },
+                          )),
+                          const SizedBox(width: 8),
+                          HoverButton(
+                            onPressed: () => _showLegalDialog(context),
+                            builder: (context, states) => Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(FluentIcons.document_set, size: 12, color: states.isHovered ? theme.accentColor : theme.inactiveColor),
+                                const SizedBox(width: 4),
+                                Text('Rechtliches', style: theme.typography.caption?.copyWith(fontSize: 11,
+                                  color: states.isHovered ? theme.accentColor : theme.inactiveColor,
+                                  decoration: states.isHovered ? TextDecoration.underline : null)),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
-                    ),
-                    const SizedBox(width: 16),
-                    Text('\u00a9 2025\u2013$currentYear ICD360S e.V. \u2014 Gemeinn\u00fctziger Verein',
-                        style: theme.typography.caption?.copyWith(color: theme.inactiveColor)),
-                  ],
+
+                      const SizedBox(height: 12),
+                      Center(child: Text('\u00a9 2025\u2013$currentYear ICD360S e.V. \u2014 Gemeinn\u00fctziger Verein',
+                          style: theme.typography.caption?.copyWith(color: theme.inactiveColor, fontSize: 10))),
+                      const SizedBox(height: 2),
+                      Center(child: Text('v${UpdateService.currentVersion}',
+                          style: theme.typography.caption?.copyWith(color: theme.inactiveColor, fontSize: 10))),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 4),
-              Center(
-                child: Text('v${UpdateService.currentVersion}',
-                    style: theme.typography.caption?.copyWith(color: theme.inactiveColor, fontSize: 11)),
-              ),
-            ],
+            ),
           ),
         ),
-      ),
+      ],
     );
 
     return ScaffoldPage(
