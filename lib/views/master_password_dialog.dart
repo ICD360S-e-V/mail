@@ -11,7 +11,9 @@ import 'factory_reset_dialog.dart';
 
 /// Master password dialog for app authentication
 class MasterPasswordDialog extends StatefulWidget {
-  const MasterPasswordDialog({super.key});
+  const MasterPasswordDialog({super.key, this.onResult});
+
+  final void Function(bool success)? onResult;
 
   @override
   State<MasterPasswordDialog> createState() => _MasterPasswordDialogState();
@@ -81,7 +83,7 @@ class _MasterPasswordDialogState extends State<MasterPasswordDialog> {
       try {
         await MasterPasswordService.setMasterPassword(_passwordController.text);
         if (mounted) {
-          Navigator.of(context).pop(true); // Success
+          widget.onResult?.call(true);
         }
       } catch (ex) {
         setState(() {
@@ -99,7 +101,7 @@ class _MasterPasswordDialogState extends State<MasterPasswordDialog> {
 
         if (isValid) {
           if (mounted) {
-            Navigator.of(context).pop(true); // Success
+            widget.onResult?.call(true);
           }
         } else {
           setState(() {
@@ -129,190 +131,211 @@ class _MasterPasswordDialogState extends State<MasterPasswordDialog> {
     final l10n = l10nOf(context);
     final currentYear = DateTime.now().year;
 
-    final isWide = MediaQuery.of(context).size.width > 700;
+    final isWide = MediaQuery.of(context).size.width > 800;
+    final w = Colors.white;
+
+    const features = <(IconData, String)>[
+      (FluentIcons.lock, 'Ende-zu-Ende-Verschl\u00fcsselung (OpenPGP)'),
+      (FluentIcons.certificate, 'mTLS Zertifikat-Authentifizierung'),
+      (FluentIcons.shield, 'ClamAV Virenscan f\u00fcr Anh\u00e4nge'),
+      (FluentIcons.mail_alert, 'Phishing- & Spam-Erkennung (Rspamd)'),
+      (FluentIcons.devices4, 'Windows, macOS, Linux, Android, iOS'),
+      (FluentIcons.cloud_secure, 'DANE + DNSSEC + MTA-STS'),
+      (FluentIcons.vault, 'MasterVault (Argon2id + XChaCha20)'),
+      (FluentIcons.red_eye, 'Screenshot-Schutz (alle Plattformen)'),
+      (FluentIcons.print, 'Drucken & PDF-Viewer'),
+      (FluentIcons.code, 'Open Source (AGPL-3.0)'),
+    ];
 
     Widget brandingPanel() => Container(
-      padding: const EdgeInsets.all(32),
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            theme.accentColor.darkest,
-            theme.accentColor.darker,
-          ],
+          colors: [theme.accentColor.darkest, theme.accentColor.darker],
         ),
-        borderRadius: isWide
-            ? const BorderRadius.only(topLeft: Radius.circular(8), bottomLeft: Radius.circular(8))
-            : const BorderRadius.only(topLeft: Radius.circular(8), topRight: Radius.circular(8)),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Image.asset('assets/logo.png', width: 80, height: 80,
-              errorBuilder: (_, __, ___) => Icon(FluentIcons.mail, size: 64, color: Colors.white)),
-          const SizedBox(height: 16),
-          Text('ICD360S', style: theme.typography.titleLarge?.copyWith(
-            color: Colors.white, fontWeight: FontWeight.bold, fontSize: 28)),
-          Text('Mail', style: theme.typography.title?.copyWith(
-            color: Colors.white.withValues(alpha: 0.9), fontWeight: FontWeight.w300, fontSize: 22)),
+          Image.asset('assets/logo.png', width: 72, height: 72,
+              errorBuilder: (_, __, ___) => Icon(FluentIcons.mail, size: 56, color: w)),
+          const SizedBox(height: 12),
+          Text('ICD360S Mail', style: theme.typography.title?.copyWith(
+              color: w, fontWeight: FontWeight.bold, fontSize: 26)),
+          const SizedBox(height: 4),
+          Text('Sicher. Privat. Verschl\u00fcsselt.',
+              style: theme.typography.body?.copyWith(color: w.withValues(alpha: 0.8))),
           const SizedBox(height: 24),
-          Text('Sicher.', style: theme.typography.body?.copyWith(color: Colors.white.withValues(alpha: 0.8))),
-          Text('Privat.', style: theme.typography.body?.copyWith(color: Colors.white.withValues(alpha: 0.8))),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(FluentIcons.shield, size: 14, color: Colors.white.withValues(alpha: 0.7)),
-              const SizedBox(width: 6),
-              Text('Ende-zu-Ende', style: theme.typography.caption?.copyWith(color: Colors.white.withValues(alpha: 0.7))),
-            ],
+          ...features.map((f) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            child: Row(children: [
+              Icon(f.$1, size: 14, color: w.withValues(alpha: 0.7)),
+              const SizedBox(width: 10),
+              Flexible(child: Text(f.$2, style: theme.typography.caption?.copyWith(
+                  color: w.withValues(alpha: 0.85), fontSize: 12))),
+            ]),
+          )),
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              border: Border.all(color: w.withValues(alpha: 0.3)),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text('Exklusiv f\u00fcr Mitglieder des ICD360S e.V.',
+                style: theme.typography.caption?.copyWith(
+                    color: w.withValues(alpha: 0.9), fontWeight: FontWeight.w600)),
           ),
         ],
       ),
     );
 
-    Widget formPanel() => Padding(
-      padding: const EdgeInsets.all(28),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (!isWide) ...[
-            Center(child: Image.asset('assets/logo.png', width: 48, height: 48,
-                errorBuilder: (_, __, ___) => Icon(FluentIcons.mail, size: 40, color: theme.accentColor))),
-            const SizedBox(height: 8),
-            Center(child: Text(l10n.masterPasswordDialogAppTitle, style: theme.typography.subtitle?.copyWith(fontWeight: FontWeight.bold))),
-            const SizedBox(height: 16),
-          ],
-
-          Text(
-            _isFirstTime ? l10n.masterPasswordDialogFirstTimeMessage : l10n.masterPasswordDialogLoginMessage,
-            style: theme.typography.body,
-          ),
-          const SizedBox(height: 20),
-
-          InfoLabel(
-            label: l10n.masterPasswordLabelPassword,
-            child: PasswordBox(
-              controller: _passwordController,
-              placeholder: l10n.masterPasswordPlaceholderPassword,
-              enabled: !_isLoading,
-              onChanged: (_) => setState(() => _errorMessage = null),
-              onSubmitted: (_) { if (!_isFirstTime) _submit(); },
-            ),
-          ),
-
-          if (_isFirstTime) ...[
-            const SizedBox(height: 12),
-            InfoLabel(
-              label: l10n.masterPasswordLabelConfirm,
-              child: PasswordBox(
-                controller: _confirmPasswordController,
-                placeholder: l10n.masterPasswordPlaceholderConfirm,
-                enabled: !_isLoading,
-                onChanged: (_) => setState(() => _errorMessage = null),
-                onSubmitted: (_) => _submit(),
-              ),
-            ),
-          ],
-
-          if (_errorMessage != null) ...[
-            const SizedBox(height: 16),
-            InfoBar(title: Text(l10n.errorTitle), content: Text(_errorMessage!), severity: InfoBarSeverity.error),
-          ],
-
-          const SizedBox(height: 20),
-
-          Row(
+    Widget formPanel() => Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(32),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (!_isFirstTime)
-                Tooltip(
-                  message: 'Reset App',
-                  child: IconButton(
-                    icon: Icon(FluentIcons.sync, size: 18, color: Colors.red),
-                    onPressed: _isLoading ? null : () async {
-                      final confirmed = await _confirmFactoryReset(context);
-                      if (confirmed && context.mounted) {
-                        await FactoryResetDialog.show(context);
-                      }
-                    },
+              if (!isWide) ...[
+                Center(child: Image.asset('assets/logo.png', width: 48, height: 48,
+                    errorBuilder: (_, __, ___) => Icon(FluentIcons.mail, size: 40, color: theme.accentColor))),
+                const SizedBox(height: 8),
+                Center(child: Text('ICD360S Mail', style: theme.typography.subtitle?.copyWith(fontWeight: FontWeight.bold))),
+                const SizedBox(height: 4),
+                Center(child: Text('Exklusiv f\u00fcr Vereinsmitglieder',
+                    style: theme.typography.caption?.copyWith(color: theme.inactiveColor))),
+                const SizedBox(height: 20),
+              ],
+
+              Text(
+                _isFirstTime ? l10n.masterPasswordDialogFirstTimeMessage : l10n.masterPasswordDialogLoginMessage,
+                style: theme.typography.body,
+              ),
+              const SizedBox(height: 20),
+
+              InfoLabel(
+                label: l10n.masterPasswordLabelPassword,
+                child: PasswordBox(
+                  controller: _passwordController,
+                  placeholder: l10n.masterPasswordPlaceholderPassword,
+                  enabled: !_isLoading,
+                  onChanged: (_) => setState(() => _errorMessage = null),
+                  onSubmitted: (_) { if (!_isFirstTime) _submit(); },
+                ),
+              ),
+
+              if (_isFirstTime) ...[
+                const SizedBox(height: 12),
+                InfoLabel(
+                  label: l10n.masterPasswordLabelConfirm,
+                  child: PasswordBox(
+                    controller: _confirmPasswordController,
+                    placeholder: l10n.masterPasswordPlaceholderConfirm,
+                    enabled: !_isLoading,
+                    onChanged: (_) => setState(() => _errorMessage = null),
+                    onSubmitted: (_) => _submit(),
                   ),
                 ),
-              Tooltip(
-                message: 'Copy Logs',
-                child: IconButton(
-                  icon: const Icon(FluentIcons.copy, size: 18),
-                  onPressed: () {
-                    final logs = LoggerService.getLogs().join('\n');
-                    Clipboard.setData(ClipboardData(text: logs));
-                  },
-                ),
-              ),
-              const Spacer(),
-              FilledButton(
-                onPressed: _isLoading ? null : _submit,
-                child: _isLoading
-                    ? const SizedBox(width: 20, height: 20, child: ProgressRing(strokeWidth: 2))
-                    : Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(_isFirstTime ? FluentIcons.save : FluentIcons.unlock, size: 16),
-                          const SizedBox(width: 8),
-                          Text(_isFirstTime ? l10n.masterPasswordButtonSetPassword : l10n.masterPasswordButtonUnlock),
-                        ],
-                      ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 20),
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 8,
-            children: [
-              for (final link in [
-                (l10n.masterPasswordLegalImpressum, 'https://icd360s.de/impressum/'),
-                (l10n.masterPasswordLegalPrivacy, 'https://icd360s.de/datenschutz/'),
-                (l10n.masterPasswordLegalWithdrawal, 'https://icd360s.de/widerrufsrecht/'),
-                (l10n.masterPasswordLegalCancellation, 'https://icd360s.de/kundigung/'),
-                (l10n.masterPasswordLegalConstitution, 'https://icd360s.de/satzung360s/'),
-              ]) ...[
-                HoverButton(
-                  onPressed: () => _openUrl(link.$2),
-                  builder: (context, states) => Text(link.$1, style: theme.typography.caption?.copyWith(
-                    decoration: states.isHovered ? TextDecoration.underline : null)),
-                ),
-                if (link.$1 != l10n.masterPasswordLegalConstitution)
-                  Text('|', style: theme.typography.caption),
               ],
+
+              if (_errorMessage != null) ...[
+                const SizedBox(height: 16),
+                InfoBar(title: Text(l10n.errorTitle), content: Text(_errorMessage!), severity: InfoBarSeverity.error),
+              ],
+
+              const SizedBox(height: 24),
+
+              Row(
+                children: [
+                  if (!_isFirstTime)
+                    Tooltip(
+                      message: 'Reset App',
+                      child: IconButton(
+                        icon: Icon(FluentIcons.sync, size: 18, color: Colors.red),
+                        onPressed: _isLoading ? null : () async {
+                          final confirmed = await _confirmFactoryReset(context);
+                          if (confirmed && context.mounted) {
+                            await FactoryResetDialog.show(context);
+                          }
+                        },
+                      ),
+                    ),
+                  Tooltip(
+                    message: 'Copy Logs',
+                    child: IconButton(
+                      icon: const Icon(FluentIcons.copy, size: 18),
+                      onPressed: () {
+                        final logs = LoggerService.getLogs().join('\n');
+                        Clipboard.setData(ClipboardData(text: logs));
+                      },
+                    ),
+                  ),
+                  const Spacer(),
+                  FilledButton(
+                    onPressed: _isLoading ? null : _submit,
+                    child: _isLoading
+                        ? const SizedBox(width: 20, height: 20, child: ProgressRing(strokeWidth: 2))
+                        : Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(_isFirstTime ? FluentIcons.save : FluentIcons.unlock, size: 16),
+                              const SizedBox(width: 8),
+                              Text(_isFirstTime ? l10n.masterPasswordButtonSetPassword : l10n.masterPasswordButtonUnlock),
+                            ],
+                          ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 24),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 8,
+                children: [
+                  for (final link in [
+                    (l10n.masterPasswordLegalImpressum, 'https://icd360s.de/impressum/'),
+                    (l10n.masterPasswordLegalPrivacy, 'https://icd360s.de/datenschutz/'),
+                    (l10n.masterPasswordLegalWithdrawal, 'https://icd360s.de/widerrufsrecht/'),
+                    (l10n.masterPasswordLegalCancellation, 'https://icd360s.de/kundigung/'),
+                    (l10n.masterPasswordLegalConstitution, 'https://icd360s.de/satzung360s/'),
+                  ]) ...[
+                    HoverButton(
+                      onPressed: () => _openUrl(link.$2),
+                      builder: (context, states) => Text(link.$1, style: theme.typography.caption?.copyWith(
+                        decoration: states.isHovered ? TextDecoration.underline : null)),
+                    ),
+                    if (link.$1 != l10n.masterPasswordLegalConstitution)
+                      Text('|', style: theme.typography.caption),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 6),
+              Center(child: Text(l10n.masterPasswordFooterCopyright(currentYear),
+                  style: theme.typography.caption?.copyWith(color: theme.inactiveColor))),
             ],
           ),
-          const SizedBox(height: 6),
-          Center(child: Text(l10n.masterPasswordFooterCopyright(currentYear),
-            style: theme.typography.caption?.copyWith(color: theme.inactiveColor))),
-        ],
+        ),
       ),
     );
 
-    return ContentDialog(
-      constraints: BoxConstraints(
-        maxWidth: isWide ? 750 : MediaQuery.of(context).size.width * 0.95,
-        maxHeight: MediaQuery.of(context).size.height * 0.9,
-      ),
+    return ScaffoldPage(
+      padding: EdgeInsets.zero,
       content: isWide
-          ? IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(flex: 2, child: brandingPanel()),
-                  Expanded(flex: 3, child: formPanel()),
-                ],
-              ),
+          ? Row(
+              children: [
+                Expanded(flex: 2, child: brandingPanel()),
+                Expanded(flex: 3, child: formPanel()),
+              ],
             )
-          : SingleChildScrollView(child: formPanel()),
-      actions: const [],
+          : SingleChildScrollView(child: Column(children: [
+              brandingPanel(),
+              formPanel(),
+            ])),
     );
   }
 

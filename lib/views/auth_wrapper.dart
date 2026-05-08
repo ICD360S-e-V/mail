@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2024-2026 ICD360S e.V.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -111,15 +112,14 @@ class _AuthWrapperState extends State<AuthWrapper> {
     }
   }
 
-  Future<bool> _showMasterPasswordDialog() async {
-    final result = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const MasterPasswordDialog(),
-    );
+  bool _showingPasswordScreen = false;
 
-    // Maximize window after successful authentication (desktop only)
-    if (result == true && PlatformService.instance.isDesktop) {
+  Future<bool> _showMasterPasswordDialog() async {
+    setState(() => _showingPasswordScreen = true);
+    final completer = _passwordCompleter = Completer<bool>();
+    final result = await completer.future;
+
+    if (result && PlatformService.instance.isDesktop) {
       try {
         await windowManager.maximize();
         LoggerService.log('WINDOW', 'Window maximized after authentication');
@@ -128,7 +128,20 @@ class _AuthWrapperState extends State<AuthWrapper> {
       }
     }
 
-    return result ?? false;
+    return result;
+  }
+
+  Completer<bool>? _passwordCompleter;
+
+  void _onPasswordResult(bool success) {
+    _passwordCompleter?.complete(success);
+    _passwordCompleter = null;
+    if (mounted) {
+      setState(() {
+        _showingPasswordScreen = false;
+        _isAuthenticated = success;
+      });
+    }
   }
 
   Future<bool> _hasNoAccounts() async {
@@ -167,31 +180,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
       );
     }
 
-    if (!_isAuthenticated) {
-      // Authentication failed - show error or exit
-      return ScaffoldPage(
-        content: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Semantics(
-                label: 'Locked',
-                child: const Icon(FluentIcons.lock, size: 64),
-              ),
-              const SizedBox(height: 16),
-              Text(l10n.authWrapperAuthRequired),
-              const SizedBox(height: 8),
-              Button(
-                child: Text(l10n.authWrapperButtonExit),
-                onPressed: () {
-                  // Exit app
-                  // In a real app, you'd call SystemNavigator.pop() or exit(0)
-                },
-              ),
-            ],
-          ),
-        ),
-      );
+    if (!_isAuthenticated || _showingPasswordScreen) {
+      return MasterPasswordDialog(onResult: _onPasswordResult);
     }
 
     // Authenticated - show main window
