@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.129.1 - 2026-05-08
+#### Bug Fixes
+- update copyright to 2025-current year with Gemeinnütziger Verein - (e569b3c) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.129.0 - 2026-05-08
 #### Features
 - replace legal links with Rechtliches icon button + modal - (6140135) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
