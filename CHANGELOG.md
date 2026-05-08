@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.127.0 - 2026-05-08
+#### Features
+- implement RFC 9788 header protection for PGP emails (#29) - (6e0a74b) - icd360sevofficial, *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.126.0 - 2026-05-08
 #### Features
 - redesign login screen (#30) - (9c876d9) - icd360sevofficial, *Claude Opus 4.6 (1M context)*, *Claude Opus 4.6 (1M context)*, *Claude Opus 4.6 (1M context)*
