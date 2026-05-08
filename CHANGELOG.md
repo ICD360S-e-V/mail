@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.130.0 - 2026-05-08
+#### Features
+- show app version on login screen - (0f445ef) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.129.2 - 2026-05-08
 #### Bug Fixes
 - replace non-existent FluentIcons (vault, mail_alert, etc.), remove unused l10n - (4fe1e82) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
