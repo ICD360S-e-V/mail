@@ -72,6 +72,5 @@ MimeMessage? _buildTestMessage(
 
 class _HasLength extends CustomMatcher {
   _HasLength(matcher) : super('String which length than is', 'length', matcher);
-  @override
   int featureValueOf(dynamic actual) => (actual as String).length;
 }

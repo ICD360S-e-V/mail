@@ -154,9 +154,6 @@ class ImapPool {
     );
 
     // Authenticate: same logic as MailService._authenticate
-    final user = account.username.contains('@')
-        ? account.username.split('@').first
-        : account.username;
     if (client.serverInfo.supports('AUTH=EXTERNAL')) {
       await client.authenticateWithExternal();
     } else {

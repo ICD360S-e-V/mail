@@ -3,12 +3,10 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:http/io_client.dart';
 
 import 'certificate_service.dart';
-import '../services/le_issuer_check.dart';
 import 'logger_service.dart';
 import 'mtls_service.dart';
 import 'pinned_security_context.dart';

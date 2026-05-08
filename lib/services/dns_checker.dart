@@ -493,52 +493,6 @@ class DnsChecker {
     return offset;
   }
 
-  /// RFC 8484 DoH query via HTTP POST with binary wireformat body.
-  ///
-  /// Quad9 (and many other DoH servers) require POST with
-  /// `Content-Type: application/dns-message`. GET with `?dns=`
-  /// base64url is optional per RFC 8484 and not universally supported.
-  ///
-  /// Uses the OS system trust store — Quad9 uses a DigiCert certificate,
-  /// not a Let's Encrypt cert.  PinnedSecurityContext (ISRG roots only)
-  /// must NOT be used here or TLS validation fails, manifesting as
-  /// SocketException("Connection refused") on the local ephemeral port.
-  static Future<List<String>> _queryDoHWireformat(
-    String endpoint,
-    String domain,
-    int qtype,
-  ) async {
-    final query = _buildDnsQuery(domain, qtype);
-    final uri = Uri.parse(endpoint);
-
-    // Plain HttpClient() uses the OS/Flutter trust store (system CAs),
-    // which correctly validates Quad9's DigiCert certificate.
-    final client = HttpClient()
-      ..connectionTimeout = _timeout
-      ..idleTimeout = const Duration(seconds: 5);
-
-    try {
-      final request = await client.postUrl(uri).timeout(_timeout);
-      request.headers.set('Content-Type', 'application/dns-message');
-      request.headers.set('Accept', 'application/dns-message');
-      request.add(query);
-
-      final response = await request.close().timeout(_timeout);
-      if (response.statusCode != 200) {
-        await response.drain<void>();
-        throw DnsException('HTTP ${response.statusCode}', response.statusCode);
-      }
-
-      final bytes = await response.fold<BytesBuilder>(
-        BytesBuilder(),
-        (builder, chunk) => builder..add(chunk),
-      ).then((b) => b.toBytes());
-
-      return _parseARecords(bytes);
-    } finally {
-      client.close();
-    }
-  }
 }
 
 /// Exception for DNS lookup failures.
