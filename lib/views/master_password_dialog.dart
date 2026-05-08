@@ -363,7 +363,7 @@ class _MasterPasswordDialogState extends State<MasterPasswordDialog> {
                       ),
                     ),
                     const SizedBox(width: 16),
-                    Text(l10n.masterPasswordFooterCopyright(currentYear),
+                    Text('\u00a9 2025\u2013$currentYear ICD360S e.V. \u2014 Gemeinn\u00fctziger Verein',
                         style: theme.typography.caption?.copyWith(color: theme.inactiveColor)),
                   ],
                 ),
