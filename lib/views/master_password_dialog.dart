@@ -46,7 +46,59 @@ class _MasterPasswordDialogState extends State<MasterPasswordDialog> {
     });
   }
 
-  /// Open URL in external browser (cross-platform)
+  void _showLegalDialog(BuildContext context) {
+    final theme = FluentTheme.of(context);
+    final links = <(IconData, String, String)>[
+      (FluentIcons.info, 'Impressum', 'https://icd360s.de/impressum/'),
+      (FluentIcons.shield, 'Datenschutz', 'https://icd360s.de/datenschutz/'),
+      (FluentIcons.undo, 'Widerrufsrecht', 'https://icd360s.de/widerrufsrecht/'),
+      (FluentIcons.cancel, 'K\u00fcndigung', 'https://icd360s.de/kundigung/'),
+      (FluentIcons.document_set, 'Satzung', 'https://icd360s.de/satzung360s/'),
+      (FluentIcons.code, 'Quellcode (AGPL-3.0)', 'https://github.com/ICD360S-e-V/mail'),
+    ];
+    showDialog(
+      context: context,
+      builder: (ctx) => ContentDialog(
+        title: Row(children: [
+          Icon(FluentIcons.document_set, size: 22, color: theme.accentColor),
+          const SizedBox(width: 10),
+          const Text('Rechtliches'),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: links.map((l) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: HoverButton(
+              onPressed: () => _openUrl(l.$3),
+              builder: (_, states) => Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: states.isHovered ? theme.accentColor.withValues(alpha: 0.1) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(children: [
+                  Icon(l.$1, size: 16, color: states.isHovered ? theme.accentColor : theme.inactiveColor),
+                  const SizedBox(width: 12),
+                  Text(l.$2, style: theme.typography.body?.copyWith(
+                    color: states.isHovered ? theme.accentColor : null)),
+                  const Spacer(),
+                  Icon(FluentIcons.open_in_new_window, size: 12,
+                      color: states.isHovered ? theme.accentColor : theme.inactiveColor),
+                ]),
+              ),
+            ),
+          )).toList(),
+        ),
+        actions: [
+          FilledButton(
+            child: const Text('Schlie\u00dfen'),
+            onPressed: () => Navigator.pop(ctx),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _openUrl(String url) async {
     try {
       final uri = Uri.parse(url);
@@ -292,31 +344,30 @@ class _MasterPasswordDialogState extends State<MasterPasswordDialog> {
                 ],
               ),
 
-              const SizedBox(height: 24),
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 8,
-                children: [
-                  for (final link in [
-                    (l10n.masterPasswordLegalImpressum, 'https://icd360s.de/impressum/'),
-                    (l10n.masterPasswordLegalPrivacy, 'https://icd360s.de/datenschutz/'),
-                    (l10n.masterPasswordLegalWithdrawal, 'https://icd360s.de/widerrufsrecht/'),
-                    (l10n.masterPasswordLegalCancellation, 'https://icd360s.de/kundigung/'),
-                    (l10n.masterPasswordLegalConstitution, 'https://icd360s.de/satzung360s/'),
-                  ]) ...[
+              const SizedBox(height: 20),
+              Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                     HoverButton(
-                      onPressed: () => _openUrl(link.$2),
-                      builder: (context, states) => Text(link.$1, style: theme.typography.caption?.copyWith(
-                        decoration: states.isHovered ? TextDecoration.underline : null)),
+                      onPressed: () => _showLegalDialog(context),
+                      builder: (context, states) => Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(FluentIcons.document_set, size: 14, color: states.isHovered ? theme.accentColor : theme.inactiveColor),
+                          const SizedBox(width: 6),
+                          Text('Rechtliches', style: theme.typography.caption?.copyWith(
+                            color: states.isHovered ? theme.accentColor : theme.inactiveColor,
+                            decoration: states.isHovered ? TextDecoration.underline : null)),
+                        ],
+                      ),
                     ),
-                    if (link.$1 != l10n.masterPasswordLegalConstitution)
-                      Text('|', style: theme.typography.caption),
+                    const SizedBox(width: 16),
+                    Text(l10n.masterPasswordFooterCopyright(currentYear),
+                        style: theme.typography.caption?.copyWith(color: theme.inactiveColor)),
                   ],
-                ],
+                ),
               ),
-              const SizedBox(height: 6),
-              Center(child: Text(l10n.masterPasswordFooterCopyright(currentYear),
-                  style: theme.typography.caption?.copyWith(color: theme.inactiveColor))),
             ],
           ),
         ),
