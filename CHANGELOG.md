@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.125.3 - 2026-05-08
+#### Bug Fixes
+- resolve remaining 24 flutter analyze warnings - (884d479) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.125.2 - 2026-05-08
 #### Bug Fixes
 - exclude fork test/example dirs from flutter analyze - (4a17f2a) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
