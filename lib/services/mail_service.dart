@@ -107,15 +107,6 @@ class MailService {
     return '(Empty email body)';
   }
 
-  /// Extract username from email for server authentication
-  /// Server expects "claudeai" not "claudeai@icd360s.de"
-  String _getAuthUsername(String email) {
-    if (email.contains('@')) {
-      return email.split('@').first;
-    }
-    return email;
-  }
-
   /// Authenticate to an already-connected SMTP submission client,
   /// preferring SASL EXTERNAL (cert-based, no password on the wire)
   /// when the server advertises `AUTH EXTERNAL` in its EHLO response.

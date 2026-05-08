@@ -82,13 +82,6 @@ class UpdateService {
   /// Expected macOS bundle identifier — verified after DMG extraction
   /// (when `_installMacOS` gains a codesign-verify step in a follow-up).
   /// Must match `PRODUCT_BUNDLE_IDENTIFIER` in
-  /// `macos/Runner/Configs/AppInfo.xcconfig`. The legacy Flutter
-  /// template ID `com.example.icd360sMailClient` was replaced by this
-  /// reverse-DNS bundle in v2.25.0; one-time runtime migration of
-  /// `~/Library/Application Support/<bundle>/secure_store.bin` is
-  /// handled by `lib/services/macos_bundle_migration.dart`.
-  static const String _expectedMacBundleId = 'de.icd360s.mailclient';
-
   /// Expected Apple Developer Team ID — null until we have a cert.
   /// When set, enables codesign --verify + Team ID check on updates.
   // ignore: unused_field
@@ -96,35 +89,6 @@ class UpdateService {
 
   static const MethodChannel _apkVerifyChannel =
       MethodChannel('de.icd360s.mailclient/apk_verify');
-
-  /// Verify an APK's signing certificate against the expected hash.
-  /// Calls into MainActivity.kt via MethodChannel.
-  /// Returns `true` only if the cert SHA-256 matches the hardcoded value.
-  static Future<bool> _verifyApkCert(String apkPath) async {
-    if (!Platform.isAndroid) return true; // not applicable
-    try {
-      final result = await _apkVerifyChannel.invokeMethod<Map<dynamic, dynamic>>(
-        'verifyApkSignature',
-        {
-          'apkPath': apkPath,
-          'expectedCertSha256': _expectedApkCertSha256,
-        },
-      );
-      final verified = result?['verified'] == true;
-      final actualHash = result?['actualHash'] as String?;
-      final reason = result?['reason'] as String?;
-      if (verified) {
-        LoggerService.log('UPDATE', '✓ APK signature verified (cert SHA-256 match)');
-      } else {
-        LoggerService.log('UPDATE',
-            '❌ APK signature verification FAILED — reason=$reason actual=$actualHash expected=$_expectedApkCertSha256');
-      }
-      return verified;
-    } catch (ex, stackTrace) {
-      LoggerService.logError('UPDATE', ex, stackTrace);
-      return false;
-    }
-  }
 
   /// Validate server certificate — only accept trusted Let's Encrypt issuers.
   /// Uses the shared `isTrustedLetsEncryptIssuer` helper.

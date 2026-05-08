@@ -86,7 +86,6 @@ class CertificateExpiryMonitor {
   static Future<void> loadPersistedExpiry() async {
     try {
       final notAfterStr = await _storage.read(key: _kNotAfter);
-      final notBeforeStr = await _storage.read(key: _kNotBefore);
 
       if (notAfterStr != null) {
         _certNotAfter = DateTime.parse(notAfterStr);

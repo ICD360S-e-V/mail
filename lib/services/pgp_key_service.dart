@@ -13,7 +13,6 @@ import 'package:flutter/foundation.dart' show compute, listEquals;
 import 'package:openpgp/openpgp.dart' as native_pgp;
 
 import 'logger_service.dart';
-import 'certificate_service.dart';
 import 'master_vault.dart';
 import 'mtls_client_pool.dart';
 import 'mtls_service.dart';
@@ -34,8 +33,6 @@ class PgpKeyService {
   static const _vaultKeyTofuDb = 'pgp_tofu_fingerprints_v1';
   static const _uploadEndpoint =
       'https://mail.icd360s.de/api/upload-pubkey.php';
-  static const _pubkeyEndpoint = 'https://mail.icd360s.de/api/pubkeys';
-
   // Per-account key caches (email → key)
   static final Map<String, dynamic> _privateKeys = {};
   static final Map<String, dynamic> _publicKeys = {};
@@ -719,22 +716,6 @@ class PgpKeyService {
       type: KeyType.ecc,
       curve: Ecc.ed25519,
     );
-  }
-
-  /// DEPRECATED: Pure-Dart PGP encryption via compute() isolate.
-  /// Replaced by native Go-based encryption (package:openpgp) which is
-  /// 50-200x faster. Kept as fallback in case native PGP is unavailable.
-  static String _encryptIsolateFallback(List<String> args) {
-    final plaintext = args[0];
-    final armoredKeys = args.sublist(1);
-    final keys = armoredKeys.map((a) => OpenPGP.readPublicKey(a)).toList();
-    pgp_config.Config.aeadProtect = false;
-    pgp_config.Config.aeadChunkSize = 26;
-    final encrypted = OpenPGP.encryptBinaryData(
-      Uint8List.fromList(utf8.encode(plaintext)),
-      encryptionKeys: keys,
-    );
-    return encrypted.armor();
   }
 
   // ── Helpers ──────────────────────────────────────────────────────

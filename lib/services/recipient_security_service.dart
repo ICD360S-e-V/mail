@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'dart:collection';
-import 'dart:io';
 import 'dns_checker.dart';
 import 'logger_service.dart';
 

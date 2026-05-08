@@ -19,7 +19,6 @@ import '../services/settings_service.dart';
 import '../services/account_service.dart';
 import '../services/master_password_service.dart';
 import '../services/master_vault.dart';
-import '../services/security_health_service.dart';
 import '../services/certificate_service.dart';
 import '../services/imap_pool.dart';
 import '../services/mtls_client_pool.dart';
@@ -1048,47 +1047,6 @@ class _MainWindowState extends State<MainWindow> {
     );
   }
 
-  /// Open URL in integrated browser
-  Future<void> _openUrl(String url) async {
-    String title = 'Browser';
-    if (url.contains('impressum')) {
-      title = 'Impressum';
-    } else if (url.contains('datenschutz')) {
-      title = 'Datenschutz';
-    } else if (url.contains('widerrufsrecht')) {
-      title = 'Widerrufsrecht';
-    } else if (url.contains('kundigung')) {
-      title = 'Kündigung';
-    } else if (url.contains('satzung')) {
-      title = 'Satzung';
-    }
-
-    LoggerService.log('UI_CLICK', 'Footer: Legal link clicked ($title) - URL: $url');
-    // Open in external browser (cross-platform)
-    try {
-      final uri = Uri.parse(url);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
-    } catch (ex, stackTrace) {
-      LoggerService.logError('BROWSER', ex, stackTrace);
-    }
-  }
-
-  /// Get quota indicator color based on percentage
-  /// Verde (0-25%), Albastru (25-50%), Galben (50-75%), Roșu (75-100%)
-  Color _getQuotaColor(double percentage) {
-    if (percentage <= 25) {
-      return Colors.green; // 0-25%: Verde (OK)
-    } else if (percentage <= 50) {
-      return Colors.blue; // 25-50%: Albastru (bine)
-    } else if (percentage <= 75) {
-      return Colors.yellow; // 50-75%: Galben (atenție)
-    } else {
-      return Colors.red; // 75-100%: Roșu (pericol)
-    }
-  }
-
   /// Build navigation pane — flat list of folders for the ACTIVE account only.
   /// Account switcher lives in the header (next to Settings), not in the sidebar.
   List<NavigationPaneItem> _buildAccountTree(EmailProvider emailProvider) {
@@ -1809,123 +1767,6 @@ class _MainWindowState extends State<MainWindow> {
     return Tooltip(
       message: tooltipMsg,
       child: Icon(icon, size: 14, color: color),
-    );
-  }
-
-  /// Build ping quality indicator
-  /// Build compact port status indicators for footer.
-  Widget _buildPortIndicators(FluentThemeData theme, EmailProvider emailProvider) {
-    final status = emailProvider.connectionStatus;
-    if (status == null) return const SizedBox.shrink();
-
-    Widget dot(String label, PortStatus portStatus) {
-      final Color color;
-      switch (portStatus.status) {
-        case 'OPEN':
-          color = Colors.green;
-          break;
-        case 'TIMEOUT':
-          color = Colors.orange;
-          break;
-        case 'CLOSED':
-          color = Colors.red;
-          break;
-        default:
-          color = Colors.grey;
-      }
-      return Tooltip(
-        message: '${portStatus.protocol}:${portStatus.port} — ${portStatus.status}',
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 7,
-              height: 7,
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 3),
-            Text(
-              label,
-              style: theme.typography.caption?.copyWith(
-                fontSize: 9,
-                color: color,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        dot('HTTPS', status.httpsStatus),
-        const SizedBox(width: 6),
-        dot('SMTP', status.smtpStatus),
-        const SizedBox(width: 6),
-        dot('IMAP', status.imapStatus),
-      ],
-    );
-  }
-
-  Widget _buildPingIndicator(FluentThemeData theme) {
-    final Color color;
-    final String label;
-    final int bars;
-
-    if (_pingError || _pingMs == null) {
-      color = Colors.grey;
-      label = 'Offline';
-      bars = 0;
-    } else if (_pingMs! <= 30) {
-      color = Colors.green;
-      label = '${_pingMs}ms';
-      bars = 4;
-    } else if (_pingMs! <= 50) {
-      color = Colors.yellow.dark;
-      label = '${_pingMs}ms';
-      bars = 3;
-    } else if (_pingMs! <= 100) {
-      color = Colors.orange;
-      label = '${_pingMs}ms';
-      bars = 2;
-    } else {
-      color = Colors.red;
-      label = '${_pingMs}ms';
-      bars = 1;
-    }
-
-    return Tooltip(
-      message: _pingError ? 'Server unreachable' : 'Ping: $label',
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Signal bars
-          SizedBox(
-            width: 16,
-            height: 14,
-            child: CustomPaint(
-              painter: _SignalBarsPainter(
-                bars: bars,
-                color: color,
-                inactiveColor: theme.inactiveBackgroundColor,
-              ),
-            ),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: theme.typography.caption?.copyWith(
-              color: color,
-              fontWeight: FontWeight.bold,
-              fontSize: 10,
-            ),
-          ),
-        ],
-      ),
     );
   }
 

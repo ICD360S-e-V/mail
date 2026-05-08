@@ -381,61 +381,6 @@ class AccountService {
     return 'icd360s_mail_password_$username';
   }
 
-  /// Save password to fallback file (AES-GCM encrypted with session key)
-  Future<void> _saveFallbackPassword(String username, String password) async {
-    if (_sessionKey == null) {
-      LoggerService.log('ACCOUNTS',
-          '⚠ Cannot save password to fallback: session is locked');
-      return;
-    }
-    try {
-      final file = File(_passwordsFallbackPath!);
-      Map<String, dynamic> passwords = {};
-
-      if (await file.exists()) {
-        final content = await file.readAsString();
-        passwords = jsonDecode(content) as Map<String, dynamic>;
-      }
-
-      passwords[username] = _encrypt(password);
-      await _atomicWriteString(file.path, jsonEncode(passwords));
-      LoggerService.log('ACCOUNTS', '✓ Password saved to fallback for $username (AES-GCM)');
-    } catch (ex, stackTrace) {
-      LoggerService.logError('ACCOUNTS_FALLBACK', ex, stackTrace);
-    }
-  }
-
-  /// Load password from fallback file
-  Future<String?> _loadFallbackPassword(String username) async {
-    try {
-      final file = File(_passwordsFallbackPath!);
-      if (!await file.exists()) return null;
-
-      final content = await file.readAsString();
-      final passwords = jsonDecode(content) as Map<String, dynamic>;
-      if (!passwords.containsKey(username)) return null;
-
-      final stored = passwords[username] as String;
-
-      // Try the new AES-GCM format first (v2.20.0+)
-      var password = _decrypt(stored);
-      if (password != null) {
-        LoggerService.log('ACCOUNTS', 'Loaded password for $username from fallback (AES-GCM)');
-        return password;
-      }
-
-      // Legacy XOR formats (v2.5.x, v2.17.x) removed in v2.125.
-      // All users are on AES-GCM since v2.20.0+.
-
-      LoggerService.log('ACCOUNTS',
-          '⚠ Could not decrypt fallback password for $username (session locked or data corrupt)');
-      return null;
-    } catch (ex, stackTrace) {
-      LoggerService.logError('ACCOUNTS_FALLBACK', ex, stackTrace);
-      return null;
-    }
-  }
-
   /// Delete password from fallback file
   Future<void> _deleteFallbackPassword(String username) async {
     try {

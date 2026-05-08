@@ -9,7 +9,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:window_manager/window_manager.dart';
 import '../utils/l10n_helper.dart';
 import '../services/master_password_service.dart';
-import '../services/master_vault.dart';
 import '../services/settings_service.dart';
 import '../services/log_upload_service.dart';
 import '../services/notification_service.dart';

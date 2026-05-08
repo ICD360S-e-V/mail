@@ -59,14 +59,6 @@ class PhishingDetector {
     '.win', '.bid', '.trade', '.webcam', '.loan', '.party',
   };
 
-  /// Cyrillic characters that look identical to Latin.
-  static const Map<int, String> _cyrillicHomoglyphs = {
-    0x0430: 'a', 0x0435: 'e', 0x043E: 'o', 0x0440: 'p',
-    0x0441: 'c', 0x0443: 'y', 0x0445: 'x', 0x0456: 'i',
-    0x0455: 's', 0x044C: 'b', 0x0457: 'i', 0x0491: 'r',
-    0x04BB: 'h', 0x043D: 'H', 0x043A: 'K',
-  };
-
   /// Cyrillic letters that visually resemble ASCII Latin letters.
   /// Used for whole-script-confusable detection (UTS #39 + Chromium).
   /// If a label is 100% Cyrillic AND every character is in this set,

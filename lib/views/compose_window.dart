@@ -4,9 +4,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:fluent_ui/fluent_ui.dart';
-import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart' show showModalBottomSheet;
 import 'package:file_picker/file_picker.dart';
 import 'package:cunning_document_scanner/cunning_document_scanner.dart';
@@ -31,13 +29,13 @@ enum _AttachStatus { uploading, ready, failed }
 
 class _ComposeAttachment {
   final PlatformFile file;
-  _AttachStatus status;
+  _AttachStatus status = _AttachStatus.uploading;
   String? errorMessage;
   String? serverUuid;
-  double uploadProgress;
-  String uploadSpeedText;
+  double uploadProgress = 0.0;
+  String uploadSpeedText = '';
 
-  _ComposeAttachment(this.file, {this.status = _AttachStatus.uploading, this.uploadProgress = 0.0, this.uploadSpeedText = ''});
+  _ComposeAttachment(this.file);
 
   bool get isImage {
     final ext = file.extension?.toLowerCase() ?? '';

@@ -158,9 +158,7 @@ class PgpIsolateWorker {
             ];
             final result = OpenPGP.decrypt(ct, decryptionKeys: allKeys);
             final literal = result.literalData;
-            plaintexts.add(literal != null
-                ? utf8.decode(literal.binary, allowMalformed: true)
-                : null);
+            plaintexts.add(utf8.decode(literal.binary, allowMalformed: true));
             errors.add(null);
           } catch (ex) {
             plaintexts.add(null);
