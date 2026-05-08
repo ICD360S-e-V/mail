@@ -4,10 +4,8 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:dart_pg/dart_pg.dart';
-import 'package:dart_pg/src/common/config.dart' as pgp_config;
 import 'package:enough_mail/enough_mail.dart';
 import 'package:flutter/foundation.dart' show compute, listEquals;
 import 'package:openpgp/openpgp.dart' as native_pgp;

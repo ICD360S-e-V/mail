@@ -323,56 +323,6 @@ class AccountService {
   static bool get isSessionUnlocked => _sessionKey != null;
 
   // ==========================================================================
-  // AES-256-GCM ENCRYPTION (replaces XOR)
-  // ==========================================================================
-
-  /// Encrypt a value using AES-256-GCM with the in-memory session key.
-  /// Returns base64(version | iv(12) | ciphertext+tag).
-  /// Version byte 0x01 marks the new format vs legacy XOR (no version byte).
-  String _encrypt(String value) {
-    if (_sessionKey == null) {
-      throw StateError('Cannot encrypt: session is locked. Call unlockSession() first.');
-    }
-    final random = Random.secure();
-    final iv = Uint8List.fromList(List<int>.generate(12, (_) => random.nextInt(256)));
-    final plaintext = Uint8List.fromList(utf8.encode(value));
-
-    final cipher = GCMBlockCipher(AESEngine())
-      ..init(true, AEADParameters(KeyParameter(_sessionKey!), 128, iv, Uint8List(0)));
-    final ciphertext = cipher.process(plaintext);
-
-    // Output format: 0x01 (version) | 12-byte IV | ciphertext+tag
-    final out = Uint8List(1 + iv.length + ciphertext.length);
-    out[0] = 0x01;
-    out.setRange(1, 1 + iv.length, iv);
-    out.setRange(1 + iv.length, out.length, ciphertext);
-    return base64Encode(out);
-  }
-
-  /// Decrypt a value previously stored by _encrypt().
-  /// Returns null if decryption fails (wrong key, tampered data, locked session).
-  String? _decrypt(String encoded) {
-    if (_sessionKey == null) return null;
-    try {
-      final raw = base64Decode(encoded);
-      if (raw.isEmpty || raw[0] != 0x01) return null;
-      if (raw.length < 1 + 12 + 16) return null; // version + iv + min ciphertext+tag
-
-      final iv = Uint8List.fromList(raw.sublist(1, 13));
-      final ciphertext = Uint8List.fromList(raw.sublist(13));
-
-      final cipher = GCMBlockCipher(AESEngine())
-        ..init(false, AEADParameters(KeyParameter(_sessionKey!), 128, iv, Uint8List(0)));
-      final plaintext = cipher.process(ciphertext);
-      return utf8.decode(plaintext);
-    } catch (ex) {
-      LoggerService.log('ACCOUNTS', 'AES-GCM decrypt failed: $ex');
-      return null;
-    }
-  }
-
-
-  // ==========================================================================
   // PASSWORD STORAGE (fallback file)
   // ==========================================================================
 

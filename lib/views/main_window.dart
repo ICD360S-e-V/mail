@@ -25,7 +25,6 @@ import '../services/mtls_client_pool.dart';
 import '../services/mail_status_service.dart';
 import '../services/pgp_key_service.dart';
 import '../services/trash_tracker_service.dart';
-import '../services/connection_monitor.dart';
 import '../utils/l10n_helper.dart';
 import 'compose_window.dart';
 import 'email_viewer.dart';
@@ -2120,49 +2119,6 @@ class RefreshIntent extends Intent {
   const RefreshIntent();
 }
 
-/// Custom painter for signal strength bars
-class _SignalBarsPainter extends CustomPainter {
-  final int bars;
-  final Color color;
-  final Color inactiveColor;
-
-  _SignalBarsPainter({
-    required this.bars,
-    required this.color,
-    required this.inactiveColor,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const totalBars = 4;
-    final barWidth = size.width / (totalBars * 2 - 1);
-    final gap = barWidth;
-
-    for (int i = 0; i < totalBars; i++) {
-      final isActive = i < bars;
-      final barHeight = size.height * (0.25 + 0.25 * i);
-      final x = i * (barWidth + gap);
-      final y = size.height - barHeight;
-
-      final paint = Paint()
-        ..color = isActive ? color : inactiveColor
-        ..style = PaintingStyle.fill;
-
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(x, y, barWidth, barHeight),
-          const Radius.circular(1),
-        ),
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _SignalBarsPainter oldDelegate) {
-    return oldDelegate.bars != bars || oldDelegate.color != color;
-  }
-}
 
 
 
