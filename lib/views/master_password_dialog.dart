@@ -129,44 +129,70 @@ class _MasterPasswordDialogState extends State<MasterPasswordDialog> {
     final l10n = l10nOf(context);
     final currentYear = DateTime.now().year;
 
-    return ContentDialog(
-      constraints: BoxConstraints(
-        maxWidth: MediaQuery.of(context).size.width > 600
-            ? 500
-            : MediaQuery.of(context).size.width * 0.95,
-        maxHeight: MediaQuery.of(context).size.height * 0.9,
+    final isWide = MediaQuery.of(context).size.width > 700;
+
+    Widget brandingPanel() => Container(
+      padding: const EdgeInsets.all(32),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            theme.accentColor.darkest,
+            theme.accentColor.darker,
+          ],
+        ),
+        borderRadius: isWide
+            ? const BorderRadius.only(topLeft: Radius.circular(8), bottomLeft: Radius.circular(8))
+            : const BorderRadius.only(topLeft: Radius.circular(8), topRight: Radius.circular(8)),
       ),
-      content: Column(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Image.asset('assets/logo.png', width: 80, height: 80,
+              errorBuilder: (_, __, ___) => Icon(FluentIcons.mail, size: 64, color: Colors.white)),
+          const SizedBox(height: 16),
+          Text('ICD360S', style: theme.typography.titleLarge?.copyWith(
+            color: Colors.white, fontWeight: FontWeight.bold, fontSize: 28)),
+          Text('Mail', style: theme.typography.title?.copyWith(
+            color: Colors.white.withValues(alpha: 0.9), fontWeight: FontWeight.w300, fontSize: 22)),
+          const SizedBox(height: 24),
+          Text('Sicher.', style: theme.typography.body?.copyWith(color: Colors.white.withValues(alpha: 0.8))),
+          Text('Privat.', style: theme.typography.body?.copyWith(color: Colors.white.withValues(alpha: 0.8))),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(FluentIcons.shield, size: 14, color: Colors.white.withValues(alpha: 0.7)),
+              const SizedBox(width: 6),
+              Text('Ende-zu-Ende', style: theme.typography.caption?.copyWith(color: Colors.white.withValues(alpha: 0.7))),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    Widget formPanel() => Padding(
+      padding: const EdgeInsets.all(28),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // App title
-          Center(
-            child: Text(
-              l10n.masterPasswordDialogAppTitle,
-              style: theme.typography.title?.copyWith(
-                fontWeight: FontWeight.bold,
-                fontSize: 24,
-              ),
-            ),
+          if (!isWide) ...[
+            Center(child: Image.asset('assets/logo.png', width: 48, height: 48,
+                errorBuilder: (_, __, ___) => Icon(FluentIcons.mail, size: 40, color: theme.accentColor))),
+            const SizedBox(height: 8),
+            Center(child: Text(l10n.masterPasswordDialogAppTitle, style: theme.typography.subtitle?.copyWith(fontWeight: FontWeight.bold))),
+            const SizedBox(height: 16),
+          ],
+
+          Text(
+            _isFirstTime ? l10n.masterPasswordDialogFirstTimeMessage : l10n.masterPasswordDialogLoginMessage,
+            style: theme.typography.body,
           ),
           const SizedBox(height: 20),
 
-          if (_isFirstTime) ...[
-            Text(
-              l10n.masterPasswordDialogFirstTimeMessage,
-              style: theme.typography.body,
-            ),
-            const SizedBox(height: 20),
-          ] else ...[
-            Text(
-              l10n.masterPasswordDialogLoginMessage,
-              style: theme.typography.body,
-            ),
-            const SizedBox(height: 20),
-          ],
-
-          // Password field
           InfoLabel(
             label: l10n.masterPasswordLabelPassword,
             child: PasswordBox(
@@ -174,15 +200,10 @@ class _MasterPasswordDialogState extends State<MasterPasswordDialog> {
               placeholder: l10n.masterPasswordPlaceholderPassword,
               enabled: !_isLoading,
               onChanged: (_) => setState(() => _errorMessage = null),
-              onSubmitted: (_) {
-                if (!_isFirstTime) {
-                  _submit();
-                }
-              },
+              onSubmitted: (_) { if (!_isFirstTime) _submit(); },
             ),
           ),
 
-          // Confirm password field (first-time only)
           if (_isFirstTime) ...[
             const SizedBox(height: 12),
             InfoLabel(
@@ -197,138 +218,101 @@ class _MasterPasswordDialogState extends State<MasterPasswordDialog> {
             ),
           ],
 
-          // Error message
           if (_errorMessage != null) ...[
             const SizedBox(height: 16),
-            InfoBar(
-              title: Text(l10n.errorTitle),
-              content: Text(_errorMessage!),
-              severity: InfoBarSeverity.error,
-            ),
+            InfoBar(title: Text(l10n.errorTitle), content: Text(_errorMessage!), severity: InfoBarSeverity.error),
           ],
 
-          // Footer with legal links
-          const SizedBox(height: 24),
-          Center(
-            child: Column(
-              children: [
-                Wrap(
-                  alignment: WrapAlignment.center,
-                  spacing: 8,
-                  children: [
-                    HoverButton(
-                      onPressed: () => _openUrl('https://icd360s.de/impressum/'),
-                      builder: (context, states) => Text(
-                        l10n.masterPasswordLegalImpressum,
-                        style: theme.typography.caption?.copyWith(
-                          decoration: states.isHovered ? TextDecoration.underline : null,
-                        ),
-                      ),
-                    ),
-                    Text('|', style: theme.typography.caption),
-                    HoverButton(
-                      onPressed: () => _openUrl('https://icd360s.de/datenschutz/'),
-                      builder: (context, states) => Text(
-                        l10n.masterPasswordLegalPrivacy,
-                        style: theme.typography.caption?.copyWith(
-                          decoration: states.isHovered ? TextDecoration.underline : null,
-                        ),
-                      ),
-                    ),
-                    Text('|', style: theme.typography.caption),
-                    HoverButton(
-                      onPressed: () => _openUrl('https://icd360s.de/widerrufsrecht/'),
-                      builder: (context, states) => Text(
-                        l10n.masterPasswordLegalWithdrawal,
-                        style: theme.typography.caption?.copyWith(
-                          decoration: states.isHovered ? TextDecoration.underline : null,
-                        ),
-                      ),
-                    ),
-                    Text('|', style: theme.typography.caption),
-                    HoverButton(
-                      onPressed: () => _openUrl('https://icd360s.de/kundigung/'),
-                      builder: (context, states) => Text(
-                        l10n.masterPasswordLegalCancellation,
-                        style: theme.typography.caption?.copyWith(
-                          decoration: states.isHovered ? TextDecoration.underline : null,
-                        ),
-                      ),
-                    ),
-                    Text('|', style: theme.typography.caption),
-                    HoverButton(
-                      onPressed: () => _openUrl('https://icd360s.de/satzung360s/'),
-                      builder: (context, states) => Text(
-                        l10n.masterPasswordLegalConstitution,
-                        style: theme.typography.caption?.copyWith(
-                          decoration: states.isHovered ? TextDecoration.underline : null,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  l10n.masterPasswordFooterCopyright(currentYear),
-                  style: theme.typography.caption?.copyWith(
-                    color: theme.inactiveColor,
+          const SizedBox(height: 20),
+
+          Row(
+            children: [
+              if (!_isFirstTime)
+                Tooltip(
+                  message: 'Reset App',
+                  child: IconButton(
+                    icon: Icon(FluentIcons.sync_icon, size: 18, color: Colors.red),
+                    onPressed: _isLoading ? null : () async {
+                      final confirmed = await _confirmFactoryReset(context);
+                      if (confirmed && context.mounted) {
+                        await FactoryResetDialog.show(context);
+                      }
+                    },
                   ),
                 ),
-              ],
-            ),
+              Tooltip(
+                message: 'Copy Logs',
+                child: IconButton(
+                  icon: const Icon(FluentIcons.copy, size: 18),
+                  onPressed: () {
+                    final logs = LoggerService.getLogs().join('\n');
+                    Clipboard.setData(ClipboardData(text: logs));
+                  },
+                ),
+              ),
+              const Spacer(),
+              FilledButton(
+                onPressed: _isLoading ? null : _submit,
+                child: _isLoading
+                    ? const SizedBox(width: 20, height: 20, child: ProgressRing(strokeWidth: 2))
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(_isFirstTime ? FluentIcons.save : FluentIcons.unlock, size: 16),
+                          const SizedBox(width: 8),
+                          Text(_isFirstTime ? l10n.masterPasswordButtonSetPassword : l10n.masterPasswordButtonUnlock),
+                        ],
+                      ),
+              ),
+            ],
           ),
+
+          const SizedBox(height: 20),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            children: [
+              for (final link in [
+                (l10n.masterPasswordLegalImpressum, 'https://icd360s.de/impressum/'),
+                (l10n.masterPasswordLegalPrivacy, 'https://icd360s.de/datenschutz/'),
+                (l10n.masterPasswordLegalWithdrawal, 'https://icd360s.de/widerrufsrecht/'),
+                (l10n.masterPasswordLegalCancellation, 'https://icd360s.de/kundigung/'),
+                (l10n.masterPasswordLegalConstitution, 'https://icd360s.de/satzung360s/'),
+              ]) ...[
+                HoverButton(
+                  onPressed: () => _openUrl(link.$2),
+                  builder: (context, states) => Text(link.$1, style: theme.typography.caption?.copyWith(
+                    decoration: states.isHovered ? TextDecoration.underline : null)),
+                ),
+                if (link.$1 != l10n.masterPasswordLegalConstitution)
+                  Text('|', style: theme.typography.caption),
+              ],
+            ],
+          ),
+          const SizedBox(height: 6),
+          Center(child: Text(l10n.masterPasswordFooterCopyright(currentYear),
+            style: theme.typography.caption?.copyWith(color: theme.inactiveColor))),
         ],
       ),
-      actions: [
-        // Factory Reset — available on lock screen for recovery when
-        // password is lost (e.g. after Argon2id migration). Protected
-        // by typed confirmation phrase "RESET" to prevent accidental
-        // or sabotage clicks. Uses the same FactoryResetDialog flow
-        // as post-login reset but with the phrase "RESET" instead of
-        // "DELETE" to distinguish the two paths in audit logs.
-        if (!_isFirstTime)
-          Button(
-            style: ButtonStyle(
-              foregroundColor: WidgetStatePropertyAll(Colors.red),
-            ),
-            onPressed: _isLoading ? null : () async {
-              final confirmed = await _confirmFactoryReset(context);
-              if (confirmed && context.mounted) {
-                await FactoryResetDialog.show(context);
-              }
-            },
-            child: const Text('Reset App'),
-          ),
-        // Copy logs button (pre-login debug access)
-        Button(
-          onPressed: () {
-            final logs = LoggerService.getLogs().join('\n');
-            Clipboard.setData(ClipboardData(text: logs));
-          },
-          child: const Text('Copy Logs'),
-        ),
-        Button(
-          onPressed: _isLoading ? null : () => Navigator.of(context).pop(false),
-          child: Text(l10n.masterPasswordButtonExitApp),
-        ),
-        FilledButton(
-          onPressed: _isLoading ? null : _submit,
-          child: _isLoading
-              ? Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: ProgressRing(strokeWidth: 2),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(l10n.masterPasswordButtonVerifying),
-                  ],
-                )
-              : Text(_isFirstTime ? l10n.masterPasswordButtonSetPassword : l10n.masterPasswordButtonUnlock),
-        ),
-      ],
+    );
+
+    return ContentDialog(
+      constraints: BoxConstraints(
+        maxWidth: isWide ? 750 : MediaQuery.of(context).size.width * 0.95,
+        maxHeight: MediaQuery.of(context).size.height * 0.9,
+      ),
+      content: isWide
+          ? IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(flex: 2, child: brandingPanel()),
+                  Expanded(flex: 3, child: formPanel()),
+                ],
+              ),
+            )
+          : SingleChildScrollView(child: formPanel()),
+      actions: const [],
     );
   }
 
