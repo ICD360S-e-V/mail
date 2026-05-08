@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.131.0 - 2026-05-08
+#### Features
+- glassmorphic login card with ambient gradient orbs - (f79a181) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.130.0 - 2026-05-08
 #### Features
 - show app version on login screen - (0f445ef) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
