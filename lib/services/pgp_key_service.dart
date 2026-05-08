@@ -717,14 +717,6 @@ class PgpKeyService {
 
   // ── Helpers ──────────────────────────────────────────────────────
 
-  static String _rfc2047Encode(String text) {
-    // Check if encoding needed (non-ASCII chars)
-    if (text.codeUnits.every((c) => c < 128)) return text;
-    final bytes = utf8.encode(text);
-    final b64 = base64.encode(bytes);
-    return '=?UTF-8?B?$b64?=';
-  }
-
   static Future<String> _getOrCreatePassphrase() async {
     final vault = MasterVault.instance;
     var passphrase = await vault.read(key: _vaultKeyPassphrase);

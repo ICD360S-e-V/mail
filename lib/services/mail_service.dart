@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:enough_mail/enough_mail.dart';
 import '../models/models.dart';
