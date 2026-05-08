@@ -8,7 +8,6 @@ import 'dart:io';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:window_manager/window_manager.dart';
-import '../utils/l10n_helper.dart';
 import '../services/master_password_service.dart';
 import '../services/settings_service.dart';
 import '../services/log_upload_service.dart';
@@ -169,8 +168,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
   @override
   Widget build(BuildContext context) {
-    final l10n = l10nOf(context);
-
     if (_isChecking) {
       // Show loading screen while checking - use ScaffoldPage with solid background
       return const ScaffoldPage(

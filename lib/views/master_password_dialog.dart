@@ -186,15 +186,15 @@ class _MasterPasswordDialogState extends State<MasterPasswordDialog> {
     final isWide = MediaQuery.of(context).size.width > 800;
     final w = Colors.white;
 
-    const features = <(IconData, String)>[
+    final features = <(IconData, String)>[
       (FluentIcons.lock, 'Ende-zu-Ende-Verschl\u00fcsselung (OpenPGP)'),
       (FluentIcons.certificate, 'mTLS Zertifikat-Authentifizierung'),
       (FluentIcons.shield, 'ClamAV Virenscan f\u00fcr Anh\u00e4nge'),
-      (FluentIcons.mail_alert, 'Phishing- & Spam-Erkennung (Rspamd)'),
+      (FluentIcons.mail, 'Phishing- & Spam-Erkennung (Rspamd)'),
       (FluentIcons.devices4, 'Windows, macOS, Linux, Android, iOS'),
-      (FluentIcons.cloud_secure, 'DANE + DNSSEC + MTA-STS'),
-      (FluentIcons.vault, 'MasterVault (Argon2id + XChaCha20)'),
-      (FluentIcons.red_eye, 'Screenshot-Schutz (alle Plattformen)'),
+      (FluentIcons.cloud_download, 'DANE + DNSSEC + MTA-STS'),
+      (FluentIcons.lock_solid, 'MasterVault (Argon2id + XChaCha20)'),
+      (FluentIcons.blocked2, 'Screenshot-Schutz (alle Plattformen)'),
       (FluentIcons.print, 'Drucken & PDF-Viewer'),
       (FluentIcons.code, 'Open Source (AGPL-3.0)'),
     ];
