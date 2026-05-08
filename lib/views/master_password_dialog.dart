@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/master_password_service.dart';
 import '../services/logger_service.dart';
+import '../services/update_service.dart';
 import '../utils/l10n_helper.dart';
 import 'factory_reset_dialog.dart';
 
@@ -367,6 +368,11 @@ class _MasterPasswordDialogState extends State<MasterPasswordDialog> {
                         style: theme.typography.caption?.copyWith(color: theme.inactiveColor)),
                   ],
                 ),
+              ),
+              const SizedBox(height: 4),
+              Center(
+                child: Text('v${UpdateService.currentVersion}',
+                    style: theme.typography.caption?.copyWith(color: theme.inactiveColor, fontSize: 11)),
               ),
             ],
           ),
