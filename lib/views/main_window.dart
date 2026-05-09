@@ -291,6 +291,11 @@ class _MainWindowState extends State<MainWindow> {
                   boxShadow: [BoxShadow(color: accent.withValues(alpha: 0.08), blurRadius: 40, spreadRadius: 8)],
                 ),
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Text('ICD360S e.V. Mail Client', style: theme.typography.bodyStrong?.copyWith(fontSize: 15)),
+                  const SizedBox(height: 4),
+                  Text('Zugang nur f\u00fcr unsere Mitglieder',
+                      style: theme.typography.caption?.copyWith(color: theme.inactiveColor)),
+                  const SizedBox(height: 20),
                   Container(
                     width: 56, height: 56,
                     decoration: BoxDecoration(
