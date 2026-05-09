@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.132.0 - 2026-05-09
+#### Features
+- modern glassmorphic lock screen with accent glow - (15fb33d) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.131.0 - 2026-05-08
 #### Features
 - glassmorphic login card with ambient gradient orbs - (f79a181) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
