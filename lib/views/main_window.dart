@@ -3,6 +3,7 @@
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -255,54 +256,104 @@ class _MainWindowState extends State<MainWindow> {
   Future<bool> _showMasterPasswordDialog() async {
     final passwordController = TextEditingController();
     var verifying = false;
+    String? errorMsg;
     final result = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.85),
       builder: (context) {
-        final l10n = l10nOf(context);
-        Future<void> submit() async {
-          if (verifying) return;
-          verifying = true;
-          final isValid = await MasterPasswordService.verifyMasterPassword(passwordController.text);
-          verifying = false;
-          if (context.mounted) {
-            Navigator.of(context).pop(isValid);
+        final theme = FluentTheme.of(context);
+        final accent = theme.accentColor;
+        return StatefulBuilder(builder: (context, setDialogState) {
+          Future<void> submit() async {
+            if (verifying) return;
+            setDialogState(() { verifying = true; errorMsg = null; });
+            final isValid = await MasterPasswordService.verifyMasterPassword(passwordController.text);
+            if (context.mounted) {
+              if (isValid) {
+                Navigator.of(context).pop(true);
+              } else {
+                setDialogState(() { verifying = false; errorMsg = 'Falsches Passwort'; });
+              }
+            }
           }
-        }
-        return ContentDialog(
-          title: Row(
-            children: [
-              const ExcludeSemantics(child: Icon(FluentIcons.lock, size: 20)),
-              const SizedBox(width: 8),
-              Text(l10n.mainWindowDialogLockedTitle),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(l10n.mainWindowDialogLockedEnterPassword),
-              const SizedBox(height: 16),
-              TextBox(
-                controller: passwordController,
-                placeholder: l10n.mainWindowPlaceholderMasterPassword,
-                obscureText: true,
-                autofocus: true,
-                onSubmitted: (_) => submit(),
+          return Center(child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+              child: Container(
+                width: 380,
+                padding: const EdgeInsets.all(32),
+                decoration: BoxDecoration(
+                  color: theme.micaBackgroundColor.withValues(alpha: 0.75),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: accent.withValues(alpha: 0.15)),
+                  boxShadow: [BoxShadow(color: accent.withValues(alpha: 0.08), blurRadius: 40, spreadRadius: 8)],
+                ),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Container(
+                    width: 56, height: 56,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(colors: [accent.darkest, accent.darker]),
+                    ),
+                    child: const Icon(FluentIcons.lock, size: 24, color: Colors.white),
+                  ),
+                  const SizedBox(height: 16),
+                  Text('Gesperrt', style: theme.typography.subtitle?.copyWith(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  Text('Bitte Master-Passwort eingeben',
+                      style: theme.typography.caption?.copyWith(color: theme.inactiveColor)),
+                  const SizedBox(height: 24),
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: errorMsg != null
+                          ? Colors.red.withValues(alpha: 0.6)
+                          : theme.inactiveColor.withValues(alpha: 0.2)),
+                      color: theme.inactiveColor.withValues(alpha: 0.05),
+                    ),
+                    child: TextBox(
+                      controller: passwordController,
+                      placeholder: 'Master-Passwort',
+                      obscureText: true,
+                      autofocus: true,
+                      onSubmitted: (_) => submit(),
+                      decoration: const BoxDecoration(color: Colors.transparent),
+                    ),
+                  ),
+                  if (errorMsg != null) ...[
+                    const SizedBox(height: 8),
+                    Row(children: [
+                      Icon(FluentIcons.error, size: 12, color: Colors.red),
+                      const SizedBox(width: 6),
+                      Text(errorMsg!, style: theme.typography.caption?.copyWith(color: Colors.red)),
+                    ]),
+                  ],
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity, height: 40,
+                    child: FilledButton(
+                      onPressed: verifying ? null : submit,
+                      style: ButtonStyle(shape: WidgetStatePropertyAll(
+                          RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)))),
+                      child: verifying
+                          ? const SizedBox(width: 20, height: 20, child: ProgressRing(strokeWidth: 2))
+                          : const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                              Icon(FluentIcons.unlock, size: 16),
+                              SizedBox(width: 8),
+                              Text('Entsperren'),
+                            ]),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text('v${UpdateService.currentVersion}',
+                      style: theme.typography.caption?.copyWith(color: theme.inactiveColor, fontSize: 10)),
+                ]),
               ),
-            ],
-          ),
-          actions: [
-            Button(
-              child: Text(l10n.buttonCancel),
-              onPressed: () => Navigator.of(context).pop(false),
             ),
-            FilledButton(
-              child: Text(l10n.mainWindowButtonUnlock),
-              onPressed: submit,
-            ),
-          ],
-        );
+          ));
+        });
       },
     );
     passwordController.dispose();
