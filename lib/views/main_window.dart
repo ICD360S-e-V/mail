@@ -324,7 +324,7 @@ class _MainWindowState extends State<MainWindow> {
                       obscureText: true,
                       autofocus: true,
                       onSubmitted: (_) => submit(),
-                      decoration: const BoxDecoration(color: Colors.transparent),
+                      decoration: WidgetStatePropertyAll(BoxDecoration(color: Colors.transparent)),
                     ),
                   ),
                   if (errorMsg != null) ...[
