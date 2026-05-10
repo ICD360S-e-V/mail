@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.133.2 - 2026-05-10
+#### Bug Fixes
+- prevent GrapheneOS auto-reboot from wiping secure storage - (1ce9aac) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.133.1 - 2026-05-09
 #### Bug Fixes
 - wrap TextBox decoration in WidgetStatePropertyAll - (386d472) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
