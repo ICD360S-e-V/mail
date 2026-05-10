@@ -257,109 +257,132 @@ class _MainWindowState extends State<MainWindow> {
     final passwordController = TextEditingController();
     var verifying = false;
     String? errorMsg;
-    final result = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      barrierColor: Colors.black.withValues(alpha: 0.85),
-      builder: (context) {
-        final theme = FluentTheme.of(context);
-        final accent = theme.accentColor;
-        return StatefulBuilder(builder: (context, setDialogState) {
-          Future<void> submit() async {
-            if (verifying) return;
-            setDialogState(() { verifying = true; errorMsg = null; });
-            final isValid = await MasterPasswordService.verifyMasterPassword(passwordController.text);
-            if (context.mounted) {
-              if (isValid) {
-                Navigator.of(context).pop(true);
-              } else {
-                setDialogState(() { verifying = false; errorMsg = 'Falsches Passwort'; });
+    final result = await Navigator.of(context).push<bool>(
+      PageRouteBuilder(
+        opaque: true,
+        barrierDismissible: false,
+        pageBuilder: (context, _, __) {
+          final theme = FluentTheme.of(context);
+          final accent = theme.accentColor;
+          return StatefulBuilder(builder: (context, setPageState) {
+            Future<void> submit() async {
+              if (verifying) return;
+              setPageState(() { verifying = true; errorMsg = null; });
+              final isValid = await MasterPasswordService.verifyMasterPassword(passwordController.text);
+              if (context.mounted) {
+                if (isValid) {
+                  Navigator.of(context).pop(true);
+                } else {
+                  setPageState(() { verifying = false; errorMsg = 'Falsches Passwort'; });
+                }
               }
             }
-          }
-          return Center(child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-              child: Container(
-                width: 380,
-                padding: const EdgeInsets.all(32),
-                decoration: BoxDecoration(
-                  color: theme.micaBackgroundColor.withValues(alpha: 0.75),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: accent.withValues(alpha: 0.15)),
-                  boxShadow: [BoxShadow(color: accent.withValues(alpha: 0.08), blurRadius: 40, spreadRadius: 8)],
-                ),
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Text('ICD360S e.V. Mail Client', style: theme.typography.bodyStrong?.copyWith(fontSize: 15)),
-                  const SizedBox(height: 4),
-                  Text('Zugang nur f\u00fcr unsere Mitglieder',
-                      style: theme.typography.caption?.copyWith(color: theme.inactiveColor)),
-                  const SizedBox(height: 20),
-                  Container(
-                    width: 56, height: 56,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: LinearGradient(colors: [accent.darkest, accent.darker]),
+            return FluentTheme(
+              data: theme,
+              child: ScaffoldPage(
+                padding: EdgeInsets.zero,
+                content: Stack(children: [
+                  // Gradient orbs
+                  Positioned(top: -80, right: -60, child: Container(
+                    width: 250, height: 250,
+                    decoration: BoxDecoration(shape: BoxShape.circle,
+                      gradient: RadialGradient(colors: [accent.darkest.withValues(alpha: 0.25), Colors.transparent])),
+                  )),
+                  Positioned(bottom: -100, left: -80, child: Container(
+                    width: 300, height: 300,
+                    decoration: BoxDecoration(shape: BoxShape.circle,
+                      gradient: RadialGradient(colors: [accent.darker.withValues(alpha: 0.2), Colors.transparent])),
+                  )),
+                  // Content
+                  Center(child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(32),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                        child: Container(
+                          constraints: const BoxConstraints(maxWidth: 400),
+                          padding: const EdgeInsets.all(32),
+                          decoration: BoxDecoration(
+                            color: theme.micaBackgroundColor.withValues(alpha: 0.7),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: accent.withValues(alpha: 0.15)),
+                          ),
+                          child: Column(mainAxisSize: MainAxisSize.min, children: [
+                            Text('ICD360S e.V. Mail Client', style: theme.typography.bodyStrong?.copyWith(fontSize: 15)),
+                            const SizedBox(height: 4),
+                            Text('Zugang nur f\u00fcr unsere Mitglieder',
+                                style: theme.typography.caption?.copyWith(color: theme.inactiveColor)),
+                            const SizedBox(height: 24),
+                            Container(
+                              width: 56, height: 56,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: LinearGradient(colors: [accent.darkest, accent.darker]),
+                              ),
+                              child: const Icon(FluentIcons.lock, size: 24, color: Colors.white),
+                            ),
+                            const SizedBox(height: 16),
+                            Text('Gesperrt', style: theme.typography.subtitle?.copyWith(fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 6),
+                            Text('Bitte Master-Passwort eingeben',
+                                style: theme.typography.caption?.copyWith(color: theme.inactiveColor)),
+                            const SizedBox(height: 24),
+                            Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: errorMsg != null
+                                    ? Colors.red.withValues(alpha: 0.6)
+                                    : theme.inactiveColor.withValues(alpha: 0.2)),
+                                color: theme.inactiveColor.withValues(alpha: 0.05),
+                              ),
+                              child: TextBox(
+                                controller: passwordController,
+                                placeholder: 'Master-Passwort',
+                                obscureText: true,
+                                autofocus: true,
+                                onSubmitted: (_) => submit(),
+                                decoration: WidgetStatePropertyAll(BoxDecoration(color: Colors.transparent)),
+                              ),
+                            ),
+                            if (errorMsg != null) ...[
+                              const SizedBox(height: 8),
+                              Row(children: [
+                                Icon(FluentIcons.error, size: 12, color: Colors.red),
+                                const SizedBox(width: 6),
+                                Text(errorMsg!, style: theme.typography.caption?.copyWith(color: Colors.red)),
+                              ]),
+                            ],
+                            const SizedBox(height: 20),
+                            SizedBox(
+                              width: double.infinity, height: 40,
+                              child: FilledButton(
+                                onPressed: verifying ? null : submit,
+                                style: ButtonStyle(shape: WidgetStatePropertyAll(
+                                    RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)))),
+                                child: verifying
+                                    ? const SizedBox(width: 20, height: 20, child: ProgressRing(strokeWidth: 2))
+                                    : const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                        Icon(FluentIcons.unlock, size: 16),
+                                        SizedBox(width: 8),
+                                        Text('Entsperren'),
+                                      ]),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text('v${UpdateService.currentVersion}',
+                                style: theme.typography.caption?.copyWith(color: theme.inactiveColor, fontSize: 10)),
+                          ]),
+                        ),
+                      ),
                     ),
-                    child: const Icon(FluentIcons.lock, size: 24, color: Colors.white),
-                  ),
-                  const SizedBox(height: 16),
-                  Text('Gesperrt', style: theme.typography.subtitle?.copyWith(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 6),
-                  Text('Bitte Master-Passwort eingeben',
-                      style: theme.typography.caption?.copyWith(color: theme.inactiveColor)),
-                  const SizedBox(height: 24),
-                  Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: errorMsg != null
-                          ? Colors.red.withValues(alpha: 0.6)
-                          : theme.inactiveColor.withValues(alpha: 0.2)),
-                      color: theme.inactiveColor.withValues(alpha: 0.05),
-                    ),
-                    child: TextBox(
-                      controller: passwordController,
-                      placeholder: 'Master-Passwort',
-                      obscureText: true,
-                      autofocus: true,
-                      onSubmitted: (_) => submit(),
-                      decoration: WidgetStatePropertyAll(BoxDecoration(color: Colors.transparent)),
-                    ),
-                  ),
-                  if (errorMsg != null) ...[
-                    const SizedBox(height: 8),
-                    Row(children: [
-                      Icon(FluentIcons.error, size: 12, color: Colors.red),
-                      const SizedBox(width: 6),
-                      Text(errorMsg!, style: theme.typography.caption?.copyWith(color: Colors.red)),
-                    ]),
-                  ],
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity, height: 40,
-                    child: FilledButton(
-                      onPressed: verifying ? null : submit,
-                      style: ButtonStyle(shape: WidgetStatePropertyAll(
-                          RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)))),
-                      child: verifying
-                          ? const SizedBox(width: 20, height: 20, child: ProgressRing(strokeWidth: 2))
-                          : const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                              Icon(FluentIcons.unlock, size: 16),
-                              SizedBox(width: 8),
-                              Text('Entsperren'),
-                            ]),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text('v${UpdateService.currentVersion}',
-                      style: theme.typography.caption?.copyWith(color: theme.inactiveColor, fontSize: 10)),
+                  )),
                 ]),
               ),
-            ),
-          ));
-        });
-      },
+            );
+          });
+        },
+      ),
     );
     passwordController.dispose();
     return result ?? false;
