@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.136.1 - 2026-05-10
+#### Bug Fixes
+- cross-platform _machineSecret for MasterVault - (79c3535) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.136.0 - 2026-05-10
 #### Features
 - enable MasterVault on all platforms (not just macOS) - (bb2b51e) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
