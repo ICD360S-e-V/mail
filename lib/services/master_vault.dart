@@ -84,7 +84,6 @@ class MasterVault {
   bool get isUnlocked => _kek != null && _dataKey != null && _cache != null;
 
   Future<void> unlock(String masterPassword) async {
-    if (!Platform.isMacOS) return;
     if (isUnlocked) return;
     if (_unlocking) return;
     _unlocking = true;
@@ -149,7 +148,6 @@ class MasterVault {
   }
 
   Future<void> unlockWithKey(Uint8List masterKey) async {
-    if (!Platform.isMacOS) return;
     if (isUnlocked) return;
     if (_unlocking) return;
     _unlocking = true;
@@ -186,7 +184,6 @@ class MasterVault {
   }
 
   Future<void> deleteAndRecreate(String masterPassword) async {
-    if (!Platform.isMacOS) return;
     _assertSodium();
     final path = await _path();
     final file = File(path);
@@ -204,7 +201,6 @@ class MasterVault {
   }
 
   void lock() {
-    if (!Platform.isMacOS) return;
     if (!isUnlocked && !_unlocking) return;
     _unlocking = false;
     _wipeKeys(wipeMasterKeyCache: true);
@@ -220,9 +216,6 @@ class MasterVault {
   }
 
   Future<String?> read({required String key}) async {
-    if (!Platform.isMacOS) {
-      return PortableSecureStorage.instance.read(key: key);
-    }
     if (!isUnlocked) {
       LoggerService.logWarning('MASTER_VAULT',
           'read($key) before unlock — returning null');
@@ -232,9 +225,6 @@ class MasterVault {
   }
 
   Future<void> write({required String key, required String? value}) async {
-    if (!Platform.isMacOS) {
-      return PortableSecureStorage.instance.write(key: key, value: value);
-    }
     if (!isUnlocked) {
       throw StateError('MasterVault.write before unlock');
     }
@@ -252,7 +242,6 @@ class MasterVault {
       (await read(key: key)) != null;
 
   Future<void> changeMasterPassword(String newMasterPassword) async {
-    if (!Platform.isMacOS) return;
     if (!isUnlocked) {
       throw StateError('changeMasterPassword called on locked vault');
     }
