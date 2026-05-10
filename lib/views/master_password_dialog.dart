@@ -416,7 +416,7 @@ class _MasterPasswordDialogState extends State<MasterPasswordDialog> {
                         children: [
                           if (!_isFirstTime)
                             Tooltip(message: 'Reset App', child: IconButton(
-                              icon: Icon(FluentIcons.sync, size: 16, color: Colors.red.withValues(alpha: 0.7)),
+                              icon: Icon(FluentIcons.update_restore, size: 16, color: Colors.red.withValues(alpha: 0.7)),
                               onPressed: _isLoading ? null : () async {
                                 final confirmed = await _confirmFactoryReset(context);
                                 if (confirmed && context.mounted) await FactoryResetDialog.show(context);
