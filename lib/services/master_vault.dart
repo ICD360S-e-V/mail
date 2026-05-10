@@ -360,42 +360,95 @@ class MasterVault {
   }
 
   Future<String> _machineSecret() async {
-    try {
-      final result = await Process.run(
-        '/usr/sbin/ioreg',
-        ['-rd1', '-c', 'IOPlatformExpertDevice'],
-      );
-      if (result.exitCode == 0) {
-        final out = result.stdout as String;
-        final uuidMatch =
-            RegExp(r'"IOPlatformUUID"\s*=\s*"([0-9A-Fa-f-]+)"').firstMatch(out);
-        if (uuidMatch != null) {
-          final uuid = uuidMatch.group(1)!;
-          final serialMatch =
-              RegExp(r'"IOPlatformSerialNumber"\s*=\s*"([^"]+)"').firstMatch(out);
-          final serial = serialMatch?.group(1) ?? '';
-          return '$uuid:$serial';
+    // macOS: use hardware UUID from ioreg/system_profiler
+    if (Platform.isMacOS) {
+      try {
+        final result = await Process.run(
+          '/usr/sbin/ioreg',
+          ['-rd1', '-c', 'IOPlatformExpertDevice'],
+        );
+        if (result.exitCode == 0) {
+          final out = result.stdout as String;
+          final uuidMatch =
+              RegExp(r'"IOPlatformUUID"\s*=\s*"([0-9A-Fa-f-]+)"').firstMatch(out);
+          if (uuidMatch != null) {
+            final uuid = uuidMatch.group(1)!;
+            final serialMatch =
+                RegExp(r'"IOPlatformSerialNumber"\s*=\s*"([^"]+)"').firstMatch(out);
+            final serial = serialMatch?.group(1) ?? '';
+            return '$uuid:$serial';
+          }
         }
-      }
-    } catch (_) {}
-    try {
-      final spResult = await Process.run(
-        '/usr/sbin/system_profiler',
-        ['SPHardwareDataType'],
-      );
-      if (spResult.exitCode == 0) {
-        final out = spResult.stdout as String;
-        final uuidMatch =
-            RegExp(r'Hardware UUID:\s*([0-9A-Fa-f-]+)').firstMatch(out);
-        if (uuidMatch != null) {
-          LoggerService.logWarning('MASTER_VAULT',
-              'ioreg failed, using system_profiler fallback');
-          return uuidMatch.group(1)!;
+      } catch (_) {}
+      try {
+        final spResult = await Process.run(
+          '/usr/sbin/system_profiler',
+          ['SPHardwareDataType'],
+        );
+        if (spResult.exitCode == 0) {
+          final out = spResult.stdout as String;
+          final uuidMatch =
+              RegExp(r'Hardware UUID:\s*([0-9A-Fa-f-]+)').firstMatch(out);
+          if (uuidMatch != null) {
+            LoggerService.logWarning('MASTER_VAULT',
+                'ioreg failed, using system_profiler fallback');
+            return uuidMatch.group(1)!;
+          }
         }
-      }
-    } catch (_) {}
-    throw StateError('Cannot determine machine secret — '
-        'both ioreg and system_profiler failed. Vault creation aborted.');
+      } catch (_) {}
+      throw StateError('Cannot determine machine secret — '
+          'both ioreg and system_profiler failed.');
+    }
+
+    // Linux: use /etc/machine-id (stable, unique per install)
+    if (Platform.isLinux) {
+      try {
+        final file = File('/etc/machine-id');
+        if (await file.exists()) {
+          final id = (await file.readAsString()).trim();
+          if (id.isNotEmpty) return 'linux:$id';
+        }
+      } catch (_) {}
+    }
+
+    // Windows: use MachineGuid from registry
+    if (Platform.isWindows) {
+      try {
+        final result = await Process.run('reg', [
+          'query', r'HKLM\SOFTWARE\Microsoft\Cryptography',
+          '/v', 'MachineGuid',
+        ]);
+        if (result.exitCode == 0) {
+          final match = RegExp(r'MachineGuid\s+REG_SZ\s+(\S+)')
+              .firstMatch(result.stdout as String);
+          if (match != null) return 'win:${match.group(1)}';
+        }
+      } catch (_) {}
+    }
+
+    // Android/iOS: use a randomly generated persistent ID stored
+    // in app-private storage (survives reboots, not tied to KeyStore).
+    // This is NOT the machine hardware ID — it is a per-install
+    // random secret that adds entropy to the vault key derivation.
+    final dir = await _vaultDir();
+    final idFile = File('$dir/vault_device_id');
+    if (await idFile.exists()) {
+      final id = (await idFile.readAsString()).trim();
+      if (id.length >= 32) return 'mobile:$id';
+    }
+    // Generate a new random device ID (first run)
+    final rng = Random.secure();
+    final bytes = List<int>.generate(32, (_) => rng.nextInt(256));
+    final newId = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    await idFile.writeAsString(newId);
+    LoggerService.log('MASTER_VAULT',
+        'Generated persistent vault device ID for mobile');
+    return 'mobile:$newId';
+  }
+
+  Future<String> _vaultDir() async {
+    final dir = await getApplicationSupportDirectory();
+    return dir.path;
   }
 
   // ── v0x04 KEK derivation (sodium BLAKE2b) ──────────────────────
