@@ -250,6 +250,41 @@ class _MasterPasswordDialogState extends State<MasterPasswordDialog> {
     final accentDark = theme.accentColor.darkest;
     final accentMed = theme.accentColor.darker;
 
+    // Full-screen "Wird entsperrt..." while Argon2id runs
+    if (_isLoading) {
+      return ScaffoldPage(
+        padding: EdgeInsets.zero,
+        content: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0.0, end: 1.0),
+                duration: const Duration(milliseconds: 800),
+                builder: (_, opacity, child) => Opacity(opacity: opacity, child: child),
+                child: Container(
+                  width: 72, height: 72,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(colors: [accentDark, accentMed]),
+                  ),
+                  child: const Icon(FluentIcons.lock, size: 32, color: Colors.white),
+                ),
+              ),
+              const SizedBox(height: 24),
+              const ProgressRing(),
+              const SizedBox(height: 16),
+              Text(_isFirstTime ? 'Tresor wird erstellt\u2026' : 'Wird entsperrt\u2026',
+                  style: theme.typography.body?.copyWith(color: theme.inactiveColor)),
+              const SizedBox(height: 8),
+              Text('Schl\u00fcssel werden abgeleitet',
+                  style: theme.typography.caption?.copyWith(color: theme.inactiveColor.withValues(alpha: 0.6))),
+            ],
+          ),
+        ),
+      );
+    }
+
     Widget formPanel() => Stack(
       children: [
         // Ambient gradient orbs — unique geometric identity

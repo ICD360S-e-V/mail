@@ -277,6 +277,44 @@ class _MainWindowState extends State<MainWindow> {
                 }
               }
             }
+            // Full-screen "Wird entsperrt..." overlay while Argon2id runs
+            if (verifying) {
+              return FluentTheme(
+                data: theme,
+                child: ScaffoldPage(
+                  padding: EdgeInsets.zero,
+                  content: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TweenAnimationBuilder<double>(
+                          tween: Tween(begin: 0.0, end: 1.0),
+                          duration: const Duration(milliseconds: 800),
+                          builder: (_, opacity, child) => Opacity(opacity: opacity, child: child),
+                          child: Container(
+                            width: 72, height: 72,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: LinearGradient(colors: [accent.darkest, accent.darker]),
+                            ),
+                            child: const Icon(FluentIcons.lock, size: 32, color: Colors.white),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        const ProgressRing(),
+                        const SizedBox(height: 16),
+                        Text('Wird entsperrt\u2026',
+                            style: theme.typography.body?.copyWith(color: theme.inactiveColor)),
+                        const SizedBox(height: 8),
+                        Text('Schl\u00fcssel werden abgeleitet',
+                            style: theme.typography.caption?.copyWith(color: theme.inactiveColor.withValues(alpha: 0.6))),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+
             return FluentTheme(
               data: theme,
               child: ScaffoldPage(
