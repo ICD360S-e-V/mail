@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.134.0 - 2026-05-10
+#### Features
+- full-screen lock screen with gradient orbs - (5442220) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.133.2 - 2026-05-10
 #### Bug Fixes
 - prevent GrapheneOS auto-reboot from wiping secure storage - (1ce9aac) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
