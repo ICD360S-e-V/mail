@@ -63,7 +63,7 @@ class PortableSecureStorage {
 
   // Native backend for non-macOS platforms.
   final FlutterSecureStorage _native = const FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    aOptions: AndroidOptions(encryptedSharedPreferences: true, resetOnError: false),
     iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
     lOptions: LinuxOptions(),
     wOptions: WindowsOptions(),
