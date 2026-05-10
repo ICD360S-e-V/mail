@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.135.0 - 2026-05-10
+#### Features
+- full-screen decryption overlay while Argon2id runs - (c6c33c0) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
+
+- - -
+
 ## v2.134.0 - 2026-05-10
 #### Features
 - full-screen lock screen with gradient orbs - (5442220) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
