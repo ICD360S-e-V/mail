@@ -339,6 +339,7 @@ Future<void> _appMain() async {
     await windowManager.waitUntilReadyToShow(windowOptions, () async {
       await windowManager.setTitle(
           'Mail Client by ICD360S e.V gemeinnützige Verein');
+      await windowManager.maximize();
       await windowManager.show();
       await windowManager.focus();
     });
