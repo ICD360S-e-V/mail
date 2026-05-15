@@ -548,7 +548,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get masterPasswordDialogTitle => 'Master Password';
 
   @override
-  String get masterPasswordDialogAppTitle => 'Client Mail';
+  String get masterPasswordDialogAppTitle => 'ICD360S Mail';
 
   @override
   String get masterPasswordDialogFirstTimeMessage =>
@@ -871,7 +871,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String mailServiceSecurityViolationServer(
-      String server, String allowedServer) {
+    String server,
+    String allowedServer,
+  ) {
     return 'SECURITY VIOLATION: Connection to $server is blocked. This client only connects to $allowedServer.';
   }
 
@@ -911,6 +913,12 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get accountServiceSecurityErrorPorts =>
       'Security Error: Only secure ports (IMAP:10993, SMTP:465) are allowed for mTLS.';
+
+  @override
+  String get notificationNewEmail => 'New email';
+
+  @override
+  String get notificationTapToView => 'Tap to open';
 
   @override
   String notificationNewEmailFrom(String from) {

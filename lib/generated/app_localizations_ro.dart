@@ -547,7 +547,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get masterPasswordDialogTitle => 'Parolă Master';
 
   @override
-  String get masterPasswordDialogAppTitle => 'Client Mail';
+  String get masterPasswordDialogAppTitle => 'ICD360S Mail';
 
   @override
   String get masterPasswordDialogFirstTimeMessage =>
@@ -872,7 +872,9 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String mailServiceSecurityViolationServer(
-      String server, String allowedServer) {
+    String server,
+    String allowedServer,
+  ) {
     return 'VIOLARE DE SECURITATE: Conexiunea la $server este blocată. Acest client se conectează doar la $allowedServer.';
   }
 
@@ -912,6 +914,12 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get accountServiceSecurityErrorPorts =>
       'Eroare de Securitate: Doar porturile securizate (IMAP:10993, SMTP:465) sunt permise pentru mTLS.';
+
+  @override
+  String get notificationNewEmail => 'Email nou';
+
+  @override
+  String get notificationTapToView => 'Apasă pentru a deschide';
 
   @override
   String notificationNewEmailFrom(String from) {
