@@ -7,7 +7,10 @@ import 'dart:io';
 
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
+import '../models/models.dart';
+import '../providers/email_provider.dart';
 import '../services/master_password_service.dart';
 import '../services/settings_service.dart';
 import '../services/log_upload_service.dart';
@@ -45,6 +48,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     if (SettingsService.isFirstRun()) {
       // Show consent dialog first
       if (mounted) {
+        setState(() => _isChecking = false);
         final consent = await showDialog<Map<String, bool>>(
           context: context,
           barrierDismissible: false,
@@ -88,6 +92,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     if (!hasPassword) {
       // First-time setup — set master password, then add first account
       if (mounted) {
+        setState(() => _isChecking = false);
         final result = await _showMasterPasswordDialog();
         if (result && mounted && await _hasNoAccounts()) {
           await _showFirstAccountWizard();
@@ -95,7 +100,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
         if (mounted) {
           setState(() {
             _isAuthenticated = result;
-            _isChecking = false;
           });
         }
       }
@@ -159,11 +163,15 @@ class _AuthWrapperState extends State<AuthWrapper> {
   Future<void> _showFirstAccountWizard() async {
     if (!mounted) return;
     LoggerService.log('WIZARD', 'First-run: showing add account wizard');
-    await showDialog<void>(
+    final account = await showDialog<EmailAccount>(
       context: context,
       barrierDismissible: false,
       builder: (_) => const AddAccountDialog(),
     );
+    if (account != null && mounted) {
+      await context.read<EmailProvider>().addAccount(account);
+      LoggerService.log('WIZARD', 'First-run: account ${account.username} added to provider');
+    }
   }
 
   @override
