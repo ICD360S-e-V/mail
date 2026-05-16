@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.136.5 - 2026-05-16
+#### Code Refactoring
+- envelope-first IMAP fetch + on-demand body load (#37) - (8969922) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.136.4 - 2026-05-16
 #### Bug Fixes
 - (**provider**) wipe Email body+attachments before reassign (~300MB/refresh leak) (#36) - (66b9613) - icd360sevofficial, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
