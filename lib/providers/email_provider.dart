@@ -6,6 +6,7 @@ import 'dart:async';
 import '../models/models.dart';
 import '../services/services.dart';
 import 'dart:io' show Platform;
+import '../services/certificate_expiry_monitor.dart';
 import '../services/device_approval_service.dart';
 import '../services/device_registration_service.dart';
 import '../services/pgp_key_service.dart';
@@ -249,9 +250,23 @@ class EmailProvider with ChangeNotifier {
     final restored =
         await CertificateService.restoreFromSecureStorageFor(account.username);
     if (restored) {
-      LoggerService.log('PROVIDER',
-          '✓ Cert for ${account.username} restored from secure storage');
-      return true;
+      // Don't trust the cache blindly — if the cached cert is expired or
+      // about to expire (<7 days), fall through to the re-approval path
+      // so we get a fresh one. Otherwise the app silently uses an expired
+      // cert and HAProxy rejects the mTLS handshake = infinite spinner
+      // with no actionable error (incident: 2026-05-15, affected all users
+      // whose 90d certs lapsed the same day).
+      final daysLeft = CertificateExpiryMonitor.getDaysUntilExpiry();
+      if (daysLeft != null && daysLeft < 7) {
+        LoggerService.logWarning('PROVIDER',
+            'Cached cert for ${account.username} expires in $daysLeft days — '
+            'discarding cache and re-requesting');
+        await CertificateService.clearCertificatesFor(account.username);
+      } else {
+        LoggerService.log('PROVIDER',
+            '✓ Cert for ${account.username} restored from secure storage');
+        return true;
+      }
     }
 
     // No cert in secure storage — request Faza 3 re-approval.
