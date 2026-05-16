@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.136.2 - 2026-05-16
+#### Bug Fixes
+- Windows desktop flow after factory reset + login screen refactor (#34) - (ea2a73b) - icd360sevofficial, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.136.1 - 2026-05-10
 #### Bug Fixes
 - cross-platform _machineSecret for MasterVault - (79c3535) - ICD360S e.V., *Claude Opus 4.6 (1M context)*
