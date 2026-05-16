@@ -117,3 +117,11 @@ TODO.txt
 *.gpg
 *.asc.tmp
 
+version_signing_priv.pem
+version_signing_pub.pem
+
+# Server-side ops scripts staged locally before scp/deploy.
+# Kept untracked so they don't leak infrastructure details into the app repo.
+sign-version-json.sh
+sign-version-json.service
+sign-version-json.path

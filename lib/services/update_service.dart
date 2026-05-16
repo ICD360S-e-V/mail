@@ -64,17 +64,31 @@ class UpdateService {
   /// format `0x04 || X || Y`) used to verify the detached signature on
   /// `version.json`.
   ///
-  /// SECURITY: The matching private key is held offline at
-  /// `/root/.icd360s/release_signing/version_signing_priv.pem` on the
-  /// release-signing host (Claude Code dev server, NOT mail.icd360s.de).
-  /// A compromise of `mail.icd360s.de` cannot forge update metadata
-  /// because the attacker would need this offline private key.
+  /// Rotated 2026-05-16: the previous keypair (whose pubkey started with
+  /// `BOaKDVWITCwis2+9tVGN…`) signed up to v2.136.1; its private key was
+  /// lost so the active version.json froze for 5 days and no client could
+  /// auto-update past v2.136.1. New keypair generated offline and
+  /// installed at `/root/.icd360s/release_signing/version_signing_priv.pem`
+  /// on mail.icd360s.de; a systemd path-watcher (`sign-version-json.path`)
+  /// auto-signs every `version.json.draft` that CI rsyncs into
+  /// `/var/www/html/downloads/mail/`.
   ///
-  /// To rotate: generate a new keypair offline, ship a release that
-  /// trusts BOTH the old and the new key, wait for adoption, ship a
-  /// follow-up release that trusts only the new key.
+  /// Trust-model note: by living on mail.icd360s.de the key is no longer
+  /// strictly "offline" — a root compromise of that host can forge update
+  /// metadata. Acceptable because the same host already terminates IMAP/
+  /// SMTP, holds the user CA, and is the canonical source of binaries, so
+  /// a root compromise there is game-over regardless. Follow-up: migrate
+  /// signing into CI using `VERSION_SIGNING_PRIVATE_KEY` GitHub Secret so
+  /// the key never lives on the mail host.
+  ///
+  /// To rotate again: generate a new keypair, ship a release whose pinned
+  /// key is the NEW one, then on the server replace
+  /// `/root/.icd360s/release_signing/version_signing_priv.pem` and trigger
+  /// `systemctl start sign-version-json.service` to re-sign the current
+  /// draft. Clients on older releases stay pinned to the previous key and
+  /// must be updated out-of-band (manual download).
   static const String _versionJsonPublicKey =
-      'BOaKDVWITCwis2+9tVGNkeNPBsV0dO/ja3HheaaqVW6GZbb6Y6csarYVoMpCFH7FTprFSwfZP1JO72fRu2x6te0=';
+      'BI+YZXuq+/fhMPMVYU3J4mKrzghAqEF0cInvGUHJ1PRezIU8PwA/02p/w/Q6gzrq/+SwcxEJBHOmzLioyscxIqA=';
 
   static const String _expectedApkCertSha256 =
       'ff9c4a92347693745a06a20cc15310e897145dad6b719cbe724eda093a6195b5';
