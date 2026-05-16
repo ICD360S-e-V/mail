@@ -48,20 +48,30 @@ class EmailProvider with ChangeNotifier {
 
   /// Wipe all cached emails from RAM. Called on lock, background, close.
   void wipeSessionCache() {
-    // Zero body strings (best-effort — Dart strings are immutable,
-    // but reassigning removes our reference for GC collection).
     for (final emails in _sessionCache.values) {
-      for (final email in emails) {
-        email.body = '';
-        email.threatDetails = '';
-        for (final a in email.attachments) {
-          a.data = null;
-        }
-      }
+      _wipeBodies(emails);
     }
     _sessionCache.clear();
     _emails = [];
     LoggerService.log('CACHE', 'Session cache wiped from RAM');
+  }
+
+  /// Release heavy body strings + attachment buffers before dropping the
+  /// reference. Without this, GC tends to retain ~300MB/refresh because
+  /// (1) String is immutable so each body lingers as its own object,
+  /// (2) widgets that just rebuilt may briefly hold the old snapshot via
+  /// closures, and (3) Dart GC is opportunistic. Wiping the fields cuts
+  /// the heavy retention path even while the Email shell waits to be GC'd.
+  /// Pattern mirrored from wipeSessionCache; see incident 2026-05-16
+  /// where 60s auto-refresh leaked 300MB/cycle until first wipe was added.
+  static void _wipeBodies(Iterable<Email> emails) {
+    for (final email in emails) {
+      email.body = '';
+      email.threatDetails = '';
+      for (final a in email.attachments) {
+        a.data = null;
+      }
+    }
   }
   ServerHealthStatus? _serverHealth;
   ConnectionStatus? _connectionStatus;
@@ -703,6 +713,12 @@ class EmailProvider with ChangeNotifier {
       );
 
       _detectAndNotifyNewEmails(account, newEmails);
+      // Release heavy fields on the outgoing list before dropping the ref.
+      _wipeBodies(_emails);
+      final previousCached = _sessionCache[cacheKey];
+      if (previousCached != null && !identical(previousCached, newEmails)) {
+        _wipeBodies(previousCached);
+      }
       _emails = newEmails;
 
       // Store in RAM session cache (LRU capped)
@@ -744,6 +760,11 @@ class EmailProvider with ChangeNotifier {
       );
 
       _detectAndNotifyNewEmails(account, newEmails);
+      _wipeBodies(_emails);
+      final previousCached = _sessionCache[cacheKey];
+      if (previousCached != null && !identical(previousCached, newEmails)) {
+        _wipeBodies(previousCached);
+      }
 
       // Update cache + UI
       _sessionCache[cacheKey] = newEmails.length > _maxCachePerFolder

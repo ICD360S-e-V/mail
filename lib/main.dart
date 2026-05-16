@@ -20,6 +20,7 @@ import 'providers/locale_provider.dart';
 import 'providers/email_provider.dart';
 import 'services/notification_service.dart';
 import 'services/logger_service.dart';
+import 'services/perf_monitor_service.dart';
 import 'services/master_vault.dart';
 import 'services/localization_service.dart';
 import 'services/macos_bundle_migration.dart';
@@ -345,6 +346,7 @@ Future<void> _appMain() async {
     });
   }
 
+  PerfMonitorService.start();
   runApp(const MyApp());
 }
 
