@@ -125,5 +125,8 @@ version_signing_pub.pem
 sign-version-json.sh
 sign-version-json.service
 sign-version-json.path
+promote-version-json.sh
+promote-version-json.service
+promote-version-json.path
 sync-numeric-aliases.sh
 create_email_account.sh
