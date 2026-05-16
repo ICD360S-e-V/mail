@@ -1020,12 +1020,20 @@ class _MainWindowState extends State<MainWindow> {
   /// Open draft email in compose window for editing
   Future<void> _openDraftInCompose(BuildContext context, Email email) async {
     LoggerService.log('UI', 'Opening draft in compose: ${email.subject}');
+    // Drafts are envelope-only after PR 2 envelope-first refactor.
+    // Fetch the body before populating the compose window so users
+    // don't open an empty editor and lose the draft's content.
+    if (!email.bodyLoaded) {
+      final provider = context.read<EmailProvider>();
+      await provider.loadBody(email);
+    }
+    if (!context.mounted) return;
     await showDialog(
       context: context,
       builder: (context) => ComposeWindow(
         replyTo: email.to,
         replySubject: email.subject,
-        initialBody: email.body,
+        initialBody: email.body ?? '',
       ),
     );
   }

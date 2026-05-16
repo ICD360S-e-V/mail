@@ -66,11 +66,18 @@ class EmailProvider with ChangeNotifier {
   /// where 60s auto-refresh leaked 300MB/cycle until first wipe was added.
   static void _wipeBodies(Iterable<Email> emails) {
     for (final email in emails) {
-      email.body = '';
+      // Reset body to null so bodyLoaded → false. Reopening the email
+      // triggers another fetchFullBody from server. With envelope-first
+      // fetch, most emails already have body == null and this is a no-op.
+      email.body = null;
+      email.bodyTruncated = false;
       email.threatDetails = '';
       for (final a in email.attachments) {
         a.data = null;
       }
+      // Drop attachment metadata too — they were populated by the body
+      // fetch path and will be repopulated on next loadBody.
+      email.attachments.clear();
     }
   }
   ServerHealthStatus? _serverHealth;
@@ -1150,6 +1157,37 @@ class EmailProvider with ChangeNotifier {
       }
     } catch (ex, stackTrace) {
       LoggerService.logError('PROVIDER', ex, stackTrace);
+    }
+  }
+
+  /// Load the full body for [email] (on-demand body fetch).
+  ///
+  /// The list/refresh path fetches envelopes only (no bodies). When the
+  /// user opens the email viewer, this method is called to download the
+  /// MIME body, decrypt PGP/MIME if applicable, and extract attachments.
+  /// On success, [Email.body] becomes non-null and listeners are notified
+  /// so the viewer rebuilds with the content.
+  ///
+  /// Idempotent: if `email.bodyLoaded` is already true, this is a no-op.
+  Future<void> loadBody(Email email) async {
+    if (email.bodyLoaded) return;
+    final account = _currentAccount;
+    if (account == null) {
+      LoggerService.logWarning(
+          'PROVIDER', 'loadBody called with no current account');
+      return;
+    }
+    try {
+      await _mailService.fetchFullBody(account, email, folder: _currentFolder);
+      LoggerService.log('PROVIDER',
+          '✓ Loaded body for ${email.messageId} (${email.body?.length ?? 0} chars, '
+          '${email.attachments.length} attachments, '
+          'encrypted=${email.isEncrypted}, truncated=${email.bodyTruncated})');
+    } catch (ex, stackTrace) {
+      // fetchFullBody already populated email.body with an error sentinel.
+      LoggerService.logError('PROVIDER', ex, stackTrace);
+    } finally {
+      if (!_disposed) notifyListeners();
     }
   }
 
