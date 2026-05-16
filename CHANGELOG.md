@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.136.3 - 2026-05-16
+#### Bug Fixes
+- (**cert**) discard cached mTLS cert when expires in <7 days (#35) - (141a9c3) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.136.2 - 2026-05-16
 #### Bug Fixes
 - Windows desktop flow after factory reset + login screen refactor (#34) - (ea2a73b) - icd360sevofficial, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
