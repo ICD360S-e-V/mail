@@ -120,6 +120,11 @@ TODO.txt
 version_signing_priv.pem
 version_signing_pub.pem
 
+# WireGuard keypair for mail.icd360s.de's wg0 tunnel to ops.icd360s.de.
+# Same exclusion reason as SSH keys: secrets, never commit.
+mail.icd360s.de.wg0.priv.key
+mail.icd360s.de.wg0.pub.key
+
 # Server-side ops scripts staged locally before scp/deploy.
 # Kept untracked so they don't leak infrastructure details into the app repo.
 sign-version-json.sh
