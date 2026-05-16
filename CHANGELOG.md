@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.136.7 - 2026-05-16
+#### Bug Fixes
+- (**update**) rotate version.json signing key after previous key was lost (#40) - (83ccb89) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.136.6 - 2026-05-16
 #### Code Refactoring
 - (**provider**) LRU body cache for re-opened messages (max 10 entries) (#39) - (8c2a3df) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
