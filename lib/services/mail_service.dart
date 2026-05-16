@@ -198,7 +198,18 @@ class MailService {
     }
   }
 
-  /// Fetch emails from a folder via IMAP (uses connection pool)
+  /// Fetch email envelopes (no bodies) for a folder.
+  ///
+  /// ARCHITECTURE: Envelope-first fetch. Returns metadata only —
+  /// subject, from/to/cc, date, message-id, flags, and RFC822.SIZE.
+  /// Bodies are loaded on demand by [fetchFullBody] when the user
+  /// opens the email viewer.
+  ///
+  /// MEMORY: Each envelope is ~1-3 KB. A 51-message INBOX uses
+  /// ~150 KB instead of the previous ~300 MB (with bodies up to
+  /// 8 MB SEIPD ciphertext each). PGP inspection has been removed
+  /// from this hot path — it now runs only inside [fetchFullBody]
+  /// when the user actually opens an encrypted email.
   Future<List<Email>> fetchEmailsAsync(
     EmailAccount account,
     String folder,
@@ -219,185 +230,58 @@ class MailService {
           return emails;
         }
 
-        // Fetch last 50 emails
-        // IMPORTANT: Include UID in criteria so message.uid is populated.
-        // Without it, fetchRecentMessages uses FETCH (not UID FETCH),
-        // and message.uid stays null — causing delete/move to fall back
-        // to unreliable Message-ID header search.
-        LoggerService.log('IMAP', 'Fetching recent messages (max 50)...');
+        // Envelope-first fetch (no BODY[] = no full message download).
+        // Pulls metadata + RFC822.SIZE so we can decide how to render
+        // and (optionally) cap body download size in fetchFullBody.
+        //
+        // IMPORTANT: Include UID so message.uid is populated for delete/move.
+        LoggerService.log('IMAP', 'Fetching envelopes (max 50, no bodies)...');
         final fetchResult = await client.fetchRecentMessages(
           messageCount: 50,
-          criteria: '(UID FLAGS BODY.PEEK[])',
+          criteria: '(UID FLAGS RFC822.SIZE ENVELOPE BODYSTRUCTURE)',
         );
-        LoggerService.log('IMAP', '✓ Fetched ${fetchResult.messages.length} messages');
+        LoggerService.log('IMAP', '✓ Fetched ${fetchResult.messages.length} envelopes');
 
         for (final message in fetchResult.messages) {
           try {
+            final envelope = message.envelope;
             final email = Email(
-              messageId: message.getHeaderValue('message-id') ??
+              messageId: envelope?.messageId ??
+                  message.getHeaderValue('message-id') ??
                   'CORRUPT-${message.uid}-${DateTime.now().millisecondsSinceEpoch}',
               uid: message.uid,
-              from: message.from?.firstOrNull?.email ?? '(Unknown Sender)',
-              to: message.to?.map((a) => a.email).join(', ') ?? '(Unknown Recipient)',
-              cc: message.cc?.map((a) => a.email).join(', ') ?? '',
-              subject: message.decodeSubject() ?? '(No Subject)',
-              date: message.decodeDate() ?? DateTime.now(),
-              body: _extractEmailBody(message),
+              from: envelope?.from?.firstOrNull?.email ??
+                  message.from?.firstOrNull?.email ??
+                  '(Unknown Sender)',
+              to: envelope?.to?.map((a) => a.email).join(', ') ??
+                  message.to?.map((a) => a.email).join(', ') ??
+                  '(Unknown Recipient)',
+              cc: envelope?.cc?.map((a) => a.email).join(', ') ??
+                  message.cc?.map((a) => a.email).join(', ') ??
+                  '',
+              subject: envelope?.subject ??
+                  message.decodeSubject() ??
+                  '(No Subject)',
+              date: envelope?.date ?? message.decodeDate() ?? DateTime.now(),
+              // body intentionally left null — loaded on demand
+              bodySize: message.size,
               isRead: message.isSeen,
             );
 
-            // Extract headers for threat analysis
+            // Extract headers for threat analysis. Envelope-only fetch
+            // returns no headers, so the threat analyzer just sees from/
+            // subject/etc. Detailed header analysis (SPF/DKIM/auth-results)
+            // happens when the body is loaded.
             for (final header in message.headers ?? []) {
               email.headers[header.name] = header.value;
             }
 
-            // E2EE: Detect PGP/MIME at the MimeMessage level (RFC 3156).
-            // Decrypt body AND extract inner attachments (Proton/Tuta pattern:
-            // outer message is just the PGP wrapper — real MIME is inside).
-            final pgpCiphertext = PgpKeyService.extractPgpCiphertext(message);
-            MimeMessage? decryptedInner;
-            if (pgpCiphertext != null) {
-              try {
-                final packetDump = PgpPacketInspector.summary(pgpCiphertext);
-                LoggerService.log('PGP_INSPECT',
-                    'Message ${email.messageId} packets:\n$packetDump');
-                final decryptedRaw = await PgpKeyService.decrypt(pgpCiphertext);
-                String? body;
-                try {
-                  final crlf = decryptedRaw
-                      .replaceAll('\r\n', '\n')
-                      .replaceAll('\n', '\r\n');
-                  LoggerService.log('PGP',
-                      'Inner MIME raw: ${crlf.length} chars, hasCRLF=${crlf.contains("\r\n")}, '
-                      'first200=${crlf.substring(0, crlf.length > 200 ? 200 : crlf.length).replaceAll("\r", "\\r").replaceAll("\n", "\\n")}');
-                  decryptedInner = MimeMessage.parseFromText(crlf);
-                  final innerCt = decryptedInner.getHeaderContentType();
-                  final boundary = innerCt?.boundary;
-                  if (boundary != null && boundary.isNotEmpty) {
-                    final sections = crlf.split('--$boundary');
-                    for (var i = 1; i < sections.length; i++) {
-                      final section = sections[i];
-                      if (section.startsWith('--')) continue;
-                      var partText = section;
-                      if (partText.startsWith('\r\n')) partText = partText.substring(2);
-                      if (partText.endsWith('\r\n')) partText = partText.substring(0, partText.length - 2);
-                      if (partText.trim().isEmpty) continue;
-                      final partMsg = MimeMessage.parseFromText(partText);
-                      decryptedInner.addPart(partMsg);
-                    }
-                  }
-                  body = decryptedInner.decodeTextPlainPart();
-                  if (body == null || body.isEmpty) {
-                    for (final p in decryptedInner.parts ?? <MimePart>[]) {
-                      final pCt = p.getHeaderContentType()?.mediaType;
-                      if (pCt?.sub == MediaSubtype.textPlain) {
-                        body = p.decodeContentText();
-                        if (body != null && body.isNotEmpty) break;
-                      }
-                    }
-                  }
-                  body ??= decryptedInner.decodeTextHtmlPart();
-                  LoggerService.log('PGP',
-                      'Inner MIME: type=${innerCt?.mediaType}, boundary=$boundary, '
-                      'parts=${decryptedInner.parts?.length ?? 0}, body=${body?.length ?? 0} chars');
-                } catch (parseEx) {
-                  LoggerService.logWarning('PGP',
-                      'Inner MIME parse failed: $parseEx — first 200 chars: ${decryptedRaw.substring(0, decryptedRaw.length > 200 ? 200 : decryptedRaw.length)}');
-                }
-                if (body == null || body.isEmpty) {
-                  final lines = decryptedRaw.split('\n');
-                  var inTextPart = false;
-                  var pastHeader = false;
-                  final contentLines = <String>[];
-                  for (final line in lines) {
-                    final trimmed = line.trim();
-                    if (trimmed.startsWith('Content-Type:') &&
-                        trimmed.contains('text/plain')) {
-                      inTextPart = true;
-                      pastHeader = false;
-                      continue;
-                    }
-                    if (inTextPart && !pastHeader) {
-                      if (trimmed.isEmpty) {
-                        pastHeader = true;
-                        continue;
-                      }
-                      continue;
-                    }
-                    if (inTextPart && pastHeader) {
-                      if (trimmed.startsWith('--')) break;
-                      contentLines.add(line);
-                    }
-                  }
-                  final extracted = contentLines.join('\n').trim();
-                  if (extracted.isNotEmpty) body = extracted;
-                }
-                email.body = body ?? decryptedRaw;
-                email.isEncrypted = true;
-                // RFC 9788: extract protected Subject from decrypted payload
-                final subjectMatch = RegExp(
-                  r'^Subject:\s*(.+)$', multiLine: true,
-                ).firstMatch(decryptedRaw);
-                if (subjectMatch != null && (email.subject == '[...]' || email.subject.isEmpty)) {
-                  var protectedSubject = subjectMatch.group(1)!.trim();
-                  // Decode RFC 2047 if needed
-                  if (protectedSubject.startsWith('=?')) {
-                    try {
-                      final m = RegExp(r'=\?([^?]+)\?([BbQq])\?([^?]+)\?=').firstMatch(protectedSubject);
-                      if (m != null && m.group(2)!.toUpperCase() == 'B') {
-                        protectedSubject = utf8.decode(base64.decode(m.group(3)!));
-                      }
-                    } catch (_) {}
-                  }
-                  email.subject = protectedSubject;
-                }
-                LoggerService.log('PGP',
-                    '✓ Decrypted E2EE email from ${email.from}');
-              } catch (ex) {
-                LoggerService.logWarning('PGP',
-                    'Decryption failed for ${email.messageId}');
-                email.body = '[Encrypted email — decryption failed]';
-                email.isEncrypted = true;
-              }
-            }
-
-            // Analyze threat level
+            // Threat analysis based on envelope fields only.
+            // Full header inspection runs after body load in fetchFullBody.
             final threatAnalysis = ThreatIntelligenceService.analyzeEmail(email);
             email.threatLevel = threatAnalysis.level;
             email.threatScore = threatAnalysis.score;
             email.threatDetails = threatAnalysis.details;
-
-            // Extract attachments: from decrypted inner MIME if encrypted,
-            // otherwise from outer message. PGP/MIME wraps the entire MIME
-            // tree (body + attachments) inside the ciphertext — the outer
-            // message only has application/pgp-encrypted + encrypted.asc.
-            final attachmentSource = decryptedInner ?? message;
-            LoggerService.log('PGP',
-                'Attachment source: ${decryptedInner != null ? "decryptedInner" : "outerMessage"} '
-                '(${attachmentSource.allPartsFlat.length} parts)');
-            for (final part in attachmentSource.allPartsFlat) {
-              final disposition = part.getHeaderContentDisposition();
-              final fileName = part.decodeFileName();
-              final isAttachment = disposition?.disposition == ContentDisposition.attachment;
-              final isInlineWithFile = disposition?.disposition == ContentDisposition.inline && fileName != null && fileName.isNotEmpty;
-              final hasFileNoDisposition = disposition == null && fileName != null && fileName.isNotEmpty && part.mediaType.sub != MediaSubtype.textPlain && part.mediaType.sub != MediaSubtype.textHtml;
-
-              if (isAttachment || isInlineWithFile || hasFileNoDisposition) {
-                final data = part.decodeContentBinary();
-                if (data != null) {
-                  email.attachments.add(EmailAttachment(
-                    fileName: fileName ?? 'unknown',
-                    size: data.length,
-                    contentType: part.mediaType.toString(),
-                    data: data,
-                  ));
-                }
-              }
-            }
-            if (decryptedInner != null && email.attachments.isNotEmpty) {
-              LoggerService.log('PGP',
-                  '✓ Extracted ${email.attachments.length} attachment(s) from encrypted inner MIME');
-            }
 
             emails.add(email);
           } catch (ex, stackTrace) {
@@ -409,7 +293,7 @@ class MailService {
         // Sort emails by date: newest first (descending)
         emails.sort((a, b) => b.date.compareTo(a.date));
 
-        LoggerService.log('IMAP', '✓ Fetched ${emails.length} emails from $folder (sorted newest first)');
+        LoggerService.log('IMAP', '✓ Fetched ${emails.length} envelopes from $folder (sorted newest first)');
         return emails;
       });
     } catch (ex, stackTrace) {
@@ -439,6 +323,238 @@ class MailService {
         );
       }
       LoggerService.logError('IMAP', ex, stackTrace);
+      rethrow;
+    }
+  }
+
+  /// Maximum body size we will fetch in one shot. Messages larger than
+  /// this are still openable: only HEADER + first chunk is downloaded
+  /// and [Email.bodyTruncated] is set so the UI can offer a "download
+  /// full message" action.
+  static const int _maxBodyFetchBytes = 1048576; // 1 MB
+
+  /// Fetch the full body for a single [email] previously returned by
+  /// [fetchEmailsAsync] (envelope-only). Populates `email.body`,
+  /// `email.attachments`, `email.isEncrypted`, and detail header
+  /// fields. Runs PGP/MIME detection + decrypt for E2EE messages.
+  ///
+  /// [folder] is the IMAP folder the email lives in; the caller
+  /// (EmailProvider.loadBody) passes the currently-selected folder
+  /// so we don't have to track that on the Email model.
+  ///
+  /// This is the *only* place where full MIME bodies are downloaded.
+  /// The list/refresh path never calls this.
+  Future<void> fetchFullBody(
+    EmailAccount account,
+    Email email, {
+    String folder = 'INBOX',
+  }) async {
+    _validateAccount(account);
+
+    final uid = email.uid;
+    if (uid == null) {
+      LoggerService.logWarning('IMAP-BODY',
+          'Cannot fetch body for ${email.messageId}: no UID');
+      email.body = '[Cannot load body: message UID missing]';
+      return;
+    }
+
+    try {
+      await ImapPool.instance.withClient(account, (client) async {
+        await client.selectMailboxByPath(folder);
+
+        // Decide fetch strategy by size. Below the cap → full BODY[].
+        // Above the cap → HEADER + first 1 MB to stay responsive on
+        // huge messages (mailing-list digests, 50 MB attachments).
+        final size = email.bodySize ?? 0;
+        final exceedsCap = size > _maxBodyFetchBytes;
+        final fetchSpec = exceedsCap
+            ? '(UID FLAGS BODY.PEEK[HEADER] BODY.PEEK[]<0.$_maxBodyFetchBytes>)'
+            : '(UID FLAGS BODY.PEEK[])';
+
+        LoggerService.log('IMAP-BODY',
+            'Fetching body for UID $uid (${(size / 1024).round()} KB, '
+            '${exceedsCap ? "capped at 1 MB" : "full"})');
+
+        final fetchResult = await client.uidFetchMessages(
+          MessageSequence.fromId(uid, isUid: true),
+          fetchSpec,
+        );
+
+        if (fetchResult.messages.isEmpty) {
+          LoggerService.logWarning(
+              'IMAP-BODY', 'No message returned for UID $uid');
+          email.body = '[Could not load message body]';
+          return;
+        }
+
+        final message = fetchResult.messages.first;
+        email.bodyTruncated = exceedsCap;
+
+        // Pick up any headers we did not have from envelope fetch
+        // (Content-Type, DKIM-Signature, Authentication-Results, etc).
+        for (final header in message.headers ?? []) {
+          email.headers[header.name] = header.value;
+        }
+
+        // ── PGP/MIME detection + decrypt ─────────────────────────────
+        // This is the ONLY place PgpKeyService.extractPgpCiphertext +
+        // PgpPacketInspector.summary + PgpKeyService.decrypt run.
+        // Removed from the envelope-fetch hot path to kill the
+        // [PGP_INSPECT] log spam (×51 per refresh) and 300 MB/refresh
+        // memory churn.
+        final pgpCiphertext = PgpKeyService.extractPgpCiphertext(message);
+        MimeMessage? decryptedInner;
+        if (pgpCiphertext != null) {
+          try {
+            final packetDump = PgpPacketInspector.summary(pgpCiphertext);
+            LoggerService.log('PGP_INSPECT',
+                'Message ${email.messageId} packets:\n$packetDump');
+            final decryptedRaw = await PgpKeyService.decrypt(pgpCiphertext);
+            String? decryptedBody;
+            try {
+              final crlf = decryptedRaw
+                  .replaceAll('\r\n', '\n')
+                  .replaceAll('\n', '\r\n');
+              LoggerService.log('PGP',
+                  'Inner MIME raw: ${crlf.length} chars, hasCRLF=${crlf.contains("\r\n")}, '
+                  'first200=${crlf.substring(0, crlf.length > 200 ? 200 : crlf.length).replaceAll("\r", "\\r").replaceAll("\n", "\\n")}');
+              decryptedInner = MimeMessage.parseFromText(crlf);
+              final innerCt = decryptedInner.getHeaderContentType();
+              final boundary = innerCt?.boundary;
+              if (boundary != null && boundary.isNotEmpty) {
+                final sections = crlf.split('--$boundary');
+                for (var i = 1; i < sections.length; i++) {
+                  final section = sections[i];
+                  if (section.startsWith('--')) continue;
+                  var partText = section;
+                  if (partText.startsWith('\r\n')) partText = partText.substring(2);
+                  if (partText.endsWith('\r\n')) partText = partText.substring(0, partText.length - 2);
+                  if (partText.trim().isEmpty) continue;
+                  final partMsg = MimeMessage.parseFromText(partText);
+                  decryptedInner.addPart(partMsg);
+                }
+              }
+              decryptedBody = decryptedInner.decodeTextPlainPart();
+              if (decryptedBody == null || decryptedBody.isEmpty) {
+                for (final p in decryptedInner.parts ?? <MimePart>[]) {
+                  final pCt = p.getHeaderContentType()?.mediaType;
+                  if (pCt?.sub == MediaSubtype.textPlain) {
+                    decryptedBody = p.decodeContentText();
+                    if (decryptedBody != null && decryptedBody.isNotEmpty) break;
+                  }
+                }
+              }
+              decryptedBody ??= decryptedInner.decodeTextHtmlPart();
+              LoggerService.log('PGP',
+                  'Inner MIME: type=${innerCt?.mediaType}, boundary=$boundary, '
+                  'parts=${decryptedInner.parts?.length ?? 0}, body=${decryptedBody?.length ?? 0} chars');
+            } catch (parseEx) {
+              LoggerService.logWarning('PGP',
+                  'Inner MIME parse failed: $parseEx — first 200 chars: ${decryptedRaw.substring(0, decryptedRaw.length > 200 ? 200 : decryptedRaw.length)}');
+            }
+            if (decryptedBody == null || decryptedBody.isEmpty) {
+              final lines = decryptedRaw.split('\n');
+              var inTextPart = false;
+              var pastHeader = false;
+              final contentLines = <String>[];
+              for (final line in lines) {
+                final trimmed = line.trim();
+                if (trimmed.startsWith('Content-Type:') &&
+                    trimmed.contains('text/plain')) {
+                  inTextPart = true;
+                  pastHeader = false;
+                  continue;
+                }
+                if (inTextPart && !pastHeader) {
+                  if (trimmed.isEmpty) {
+                    pastHeader = true;
+                    continue;
+                  }
+                  continue;
+                }
+                if (inTextPart && pastHeader) {
+                  if (trimmed.startsWith('--')) break;
+                  contentLines.add(line);
+                }
+              }
+              final extracted = contentLines.join('\n').trim();
+              if (extracted.isNotEmpty) decryptedBody = extracted;
+            }
+            email.body = decryptedBody ?? decryptedRaw;
+            email.isEncrypted = true;
+            // RFC 9788: extract protected Subject from decrypted payload
+            final subjectMatch = RegExp(
+              r'^Subject:\s*(.+)$', multiLine: true,
+            ).firstMatch(decryptedRaw);
+            if (subjectMatch != null && (email.subject == '[...]' || email.subject.isEmpty)) {
+              var protectedSubject = subjectMatch.group(1)!.trim();
+              if (protectedSubject.startsWith('=?')) {
+                try {
+                  final m = RegExp(r'=\?([^?]+)\?([BbQq])\?([^?]+)\?=').firstMatch(protectedSubject);
+                  if (m != null && m.group(2)!.toUpperCase() == 'B') {
+                    protectedSubject = utf8.decode(base64.decode(m.group(3)!));
+                  }
+                } catch (_) {}
+              }
+              email.subject = protectedSubject;
+            }
+            LoggerService.log('PGP',
+                '✓ Decrypted E2EE email from ${email.from}');
+          } catch (ex) {
+            LoggerService.logWarning('PGP',
+                'Decryption failed for ${email.messageId}');
+            email.body = '[Encrypted email — decryption failed]';
+            email.isEncrypted = true;
+          }
+        } else {
+          // Plain (non-PGP) message → use enough_mail's part-aware decoder.
+          email.body = _extractEmailBody(message);
+        }
+
+        // Re-run threat analysis now that we have full headers.
+        final threatAnalysis = ThreatIntelligenceService.analyzeEmail(email);
+        email.threatLevel = threatAnalysis.level;
+        email.threatScore = threatAnalysis.score;
+        email.threatDetails = threatAnalysis.details;
+
+        // Extract attachments: from decrypted inner MIME if encrypted,
+        // otherwise from outer message. PGP/MIME wraps the entire MIME
+        // tree (body + attachments) inside the ciphertext.
+        final attachmentSource = decryptedInner ?? message;
+        LoggerService.log('PGP',
+            'Attachment source: ${decryptedInner != null ? "decryptedInner" : "outerMessage"} '
+            '(${attachmentSource.allPartsFlat.length} parts)');
+        for (final part in attachmentSource.allPartsFlat) {
+          final disposition = part.getHeaderContentDisposition();
+          final fileName = part.decodeFileName();
+          final isAttachment = disposition?.disposition == ContentDisposition.attachment;
+          final isInlineWithFile = disposition?.disposition == ContentDisposition.inline && fileName != null && fileName.isNotEmpty;
+          final hasFileNoDisposition = disposition == null && fileName != null && fileName.isNotEmpty && part.mediaType.sub != MediaSubtype.textPlain && part.mediaType.sub != MediaSubtype.textHtml;
+
+          if (isAttachment || isInlineWithFile || hasFileNoDisposition) {
+            final data = part.decodeContentBinary();
+            if (data != null) {
+              email.attachments.add(EmailAttachment(
+                fileName: fileName ?? 'unknown',
+                size: data.length,
+                contentType: part.mediaType.toString(),
+                data: data,
+              ));
+            }
+          }
+        }
+        if (decryptedInner != null && email.attachments.isNotEmpty) {
+          LoggerService.log('PGP',
+              '✓ Extracted ${email.attachments.length} attachment(s) from encrypted inner MIME');
+        }
+      });
+    } catch (ex, stackTrace) {
+      LoggerService.logError('IMAP-BODY', ex, stackTrace);
+      // Preserve a non-null body string so bodyLoaded returns true and
+      // the UI exits the loading spinner. Caller can inspect for the
+      // sentinel if it wants to retry.
+      email.body = '[Failed to load message body: ${ex.toString()}]';
       rethrow;
     }
   }

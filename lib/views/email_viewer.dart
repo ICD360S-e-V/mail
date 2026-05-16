@@ -54,18 +54,60 @@ class _EmailViewerState extends State<EmailViewer> {
   /// Whether the user has opted to load remote images for this email.
   bool _allowRemoteContent = false;
 
+  /// Body-load state. Set to true the first time `loadBody` finishes
+  /// (success or sentinel error message). The build method shows a
+  /// ProgressRing while this is false.
+  bool _bodyReady = false;
+  /// Error message from a failed body load. Shown inline instead of the
+  /// body when set.
+  String? _bodyLoadError;
+
   @override
   void initState() {
     super.initState();
-    // Trigger AV scan on all attachments when email is opened.
-    if (widget.email.attachments.isNotEmpty) {
-      AttachmentScanService.scanAll(
-        widget.email,
-        onProgress: () {
-          if (mounted) setState(() {});
-        },
-      );
+    // Envelope-first architecture: the email list only has metadata.
+    // Fetch the body now (or skip if already loaded — e.g. cached).
+    _ensureBodyLoaded();
+  }
+
+  /// Trigger body load on first open. If the body is already populated
+  /// (LRU cache hit, prior open in this session), runs the AV scan
+  /// synchronously. Otherwise shows a spinner until the body arrives.
+  Future<void> _ensureBodyLoaded() async {
+    if (widget.email.bodyLoaded) {
+      _bodyReady = true;
+      _scanAttachments();
+      return;
     }
+    try {
+      // Use listen:false — we don't want to rebuild on every provider
+      // change, only when the body load completes.
+      await context.read<EmailProvider>().loadBody(widget.email);
+      if (!mounted) return;
+      setState(() {
+        _bodyReady = true;
+      });
+      _scanAttachments();
+    } catch (ex) {
+      LoggerService.logError('EMAIL_VIEWER', ex, StackTrace.current);
+      if (!mounted) return;
+      setState(() {
+        _bodyReady = true; // exit spinner; show error inline
+        _bodyLoadError = ex.toString();
+      });
+    }
+  }
+
+  /// Kick off antivirus scanning on any attachments populated by the
+  /// body fetch. Mirrors the pre-envelope behaviour.
+  void _scanAttachments() {
+    if (widget.email.attachments.isEmpty) return;
+    AttachmentScanService.scanAll(
+      widget.email,
+      onProgress: () {
+        if (mounted) setState(() {});
+      },
+    );
   }
 
   @override
@@ -450,15 +492,75 @@ class _EmailViewerState extends State<EmailViewer> {
 
   /// Build email body widget.
   ///
-  /// HTML emails are rendered with [SafeHtmlRenderer] which shows
-  /// formatted content while blocking all remote resources by default.
-  /// Plain-text emails use the existing clickable-text renderer.
+  /// Shows a [ProgressRing] while the body is being fetched on demand
+  /// (envelope-first architecture: the list view only has metadata).
+  /// HTML emails are rendered with [SafeHtmlRenderer]. Plain-text uses
+  /// the clickable-text renderer.
   Widget _buildEmailBody(FluentThemeData theme, Email email) {
-    final isHtml = _isHtmlEmail(email.body, contentType: email.headers['Content-Type'] ?? email.headers['content-type'] ?? '');
+    // Loading state — body fetch in flight.
+    if (!_bodyReady) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 32),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const ProgressRing(),
+              const SizedBox(height: 12),
+              Text(
+                'Loading message…',
+                style: theme.typography.caption?.copyWith(
+                  color: theme.inactiveColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    // Error state — body fetch failed AND no sentinel populated.
+    if (_bodyLoadError != null && (email.body == null || email.body!.isEmpty)) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.red.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+        ),
+        child: Text(
+          'Could not load message body:\n$_bodyLoadError',
+          style: theme.typography.body?.copyWith(color: Colors.red),
+        ),
+      );
+    }
+    final body = email.body ?? '';
+    final isHtml = _isHtmlEmail(body, contentType: email.headers['Content-Type'] ?? email.headers['content-type'] ?? '');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (email.bodyTruncated)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                Semantics(
+                  excludeSemantics: true,
+                  child: Icon(FluentIcons.info,
+                      size: 14, color: Colors.orange),
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    'Large message — only the first 1 MB was downloaded.',
+                    style: theme.typography.caption?.copyWith(
+                      color: theme.inactiveColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         if (isHtml && !_allowRemoteContent)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
@@ -498,13 +600,13 @@ class _EmailViewerState extends State<EmailViewer> {
           ),
           child: isHtml
               ? SafeHtmlRenderer(
-                  html: email.body,
+                  html: body,
                   allowRemoteContent: _allowRemoteContent,
                   textStyle: theme.typography.body,
                   onLinkTap: (url, {String? displayText}) => _openUrlInExternalBrowser(url, displayText: displayText),
                 )
               : SelectableText.rich(
-                  _buildClickableText(email.body, theme.typography.body),
+                  _buildClickableText(body, theme.typography.body),
                 ),
         ),
       ],
@@ -623,9 +725,10 @@ class _EmailViewerState extends State<EmailViewer> {
             // pixels and base64 images, and prevents the recipient
             // from receiving raw HTML that could re-render phishing
             // content with full styling.
-            final plainBody = _isHtmlEmail(email.body)
-                ? HtmlToPlainText.convert(email.body)
-                : email.body;
+            final rawBody = email.body ?? '';
+            final plainBody = _isHtmlEmail(rawBody)
+                ? HtmlToPlainText.convert(rawBody)
+                : rawBody;
             final forwardBody = '''
 ${l10nForward.infoForwardedMessage}
 ${l10nForward.labelFrom} ${email.from}
@@ -658,7 +761,7 @@ To: ${email.to}${email.cc.isNotEmpty ? '\nCC: ${email.cc}' : ''}
 Date: ${DateFormat('yyyy-MM-dd HH:mm:ss').format(email.date)}
 Threat: ${email.threatLevel}
 
-${email.body}
+${email.body ?? "(message body not loaded)"}
 
 ${email.attachments.isNotEmpty ? '\nAttachments (${email.attachments.length}): ${email.attachments.map((a) => a.fileName).join(", ")}' : ''}
 ''';
@@ -695,7 +798,7 @@ ${email.attachments.isNotEmpty ? '\nAttachments (${email.attachments.length}): $
             LoggerService.log('EMAIL_VIEWER', 'Copy email button clicked');
             try {
               // Format email for clipboard (strip HTML tags for clean text)
-              final cleanBody = _stripHtmlTags(email.body);
+              final cleanBody = _stripHtmlTags(email.body ?? '');
               final emailContent = '''
 Subject: ${email.subject}
 From: ${email.from}

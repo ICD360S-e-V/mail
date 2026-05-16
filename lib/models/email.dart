@@ -11,13 +11,29 @@ class Email {
   String cc;  // Carbon Copy recipients (visible when receiving)
   String subject;
   DateTime date;
-  String body;
+  /// Email body. `null` means "not yet loaded" (envelope-only fetch).
+  /// Set by [EmailProvider.loadBody] when the user opens the email viewer.
+  String? body;
   bool isRead;
   String threatLevel;
   int threatScore;
   String threatDetails;
   int? uid; // IMAP UID for reliable operations
   bool isEncrypted; // E2EE: decrypted from PGP
+
+  /// Total message size in bytes as reported by IMAP RFC822.SIZE
+  /// (envelope fetch). Used to decide whether to download the full
+  /// body inline or warn the user about a large download.
+  int? bodySize;
+
+  /// True when [body] is non-null. False right after an envelope-only
+  /// fetch, until [EmailProvider.loadBody] populates the body.
+  bool get bodyLoaded => body != null;
+
+  /// True when the server message exceeded the body-fetch cap and only
+  /// a truncated version was loaded. UI can show a "tap to download
+  /// full message" affordance.
+  bool bodyTruncated;
 
   // Attachments
   List<EmailAttachment> attachments;
@@ -32,13 +48,15 @@ class Email {
     this.cc = '',
     this.subject = '',
     DateTime? date,
-    this.body = '',
+    this.body,
     this.isRead = false,
     this.threatLevel = 'Safe',
     this.threatScore = 0,
     this.threatDetails = '',
     this.uid,
     this.isEncrypted = false,
+    this.bodySize,
+    this.bodyTruncated = false,
     List<EmailAttachment>? attachments,
     Map<String, String>? headers,
   })  : date = date ?? DateTime.now(),
@@ -55,6 +73,8 @@ class Email {
       'subject': subject,
       'date': date.toIso8601String(),
       'body': body,
+      'bodySize': bodySize,
+      'bodyTruncated': bodyTruncated,
       'isRead': isRead,
       'threatLevel': threatLevel,
       'threatScore': threatScore,
@@ -75,7 +95,9 @@ class Email {
       date: json['date'] != null
           ? DateTime.parse(json['date'] as String)
           : DateTime.now(),
-      body: json['body'] as String? ?? '',
+      body: json['body'] as String?,
+      bodySize: json['bodySize'] as int?,
+      bodyTruncated: json['bodyTruncated'] as bool? ?? false,
       isRead: json['isRead'] as bool? ?? false,
       threatLevel: json['threatLevel'] as String? ?? 'Safe',
       threatScore: json['threatScore'] as int? ?? 0,
@@ -100,6 +122,8 @@ class Email {
     String? subject,
     DateTime? date,
     String? body,
+    int? bodySize,
+    bool? bodyTruncated,
     bool? isRead,
     String? threatLevel,
     int? threatScore,
@@ -115,6 +139,8 @@ class Email {
       subject: subject ?? this.subject,
       date: date ?? this.date,
       body: body ?? this.body,
+      bodySize: bodySize ?? this.bodySize,
+      bodyTruncated: bodyTruncated ?? this.bodyTruncated,
       isRead: isRead ?? this.isRead,
       threatLevel: threatLevel ?? this.threatLevel,
       threatScore: threatScore ?? this.threatScore,
