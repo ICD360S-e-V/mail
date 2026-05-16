@@ -158,6 +158,32 @@ class FactoryResetDialog {
       }
     }
 
+    // 5. Delete flutter_secure_storage / MasterVault folder (Windows: %APPDATA%\de.icd360s\icd360s_mail_client)
+    //    This is where DPAPI-protected secrets and the vault file live — separate
+    //    from the appName folder above. Without this, PGP keys and cached secrets
+    //    survive factory reset (bug observed: v4 key generated under wrong master
+    //    password kept blocking blob v5 download from server on Windows after reset).
+    if (Platform.isWindows) {
+      final appData = Platform.environment['APPDATA'];
+      if (appData != null) {
+        for (final relativePath in [
+          'de.icd360s/icd360s_mail_client',
+          'ICD360S e.V',
+        ]) {
+          final dir = Directory(p.join(appData, relativePath));
+          if (await dir.exists()) {
+            try {
+              await dir.delete(recursive: true);
+              LoggerService.log('RESET', '✓ Deleted $relativePath');
+            } catch (ex) {
+              errors.add('$relativePath: $ex');
+              LoggerService.log('RESET', '⚠ Could not delete $relativePath: $ex');
+            }
+          }
+        }
+      }
+    }
+
     if (errors.isNotEmpty) {
       LoggerService.logWarning('RESET',
           '⚠ Factory reset completed with ${errors.length} errors: ${errors.join(", ")}');

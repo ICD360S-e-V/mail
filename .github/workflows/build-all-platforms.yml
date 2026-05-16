@@ -3,6 +3,18 @@ name: Build All Platforms
 on:
   push:
     tags: ['v*']
+  pull_request:
+    paths:
+      - 'lib/**'
+      - 'android/**'
+      - 'ios/**'
+      - 'macos/**'
+      - 'linux/**'
+      - 'windows/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - 'enough_mail_fork/**'
+      - '.github/workflows/build-all-platforms.yml'
   workflow_dispatch:
 
 concurrency:

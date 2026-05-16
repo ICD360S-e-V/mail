@@ -189,21 +189,73 @@ class _MasterPasswordDialogState extends State<MasterPasswordDialog> {
     final isWide = MediaQuery.of(context).size.width > 800;
     final w = Colors.white;
 
-    final features = <(IconData, String)>[
+    final serverSections = <(IconData, String, List<(IconData, String)>)>[
+      (FluentIcons.command_prompt, 'Betriebssystem', [
+        (FluentIcons.command_prompt, 'AlmaLinux 10.1 \u00b7 Heliotrope Lion'),
+        (FluentIcons.processing, 'Kernel 6.12 \u00b7 KSPP-Hardening'),
+      ]),
+      (FluentIcons.globe, 'Infrastruktur', [
+        (FluentIcons.globe, 'OVH-Rechenzentrum \u00b7 Deutschland'),
+        (FluentIcons.encryption, '2\u00d7 NVMe \u00b7 LUKS2 \u00b7 AES-256-XTS'),
+      ]),
+      (FluentIcons.protect_restrict, 'Firewall', [
+        (FluentIcons.protect_restrict, 'firewalld + nftables'),
+        (FluentIcons.blocked2, 'Fail2Ban-RS \u00b7 portscan_guard'),
+      ]),
+      (FluentIcons.shield, 'Antivirus & Anti-Spam', [
+        (FluentIcons.bug, 'ClamAV Virenscan'),
+        (FluentIcons.mail, 'Rspamd (Phishing & Spam)'),
+      ]),
+      (FluentIcons.shield_solid, 'Hardening & Audit', [
+        (FluentIcons.shield_solid, 'SELinux Enforcing'),
+        (FluentIcons.activity_feed, 'auditd Audit-Logging'),
+        (FluentIcons.verified_brand_solid, 'Lynis-Score: 91/100'),
+      ]),
+      (FluentIcons.mail, 'E-Mail-Sicherheit', [
+        (FluentIcons.certificate, 'mTLS Zertifikat-Authentifizierung'),
+        (FluentIcons.cloud_download, 'DANE + DNSSEC + MTA-STS'),
+      ]),
+    ];
+
+    final appFeatures = <(IconData, String)>[
       (FluentIcons.lock, 'Ende-zu-Ende-Verschl\u00fcsselung (OpenPGP)'),
-      (FluentIcons.certificate, 'mTLS Zertifikat-Authentifizierung'),
-      (FluentIcons.shield, 'ClamAV Virenscan f\u00fcr Anh\u00e4nge'),
-      (FluentIcons.mail, 'Phishing- & Spam-Erkennung (Rspamd)'),
-      (FluentIcons.devices4, 'Windows, macOS, Linux, Android, iOS'),
-      (FluentIcons.cloud_download, 'DANE + DNSSEC + MTA-STS'),
       (FluentIcons.lock_solid, 'MasterVault (Argon2id + XChaCha20)'),
       (FluentIcons.blocked2, 'Screenshot-Schutz (alle Plattformen)'),
+      (FluentIcons.devices4, 'Windows, macOS, Linux, Android, iOS'),
       (FluentIcons.print, 'Drucken & PDF-Viewer'),
       (FluentIcons.code, 'Open Source (AGPL-3.0)'),
     ];
 
+    Widget sectionHeader(IconData icon, String label, {bool large = false}) => Padding(
+      padding: EdgeInsets.only(top: large ? 16 : 10, bottom: large ? 6 : 3),
+      child: Row(children: [
+        Icon(icon, size: large ? 13 : 12, color: w.withValues(alpha: 0.9)),
+        const SizedBox(width: 8),
+        Text(label.toUpperCase(),
+            style: theme.typography.caption?.copyWith(
+                color: w.withValues(alpha: 0.9),
+                fontSize: large ? 11 : 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.2)),
+        const SizedBox(width: 10),
+        Expanded(child: Container(
+          height: 1,
+          color: w.withValues(alpha: 0.2),
+        )),
+      ]),
+    );
+
+    Widget featureRow((IconData, String) f) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(children: [
+        Icon(f.$1, size: 14, color: w.withValues(alpha: 0.7)),
+        const SizedBox(width: 10),
+        Flexible(child: Text(f.$2, style: theme.typography.caption?.copyWith(
+            color: w.withValues(alpha: 0.85), fontSize: 12))),
+      ]),
+    );
+
     Widget brandingPanel() => Container(
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -211,39 +263,40 @@ class _MasterPasswordDialogState extends State<MasterPasswordDialog> {
           colors: [theme.accentColor.darkest, theme.accentColor.darker],
         ),
       ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Image.asset('assets/logo.png', width: 72, height: 72,
-              errorBuilder: (_, __, ___) => Icon(FluentIcons.mail, size: 56, color: w)),
-          const SizedBox(height: 12),
-          Text('ICD360S Mail', style: theme.typography.title?.copyWith(
-              color: w, fontWeight: FontWeight.bold, fontSize: 26)),
-          const SizedBox(height: 4),
-          Text('Sicher. Privat. Verschl\u00fcsselt.',
-              style: theme.typography.body?.copyWith(color: w.withValues(alpha: 0.8))),
-          const SizedBox(height: 24),
-          ...features.map((f) => Padding(
-            padding: const EdgeInsets.symmetric(vertical: 3),
-            child: Row(children: [
-              Icon(f.$1, size: 14, color: w.withValues(alpha: 0.7)),
-              const SizedBox(width: 10),
-              Flexible(child: Text(f.$2, style: theme.typography.caption?.copyWith(
-                  color: w.withValues(alpha: 0.85), fontSize: 12))),
-            ]),
-          )),
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              border: Border.all(color: w.withValues(alpha: 0.3)),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text('Exklusiv f\u00fcr Mitglieder des ICD360S e.V.',
-                style: theme.typography.caption?.copyWith(
-                    color: w.withValues(alpha: 0.9), fontWeight: FontWeight.w600)),
-          ),
-        ],
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(child: Image.asset('assets/logo.png', width: 64, height: 64,
+                errorBuilder: (_, __, ___) => Icon(FluentIcons.mail, size: 52, color: w))),
+            const SizedBox(height: 10),
+            Center(child: Text('ICD360S Mail', style: theme.typography.title?.copyWith(
+                color: w, fontWeight: FontWeight.bold, fontSize: 24))),
+            const SizedBox(height: 2),
+            Center(child: Text('Sicher. Privat. Verschl\u00fcsselt.',
+                style: theme.typography.body?.copyWith(color: w.withValues(alpha: 0.8)))),
+            sectionHeader(FluentIcons.server_enviroment, 'Server', large: true),
+            for (final section in serverSections) ...[
+              sectionHeader(section.$1, section.$2),
+              ...section.$3.map(featureRow),
+            ],
+            sectionHeader(FluentIcons.devices3, 'Anwendung', large: true),
+            ...appFeatures.map(featureRow),
+            const SizedBox(height: 18),
+            Center(child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                border: Border.all(color: w.withValues(alpha: 0.3)),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text('Exklusiv f\u00fcr Mitglieder des ICD360S e.V.',
+                  style: theme.typography.caption?.copyWith(
+                      color: w.withValues(alpha: 0.9), fontWeight: FontWeight.w600)),
+            )),
+          ],
+        ),
       ),
     );
 
@@ -329,12 +382,14 @@ class _MasterPasswordDialogState extends State<MasterPasswordDialog> {
                         const SizedBox(height: 20),
                       ],
 
-                      Row(children: [
+                      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Icon(FluentIcons.lock, size: 20, color: theme.accentColor),
                         const SizedBox(width: 10),
-                        Text(
-                          _isFirstTime ? l10n.masterPasswordDialogFirstTimeMessage : 'Willkommen zur\u00fcck',
-                          style: theme.typography.bodyStrong,
+                        Expanded(
+                          child: Text(
+                            _isFirstTime ? l10n.masterPasswordDialogFirstTimeMessage : 'Willkommen zur\u00fcck',
+                            style: theme.typography.bodyStrong,
+                          ),
                         ),
                       ]),
                       if (!_isFirstTime) ...[
