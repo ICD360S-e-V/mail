@@ -3,6 +3,7 @@
 
 import 'package:fluent_ui/fluent_ui.dart';
 import 'dart:async';
+import 'dart:collection' show LinkedHashMap;
 import '../models/models.dart';
 import '../services/services.dart';
 import 'dart:io' show Platform;
@@ -46,14 +47,40 @@ class EmailProvider with ChangeNotifier {
   static const _maxCachePerFolder = 50;
   final Map<String, List<Email>> _sessionCache = {};
 
+  // ── On-demand body LRU cache ──────────────────────────────────────
+  //
+  // Envelope-first fetch (PR #37) means Email.body is null on the list
+  // path. When the user opens a viewer we call loadBody which fetches
+  // from IMAP — and without a body cache, every reopen re-fetches. The
+  // LRU here keeps the last N opened bodies so re-clicks are instant.
+  //
+  // Sizing: hard cap of _maxBodyCacheEntries × max body size. With 1MB
+  // body cap (mail_service.dart) and 10 entries, worst-case RAM
+  // contribution is bounded at ~10MB + attachments. Predictable ceiling,
+  // no possibility of the 300MB/refresh regression we hit pre-PR #36.
+  //
+  // Key: messageId. LinkedHashMap insertion order = LRU order; evict
+  // oldest from the head, touch by re-insert.
+  static const _maxBodyCacheEntries = 10;
+  final LinkedHashMap<String, _CachedBody> _bodyCache =
+      LinkedHashMap<String, _CachedBody>();
+
   /// Wipe all cached emails from RAM. Called on lock, background, close.
   void wipeSessionCache() {
     for (final emails in _sessionCache.values) {
       _wipeBodies(emails);
     }
     _sessionCache.clear();
+    // Also drop the LRU body cache — bodies are decrypted plaintext, must
+    // not survive a lock or background transition.
+    for (final cached in _bodyCache.values) {
+      for (final a in cached.attachments) {
+        a.data = null;
+      }
+    }
+    _bodyCache.clear();
     _emails = [];
-    LoggerService.log('CACHE', 'Session cache wiped from RAM');
+    LoggerService.log('CACHE', 'Session cache + body LRU wiped from RAM');
   }
 
   /// Release heavy body strings + attachment buffers before dropping the
@@ -1170,7 +1197,31 @@ class EmailProvider with ChangeNotifier {
   ///
   /// Idempotent: if `email.bodyLoaded` is already true, this is a no-op.
   Future<void> loadBody(Email email) async {
-    if (email.bodyLoaded) return;
+    // Already loaded on this Email instance — just touch the LRU.
+    if (email.bodyLoaded) {
+      _touchBodyCache(email.messageId);
+      return;
+    }
+
+    // Cache hit on a different Email shell (same messageId, e.g. after
+    // an envelope-only refresh replaced the list). Hydrate from cache,
+    // skip the IMAP fetch entirely.
+    final cached = _bodyCache[email.messageId];
+    if (cached != null) {
+      email.body = cached.body;
+      email.bodyTruncated = cached.bodyTruncated;
+      email.isEncrypted = cached.isEncrypted;
+      email.attachments
+        ..clear()
+        ..addAll(cached.attachments);
+      _touchBodyCache(email.messageId);
+      LoggerService.log('CACHE',
+          '✓ Body cache HIT for ${email.messageId} (size=${_bodyCache.length})');
+      if (!_disposed) notifyListeners();
+      return;
+    }
+
+    // Cache miss — fetch from IMAP.
     final account = _currentAccount;
     if (account == null) {
       LoggerService.logWarning(
@@ -1183,11 +1234,42 @@ class EmailProvider with ChangeNotifier {
           '✓ Loaded body for ${email.messageId} (${email.body?.length ?? 0} chars, '
           '${email.attachments.length} attachments, '
           'encrypted=${email.isEncrypted}, truncated=${email.bodyTruncated})');
+      // Insert into LRU on success only (don't pollute cache with errors).
+      if (email.bodyLoaded) {
+        _putBodyCache(email);
+      }
     } catch (ex, stackTrace) {
       // fetchFullBody already populated email.body with an error sentinel.
       LoggerService.logError('PROVIDER', ex, stackTrace);
     } finally {
       if (!_disposed) notifyListeners();
+    }
+  }
+
+  /// Move existing entry to end (most-recently-used) without re-storing.
+  void _touchBodyCache(String messageId) {
+    final entry = _bodyCache.remove(messageId);
+    if (entry != null) _bodyCache[messageId] = entry;
+  }
+
+  /// Store body+attachments in LRU; evict oldest if over capacity.
+  void _putBodyCache(Email email) {
+    _bodyCache[email.messageId] = _CachedBody(
+      body: email.body!,
+      bodyTruncated: email.bodyTruncated,
+      isEncrypted: email.isEncrypted,
+      attachments: List<EmailAttachment>.from(email.attachments),
+    );
+    while (_bodyCache.length > _maxBodyCacheEntries) {
+      final evictId = _bodyCache.keys.first;
+      final evicted = _bodyCache.remove(evictId);
+      if (evicted != null) {
+        for (final a in evicted.attachments) {
+          a.data = null;
+        }
+      }
+      LoggerService.log('CACHE',
+          'Evicted body for $evictId (cache full at $_maxBodyCacheEntries)');
     }
   }
 
@@ -1270,4 +1352,23 @@ class EmailProvider with ChangeNotifier {
       LoggerService.log('TRASH_CLEANUP', '✓ No old emails to clean in Trash folders');
     }
   }
+}
+
+/// Snapshot of a loaded message body for the LRU cache. We don't keep a
+/// reference to the original Email because the envelope-only refresh path
+/// replaces the Email shell — the body would point to a dead instance.
+/// Storing the raw fields lets us re-hydrate any future Email shell with
+/// the same messageId.
+class _CachedBody {
+  final String body;
+  final bool bodyTruncated;
+  final bool isEncrypted;
+  final List<EmailAttachment> attachments;
+
+  _CachedBody({
+    required this.body,
+    required this.bodyTruncated,
+    required this.isEncrypted,
+    required this.attachments,
+  });
 }
