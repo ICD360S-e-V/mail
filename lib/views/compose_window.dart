@@ -573,35 +573,29 @@ class _ComposeWindowState extends State<ComposeWindow> {
     _recipientSecurity.removeWhere((k, _) => !recipients.contains(k));
   }
 
-  /// Parse recipients from comma-separated string
-  List<String> _getRecipientsList() {
-    if (_toController.text.isEmpty) return [];
-    return _toController.text
-        .split(',')
-        .map((e) => e.trim())
+  /// Strip characters that cannot legally appear in a MIME header value (RFC 5322).
+  /// CR / LF / NUL / TAB get silently removed — they only end up in a controller
+  /// when the user pastes pre-formatted text (e.g. "3:28 AM\nfoo@bar.com" copied
+  /// from a chat app), and propagating them into `setHeader` throws FormatException
+  /// (CWE-93 CRLF injection guard in `enough_mail`).
+  static String _sanitizeHeaderValue(String s) =>
+      s.replaceAll(RegExp(r'[\r\n\t]'), '');
+
+  /// Split a recipient field into addresses. Comma is the RFC 5322 canonical
+  /// delimiter; we also accept `;` (Outlook-style) and newlines (paste from
+  /// chat / spreadsheet) for tolerance. Each token is header-sanitized + trimmed.
+  static List<String> _parseRecipientField(String raw) {
+    if (raw.isEmpty) return const [];
+    return raw
+        .split(RegExp(r'[,;\r\n]'))
+        .map((e) => _sanitizeHeaderValue(e).trim())
         .where((e) => e.isNotEmpty)
         .toList();
   }
 
-  /// Parse CC recipients from comma-separated string
-  List<String> _getCcList() {
-    if (_ccController.text.isEmpty) return [];
-    return _ccController.text
-        .split(',')
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .toList();
-  }
-
-  /// Parse BCC recipients from comma-separated string
-  List<String> _getBccList() {
-    if (_bccController.text.isEmpty) return [];
-    return _bccController.text
-        .split(',')
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .toList();
-  }
+  List<String> _getRecipientsList() => _parseRecipientField(_toController.text);
+  List<String> _getCcList()         => _parseRecipientField(_ccController.text);
+  List<String> _getBccList()        => _parseRecipientField(_bccController.text);
 
   Future<void> _autoSaveDraft() async {
     if (_isSavingDraft) return; // Prevent concurrent saves
@@ -615,10 +609,10 @@ class _ComposeWindowState extends State<ComposeWindow> {
     try {
       final emailProvider = context.read<EmailProvider>();
       final uid = await emailProvider.saveDraft(
-        _toController.text,
-        _ccController.text,
-        _bccController.text,
-        _subjectController.text,
+        _getRecipientsList().join(', '),
+        _getCcList().join(', '),
+        _getBccList().join(', '),
+        _sanitizeHeaderValue(_subjectController.text),
         _bodyController.text,
         account: _selectedAccount,
         previousDraftUid: _lastDraftUid,
@@ -874,10 +868,10 @@ class _ComposeWindowState extends State<ComposeWindow> {
 
       await emailProvider.sendEmailFromAccountWithAttachments(
         _selectedAccount!,
-        _toController.text,
-        _ccController.text,
-        _bccController.text,
-        _subjectController.text,
+        _getRecipientsList().join(', '),
+        _getCcList().join(', '),
+        _getBccList().join(', '),
+        _sanitizeHeaderValue(_subjectController.text),
         _bodyController.text,
         _attachments.map((a) => a.file).toList(),
         draftUid: _lastDraftUid,
@@ -921,10 +915,10 @@ class _ComposeWindowState extends State<ComposeWindow> {
 
     try {
       final uid = await emailProvider.saveDraft(
-        _toController.text,
-        _ccController.text,
-        _bccController.text,
-        _subjectController.text,
+        _getRecipientsList().join(', '),
+        _getCcList().join(', '),
+        _getBccList().join(', '),
+        _sanitizeHeaderValue(_subjectController.text),
         _bodyController.text,
         account: _selectedAccount,
         attachments: _attachments.map((a) => a.file).toList(),
@@ -1012,6 +1006,17 @@ class _ComposeWindowState extends State<ComposeWindow> {
                     placeholder: l10n.placeholderRecipients,
                     enabled: !_isSending,
                     onChanged: (value) {
+                      // Strip CR/LF/TAB on input so the controller never holds
+                      // chars that would later crash setHeader (CWE-93). User
+                      // sees the cleaned value immediately.
+                      final cleaned = _sanitizeHeaderValue(value);
+                      if (cleaned != value) {
+                        _toController.value = TextEditingValue(
+                          text: cleaned,
+                          selection: TextSelection.collapsed(offset: cleaned.length),
+                        );
+                        value = cleaned;
+                      }
                       // Update suggestions based on input
                       final lastEmail = value.split(',').last.trim();
                       if (lastEmail.length >= 3) {
