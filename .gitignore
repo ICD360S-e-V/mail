@@ -124,6 +124,7 @@ version_signing_pub.pem
 # Same exclusion reason as SSH keys: secrets, never commit.
 mail.icd360s.de.wg0.priv.key
 mail.icd360s.de.wg0.pub.key
+mail.icd360s.de.restic-repo-password.txt
 
 # Server-side ops scripts staged locally before scp/deploy.
 # Kept untracked so they don't leak infrastructure details into the app repo.
