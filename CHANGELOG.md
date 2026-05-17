@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.136.9 - 2026-05-17
+#### Bug Fixes
+- (**compose**) sanitize CR/LF/NUL out of recipient + subject fields (#42) - (3e054b1) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.136.8 - 2026-05-16
 #### Bug Fixes
 - (**ci**) sign version.json in CI with GitHub Secret instead of on mail host (#41) - (507f5d5) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
