@@ -272,8 +272,14 @@ class MailService {
             // returns no headers, so the threat analyzer just sees from/
             // subject/etc. Detailed header analysis (SPF/DKIM/auth-results)
             // happens when the body is loaded.
+            // Skip headers with null name/value — enough_mail surfaces them
+            // for malformed messages, and our Map<String,String> rejects null.
             for (final header in message.headers ?? []) {
-              email.headers[header.name] = header.value;
+              final name = header.name;
+              final value = header.value;
+              if (name != null && value != null) {
+                email.headers[name] = value;
+              }
             }
 
             // Threat analysis based on envelope fields only.
@@ -393,8 +399,14 @@ class MailService {
 
         // Pick up any headers we did not have from envelope fetch
         // (Content-Type, DKIM-Signature, Authentication-Results, etc).
+        // Same null guard as envelope-fetch: malformed headers may surface
+        // null name/value via enough_mail; our Map<String,String> rejects them.
         for (final header in message.headers ?? []) {
-          email.headers[header.name] = header.value;
+          final name = header.name;
+          final value = header.value;
+          if (name != null && value != null) {
+            email.headers[name] = value;
+          }
         }
 
         // ── PGP/MIME detection + decrypt ─────────────────────────────
