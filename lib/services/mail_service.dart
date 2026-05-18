@@ -282,6 +282,17 @@ class MailService {
               }
             }
 
+            // ENVELOPE fetch returns no headers, but BODYSTRUCTURE gives us
+            // the top-level Content-Type. Capture it so fetchFullBody can
+            // detect PGP/MIME (multipart/encrypted) and skip the 1 MB body
+            // cap — encrypted blobs cannot be partially decrypted.
+            if (!email.headers.containsKey('Content-Type')) {
+              final envCt = message.getHeaderContentType();
+              if (envCt != null) {
+                email.headers['Content-Type'] = envCt.render();
+              }
+            }
+
             // Threat analysis based on envelope fields only.
             // Full header inspection runs after body load in fetchFullBody.
             final threatAnalysis = ThreatIntelligenceService.analyzeEmail(email);
@@ -372,15 +383,21 @@ class MailService {
         // Decide fetch strategy by size. Below the cap → full BODY[].
         // Above the cap → HEADER + first 1 MB to stay responsive on
         // huge messages (mailing-list digests, 50 MB attachments).
+        // EXCEPTION: PGP/MIME ciphertext cannot be partially decrypted —
+        // truncating the encrypted blob loses attachments past the cap
+        // (and may corrupt MDC verification). Always fetch full body for
+        // multipart/encrypted; Content-Type was captured from BODYSTRUCTURE
+        // during the envelope fetch.
         final size = email.bodySize ?? 0;
-        final exceedsCap = size > _maxBodyFetchBytes;
+        final isEncrypted = PgpKeyService.isPgpEncryptedHeaders(email.headers);
+        final exceedsCap = !isEncrypted && size > _maxBodyFetchBytes;
         final fetchSpec = exceedsCap
             ? '(UID FLAGS BODY.PEEK[HEADER] BODY.PEEK[]<0.$_maxBodyFetchBytes>)'
             : '(UID FLAGS BODY.PEEK[])';
 
         LoggerService.log('IMAP-BODY',
             'Fetching body for UID $uid (${(size / 1024).round()} KB, '
-            '${exceedsCap ? "capped at 1 MB" : "full"})');
+            '${exceedsCap ? "capped at 1 MB" : (isEncrypted ? "full (PGP)" : "full")})');
 
         final fetchResult = await client.uidFetchMessages(
           MessageSequence.fromId(uid, isUid: true),
