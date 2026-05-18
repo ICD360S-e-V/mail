@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.136.11 - 2026-05-18
+#### Bug Fixes
+- (**mail**) always fetch full body for PGP/MIME — 1 MB cap loses attachments (#45) - (7a2f59f) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.136.10 - 2026-05-17
 #### Bug Fixes
 - (**fetch**) skip headers with null name/value (365 errors/fetch on v2.136.9) (#43) - (60b6dca) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
