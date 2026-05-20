@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.137.1 - 2026-05-20
+#### Bug Fixes
+- (**ci**) tag-isolated concurrency + fail loudly when RELEASE_PAT is unset (#48) - (836c032) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.137.0 - 2026-05-20
 #### Features
 - (**compose**) per-account email signature with ICD360S e.V. default (#46) - (eba3af3) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
