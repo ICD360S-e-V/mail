@@ -22,6 +22,24 @@ jobs:
     if: "!startsWith(github.event.head_commit.message, 'chore(version):')"
 
     steps:
+      - name: Verify RELEASE_PAT is configured
+        # Without RELEASE_PAT the checkout silently falls back to the
+        # default GITHUB_TOKEN, and any tag we push later WILL NOT trigger
+        # build-all-platforms.yml (per GitHub's anti-recursion design for
+        # GITHUB_TOKEN). That silently breaks the release pipeline — see
+        # the v2.136.11 / v2.137.0 missed builds. Fail loudly instead.
+        env:
+          PAT: ${{ secrets.RELEASE_PAT }}
+        run: |
+          if [ -z "$PAT" ]; then
+            echo "::error::RELEASE_PAT secret is not configured. Tag push from this workflow"
+            echo "::error::will not trigger build-all-platforms.yml, so no release binaries"
+            echo "::error::will be built. Configure RELEASE_PAT in repo Settings → Secrets →"
+            echo "::error::Actions (PAT must have 'repo' + 'workflow' scopes)."
+            exit 1
+          fi
+          echo "✓ RELEASE_PAT is configured"
+
       - name: Checkout (full history required for cocogitto)
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
