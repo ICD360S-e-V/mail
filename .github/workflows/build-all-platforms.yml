@@ -17,9 +17,14 @@ on:
       - '.github/workflows/build-all-platforms.yml'
   workflow_dispatch:
 
+# Concurrency: PR / branch pushes share a group and cancel the previous
+# run on new commits (saves CI minutes). Tag pushes (v*) get an isolated
+# group per tag AND opt out of cancellation so a release build is never
+# killed by a concurrent dependabot PR — that's how v2.136.11 and v2.137.0
+# were lost previously (PR sync triggered cancel-in-progress on the tag run).
 concurrency:
-  group: ${{ github.workflow }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
 
 # SECURITY: Default least-privilege permissions for all jobs.
 # Individual jobs override as needed (e.g., 'release' needs contents: write).
