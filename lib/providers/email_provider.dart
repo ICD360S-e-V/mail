@@ -248,6 +248,15 @@ class EmailProvider with ChangeNotifier {
     }
   }
 
+  /// Persist changes made to an [account] (e.g. `account.signature`)
+  /// back to encrypted disk storage and notify UI listeners. Callers
+  /// mutate the account in-place then call this; the account reference
+  /// is already inside [_accounts] so no list mutation is needed.
+  Future<void> persistAccount(EmailAccount account) async {
+    await _accountService.updateAccount(account);
+    if (!_disposed) notifyListeners();
+  }
+
   /// Update performance stats (CPU/RAM) - async to avoid blocking UI.
   /// Does NOT call notifyListeners() — performanceStats is only used
   /// by log uploads, not by any widget. Calling notifyListeners() here

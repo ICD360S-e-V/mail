@@ -1085,79 +1085,195 @@ class _MainWindowState extends State<MainWindow> {
     var privacyLevel = await SettingsService.getNotificationPrivacyLevel();
 
     if (!ctx.mounted) return;
-    await showDialog(
-      context: ctx,
-      builder: (dialogCtx) => StatefulBuilder(
-        builder: (dialogCtx, setDialogState) {
-          return ContentDialog(
-            title: const Text('Settings'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── Notification Privacy ────────────────────────
-                Text('Notification Content',
-                    style: FluentTheme.of(dialogCtx).typography.bodyStrong),
-                const SizedBox(height: 8),
-                ComboBox<NotificationPrivacyLevel>(
-                  value: privacyLevel,
-                  items: const [
-                    ComboBoxItem(
-                      value: NotificationPrivacyLevel.none,
-                      child: Text('Minimal — "New email" only'),
+
+    // Signature editor state (lives outside StatefulBuilder so the text
+    // controller survives rebuilds and is disposed exactly once).
+    final emailProvider = ctx.read<EmailProvider>();
+    final accounts = emailProvider.accounts;
+    EmailAccount? sigAccount = accounts.isEmpty
+        ? null
+        : (emailProvider.currentAccount ?? accounts.first);
+    final sigController = TextEditingController(
+      text: sigAccount?.signature.isNotEmpty == true
+          ? sigAccount!.signature
+          : EmailAccount.defaultSignatureFor(sigAccount?.username ?? ''),
+    );
+    String? sigSaveStatus;
+
+    try {
+      await showDialog(
+        context: ctx,
+        builder: (dialogCtx) => StatefulBuilder(
+          builder: (dialogCtx, setDialogState) {
+            final theme = FluentTheme.of(dialogCtx);
+            return ContentDialog(
+              title: const Text('Settings'),
+              constraints: const BoxConstraints(maxWidth: 520, maxHeight: 720),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ── Notification Privacy ────────────────────────
+                    Text('Notification Content',
+                        style: theme.typography.bodyStrong),
+                    const SizedBox(height: 8),
+                    ComboBox<NotificationPrivacyLevel>(
+                      value: privacyLevel,
+                      items: const [
+                        ComboBoxItem(
+                          value: NotificationPrivacyLevel.none,
+                          child: Text('Minimal — "New email" only'),
+                        ),
+                        ComboBoxItem(
+                          value: NotificationPrivacyLevel.senderOnly,
+                          child: Text('Sender only — "New email from Marcel"'),
+                        ),
+                        ComboBoxItem(
+                          value: NotificationPrivacyLevel.full,
+                          child: Text('Full — sender + subject'),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) {
+                          setDialogState(() => privacyLevel = v);
+                          SettingsService.setNotificationPrivacyLevel(v);
+                        }
+                      },
                     ),
-                    ComboBoxItem(
-                      value: NotificationPrivacyLevel.senderOnly,
-                      child: Text('Sender only — "New email from Marcel"'),
-                    ),
-                    ComboBoxItem(
-                      value: NotificationPrivacyLevel.full,
-                      child: Text('Full — sender + subject'),
+
+                    // ── Email Signature (per account) ────────────────
+                    if (accounts.isNotEmpty) ...[
+                      const SizedBox(height: 20),
+                      Text('Email Signature',
+                          style: theme.typography.bodyStrong),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Auto-appended to NEW compose windows after the "-- " marker. '
+                        'Stored per account.',
+                        style: TextStyle(
+                            fontSize: 11, color: theme.inactiveColor),
+                      ),
+                      const SizedBox(height: 8),
+                      ComboBox<EmailAccount>(
+                        value: sigAccount,
+                        items: accounts
+                            .map((a) => ComboBoxItem<EmailAccount>(
+                                  value: a,
+                                  child: Text(a.username),
+                                ))
+                            .toList(),
+                        onChanged: (a) {
+                          if (a == null) return;
+                          setDialogState(() {
+                            sigAccount = a;
+                            sigController.text = a.signature.isNotEmpty
+                                ? a.signature
+                                : EmailAccount.defaultSignatureFor(a.username);
+                            sigSaveStatus = null;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 220,
+                        child: TextBox(
+                          controller: sigController,
+                          maxLines: null,
+                          expands: true,
+                          textAlignVertical: TextAlignVertical.top,
+                          placeholder: 'Empty (no signature)',
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Button(
+                            onPressed: sigAccount == null
+                                ? null
+                                : () {
+                                    setDialogState(() {
+                                      sigController.text =
+                                          EmailAccount.defaultSignatureFor(
+                                              sigAccount!.username);
+                                      sigSaveStatus = null;
+                                    });
+                                  },
+                            child: const Text('Reset to default'),
+                          ),
+                          const SizedBox(width: 8),
+                          FilledButton(
+                            onPressed: sigAccount == null
+                                ? null
+                                : () async {
+                                    sigAccount!.signature = sigController.text;
+                                    await emailProvider
+                                        .persistAccount(sigAccount!);
+                                    LoggerService.log('SETTINGS',
+                                        'Signature updated for ${piiEmail(sigAccount!.username)} (${sigController.text.length} chars)');
+                                    setDialogState(() {
+                                      sigSaveStatus =
+                                          '✓ Saved at ${DateTime.now().toString().substring(11, 19)}';
+                                    });
+                                  },
+                            child: const Text('Save'),
+                          ),
+                          if (sigSaveStatus != null) ...[
+                            const SizedBox(width: 12),
+                            Text(
+                              sigSaveStatus!,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: theme.accentColor,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+
+                    const SizedBox(height: 20),
+                    // ── Factory Reset ──────────────────────────────
+                    Text('Danger Zone',
+                        style: theme.typography.bodyStrong?.copyWith(
+                          color: Colors.red,
+                        )),
+                    const SizedBox(height: 8),
+                    Button(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(FluentIcons.delete,
+                              size: 14, color: Colors.red),
+                          const SizedBox(width: 6),
+                          Text('Factory Reset',
+                              style: TextStyle(color: Colors.red)),
+                        ],
+                      ),
+                      onPressed: () async {
+                        Navigator.pop(dialogCtx);
+                        LoggerService.log('SECURITY',
+                            'User clicked factory reset from settings');
+                        _resetAutoLockTimer();
+                        await FactoryResetDialog.show(ctx);
+                      },
                     ),
                   ],
-                  onChanged: (v) {
-                    if (v != null) {
-                      setDialogState(() => privacyLevel = v);
-                      SettingsService.setNotificationPrivacyLevel(v);
-                    }
-                  },
                 ),
-
-                const SizedBox(height: 20),
-                // ── Factory Reset ──────────────────────────────
-                Text('Danger Zone',
-                    style: FluentTheme.of(dialogCtx).typography.bodyStrong?.copyWith(
-                      color: Colors.red,
-                    )),
-                const SizedBox(height: 8),
-                Button(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(FluentIcons.delete, size: 14, color: Colors.red),
-                      const SizedBox(width: 6),
-                      Text('Factory Reset', style: TextStyle(color: Colors.red)),
-                    ],
-                  ),
-                  onPressed: () async {
-                    Navigator.pop(dialogCtx);
-                    LoggerService.log('SECURITY', 'User clicked factory reset from settings');
-                    _resetAutoLockTimer();
-                    await FactoryResetDialog.show(ctx);
-                  },
+              ),
+              actions: [
+                FilledButton(
+                  child: const Text('Close'),
+                  onPressed: () => Navigator.pop(dialogCtx),
                 ),
               ],
-            ),
-            actions: [
-              FilledButton(
-                child: const Text('Close'),
-                onPressed: () => Navigator.pop(dialogCtx),
-              ),
-            ],
-          );
-        },
-      ),
-    );
+            );
+          },
+        ),
+      );
+    } finally {
+      sigController.dispose();
+    }
   }
 
   /// Show security health dialog (v2.30.2 — runs platform-aware
