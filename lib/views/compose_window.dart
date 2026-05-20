@@ -113,12 +113,24 @@ class _ComposeWindowState extends State<ComposeWindow> {
     _subjectController = TextEditingController(
       text: widget.replySubject ?? '',
     );
-    _bodyController = TextEditingController(text: widget.initialBody ?? '');
 
-    // Set default account
+    // Set default account FIRST — needed below to seed signature.
     final emailProvider = context.read<EmailProvider>();
     _selectedAccount = emailProvider.currentAccount;
     LoggerService.log('COMPOSE', 'Default account: ${_selectedAccount != null ? piiEmail(_selectedAccount!.username) : "none"}');
+
+    // Body seed: replies/forwards already carry quoted text in initialBody —
+    // leave those untouched. New empty composes get the account signature
+    // pre-pended, separated by the RFC 3676 "-- " sigdash marker so MUAs
+    // can fold/strip it. Cursor lands at row 0 so the user types above.
+    final sig = _selectedAccount?.signature ?? '';
+    final hasInitialBody = (widget.initialBody ?? '').isNotEmpty;
+    if (!hasInitialBody && sig.isNotEmpty) {
+      _bodyController = TextEditingController(text: '\n\n-- \n$sig');
+      _bodyController.selection = const TextSelection.collapsed(offset: 0);
+    } else {
+      _bodyController = TextEditingController(text: widget.initialBody ?? '');
+    }
 
     // Start auto-save timer (every 5 seconds)
     _autoSaveTimer = Timer.periodic(const Duration(seconds: 5), (_) => _autoSaveDraft());

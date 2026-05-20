@@ -26,6 +26,12 @@ class EmailAccount {
   bool isActive;
   int inboxCount;
 
+  /// Signature auto-appended to new outgoing emails (after RFC 3676 "-- " marker).
+  /// Stored per-account so switching accounts in compose swaps the signature.
+  /// Empty by default; populated either via account settings UI or
+  /// [defaultSignatureFor] for known accounts.
+  String signature;
+
   // Folders fetched from server (not serialized, loaded dynamically)
   List<String> folders;
 
@@ -50,6 +56,7 @@ class EmailAccount {
     this.lastFolder = 'INBOX',
     this.isActive = true,
     this.inboxCount = 0,
+    this.signature = '',
     List<String>? folders,
     Map<String, int>? folderCounts,
     this.connectionStatus = AccountConnectionStatus.unknown,
@@ -68,6 +75,7 @@ class EmailAccount {
       'lastFolder': lastFolder,
       'isActive': isActive,
       'inboxCount': inboxCount,
+      'signature': signature,
       // Note: folders, folderCounts, and password are not serialized
     };
   }
@@ -83,7 +91,52 @@ class EmailAccount {
       lastFolder: json['lastFolder'] as String? ?? 'INBOX',
       isActive: json['isActive'] as bool? ?? true,
       inboxCount: json['inboxCount'] as int? ?? 0,
+      signature: (json['signature'] as String?) ??
+          defaultSignatureFor(json['username'] as String? ?? ''),
     );
+  }
+
+  /// Built-in default signature for known ICD360S e.V. mailboxes. Used as
+  /// fallback when no stored signature exists yet (one-time migration for
+  /// installs upgrading to client versions that introduce signature support).
+  /// Returns '' for unknown accounts.
+  static String defaultSignatureFor(String username) {
+    final addr = username.toLowerCase();
+    if (addr == 'icd@icd360s.de') {
+      // Mandatory disclosures per § 5 TMG / § 26 BGB for an eingetragener
+      // Verein: full association name, business address, Vertretungsberechtigter
+      // (Vorstand) and Vereinsregister (court + VR-Nr). Tagline is the
+      // association's official acronym expansion (Integration · Chancen ·
+      // Diversity · 360° Support) as shown on icd360s.de header.
+      return '''Freundliche Grüße
+
+Ionuț Claudiu Duinea
+1. Vorsitzender
+____________________________________________
+
+
+ICD360S e.V.
+Eingetragener gemeinnütziger Verein
+
+c/o Ionuț-Claudiu Duinea
+Elsa-Brändström-Str. 13
+89231 Neu-Ulm
+
+E-Mail:    icd@icd360s.de
+Internet:  www.icd360s.de
+
+Amtsgericht Memmingen · VR 201335
+Gemeinnützig anerkannt
+
+Integration · Chancen · Diversity
+360° Support
+____________________________________________
+Diese E-Mail ist ausschließlich für den Adressaten/die Adressatin bestimmt
+und kann vertrauliche oder gesetzlich geschützte Informationen enthalten.
+Wenn Sie nicht der/die bestimmungsgemäße Adressat/-in sind, unterrichten
+Sie bitte den Absender/die Absenderin und vernichten Sie diese E-Mail.''';
+    }
+    return '';
   }
 
   /// Create a copy of this account with optional field modifications
@@ -96,6 +149,7 @@ class EmailAccount {
     String? lastFolder,
     bool? isActive,
     int? inboxCount,
+    String? signature,
     List<String>? folders,
     Map<String, int>? folderCounts,
     AccountConnectionStatus? connectionStatus,
@@ -110,6 +164,7 @@ class EmailAccount {
       lastFolder: lastFolder ?? this.lastFolder,
       isActive: isActive ?? this.isActive,
       inboxCount: inboxCount ?? this.inboxCount,
+      signature: signature ?? this.signature,
       folders: folders ?? List.from(this.folders),
       folderCounts: folderCounts ?? Map.from(this.folderCounts),
       connectionStatus: connectionStatus ?? this.connectionStatus,
