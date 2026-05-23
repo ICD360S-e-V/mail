@@ -136,3 +136,19 @@ promote-version-json.service
 promote-version-json.path
 sync-numeric-aliases.sh
 create_email_account.sh
+mail.icd360s.de.grub-password
+
+# Sentry self-hosted + journal-upload recovery + CIS scan automation +
+# haproxy crypto drop-in + ClickHouse IPv4-only override — server-side
+# files staged in this repo's root for editing; deployed to mail.icd360s.de
+# via scp. See [[sentry-wiring-mail]], [[journal-upload-auto-recover]],
+# [[cis-scan-automation]], [[sentry-clickhouse-ipv4-only]] in memory.
+30-haproxy.conf
+auto-recover.conf
+cis-scan.service
+cis-scan.sh
+cis-scan.timer
+clickhouse-listen-ipv4-only.xml
+docker-compose.override.yml
+journal-upload-recover.service
+journal-upload-recover.sh

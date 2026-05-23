@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.138.0 - 2026-05-23
+#### Features
+- (**sentry**) integrate crash + perf monitoring with PII scrub (#49) - (afafdbd) - icd360sevofficial, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.137.1 - 2026-05-20
 #### Bug Fixes
 - (**ci**) tag-isolated concurrency + fail loudly when RELEASE_PAT is unset (#48) - (836c032) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*

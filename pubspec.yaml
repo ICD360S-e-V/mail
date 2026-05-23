@@ -2,7 +2,7 @@ name: icd360s_mail_client
 description: "ICD360S Mail Client - Modern email client with threat detection"
 publish_to: 'none'
 
-version: 2.137.1+1309
+version: 2.138.0+1311
 
 environment:
   sdk: ^3.10.0
@@ -90,6 +90,12 @@ dependencies:
   # Root/jailbreak detection (mobile only, no external telemetry)
   safe_device: ^1.1.0
 
+  # Sentry crash reporting + perf monitoring.
+  # Self-hosted instance at https://sentry-mail.icd360s.de (project ID 3,
+  # mail-client-app). PII scrubbed in beforeSend hook (lib/main.dart) —
+  # NO IP, NO user email, NO request headers/cookies sent.
+  sentry_flutter: ^9.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -108,7 +114,7 @@ msix_config:
   publisher_display_name: ICD360S e.V.
   publisher: CN=ICD360S
   identity_name: ICD360S.MailClient
-  msix_version: 2.137.1.1309
+  msix_version: 2.138.0.1311
   capabilities: internetClient
   protocol_activation: mailto
 
