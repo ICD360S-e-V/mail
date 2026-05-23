@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.138.1 - 2026-05-23
+#### CI/Build
+- (**sentry**) inject SENTRY_DSN + release tag in 5 platform builds (#50) - (d120229) - icd360sevofficial, *Claude Opus 4.7 (1M context)*
+
+Re-release of v2.138.0 with Sentry SDK actually active in shipped builds. The v2.138.0 tag was created from a workflow that did not pass --dart-define=SENTRY_DSN to flutter build, so its shipped binaries (which never reached upload due to a separate lockfile race) would have run Sentry as a no-op. This release fixes that.
+
+- - -
+
 ## v2.138.0 - 2026-05-23
 #### Features
 - (**sentry**) integrate crash + perf monitoring with PII scrub (#49) - (afafdbd) - icd360sevofficial, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
