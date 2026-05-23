@@ -4,7 +4,6 @@
 import 'dart:async';
 import 'dart:ffi' as ffi;
 import 'dart:io';
-import 'package:cryptography_flutter/cryptography_flutter.dart';
 import 'package:no_screenshot/no_screenshot.dart';
 import 'package:safe_device/safe_device.dart';
 import 'package:sodium/sodium_sumo.dart';
@@ -12,6 +11,7 @@ import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:path/path.dart' as p;
 import 'generated/app_localizations.dart';
@@ -96,18 +96,37 @@ class _CrashErrorApp extends StatelessWidget {
 }
 
 void main() async {
-  // Global error handler — catches crashes on custom ROMs (GrapheneOS etc.)
-  // Shows actual error on screen instead of grey screen
-  runZonedGuarded(() async {
-    try {
-      await _appMain();
-    } catch (ex, stack) {
-      LoggerService.logError('FATAL_MAIN', ex, stack);
-      runApp(_CrashErrorApp('$ex\n\n$stack'));
-    }
-  }, (error, stack) {
-    LoggerService.logError('FATAL_ZONE', error, stack);
-  });
+  await SentryFlutter.init(
+    (options) {
+      options.dsn = 'https://4aa6338a8fb55197d7b2594ed6e24969@sentry-mail.icd360s.de/3';
+      options.environment = kReleaseMode ? 'production' : 'development';
+      options.tracesSampleRate = 0.1;
+      options.sendDefaultPii = false;
+      options.attachStacktrace = true;
+      options.attachScreenshot = false;
+      options.attachViewHierarchy = false;
+      options.enableAutoNativeBreadcrumbs = false;
+      options.beforeSend = (event, hint) {
+        event.request?.headers.clear();
+        event.request?.cookies = null;
+        return event.copyWith(user: null);
+      };
+    },
+    appRunner: () {
+      runZonedGuarded(() async {
+        try {
+          await _appMain();
+        } catch (ex, stack) {
+          LoggerService.logError('FATAL_MAIN', ex, stack);
+          await Sentry.captureException(ex, stackTrace: stack);
+          runApp(_CrashErrorApp('$ex\n\n$stack'));
+        }
+      }, (error, stack) {
+        LoggerService.logError('FATAL_ZONE', error, stack);
+        Sentry.captureException(error, stackTrace: stack);
+      });
+    },
+  );
 }
 
 Future<void> _checkDeviceIntegrity() async {
@@ -170,13 +189,10 @@ Future<void> _checkDeviceIntegrity() async {
 Future<void> _appMain() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // SECURITY (B5, v2.30.0): enable platform-native crypto acceleration
-  // for Argon2id / AES-GCM / HKDF used by MasterVault. On macOS this
-  // routes Argon2id through CommonCrypto and gets ~100x speedup vs
-  // the pure Dart implementation, bringing unlock latency from
-  // ~2-3 seconds to ~200 ms with the Bitwarden-recommended 64 MiB /
-  // 3 iters / 4 threads parameters.
-  FlutterCryptography.enable();
+  // SECURITY (B5, v2.30.0): cryptography_flutter still in pubspec — provides
+  // platform-native crypto acceleration for Argon2id / AES-GCM / HKDF used by
+  // MasterVault (macOS CommonCrypto = ~100x speedup, unlock ~200ms vs ~2-3s).
+  // Flutter auto-enables the plugin now — no explicit FlutterCryptography.enable() needed.
 
   // Initialize libsodium on all platforms (SecureKey, pwhash).
   MasterVault.sodium = await SodiumSumoInit.init();
