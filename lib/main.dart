@@ -98,12 +98,30 @@ class _CrashErrorApp extends StatelessWidget {
 void main() async {
   await SentryFlutter.init(
     (options) {
-      options.dsn = 'https://4aa6338a8fb55197d7b2594ed6e24969@sentry-mail.icd360s.de/3';
+      // DSN injected at build time via --dart-define=SENTRY_DSN=...
+      // (see .github/workflows/build-all-platforms.yml). Default falls
+      // back to the project 3 DSN so local `flutter run` still sends
+      // to Sentry; rotate by updating the GitHub secret SENTRY_DSN.
+      options.dsn = const String.fromEnvironment(
+        'SENTRY_DSN',
+        defaultValue:
+            'https://4aa6338a8fb55197d7b2594ed6e24969@sentry-mail.icd360s.de/3',
+      );
+      // Release tag injected at build time via --dart-define=SENTRY_RELEASE=…
+      // Format: mail-client-app@{version}+{build}, kept in sync with pubspec
+      // by CI (build.yml uses ${{ github.ref_name }} + ${{ github.run_number }}).
+      // Dev fallback prevents Release Health from grouping ad-hoc runs with a
+      // real shipped version.
+      options.release = const String.fromEnvironment(
+        'SENTRY_RELEASE',
+        defaultValue: 'mail-client-app@dev',
+      );
       options.environment = kReleaseMode ? 'production' : 'development';
       options.tracesSampleRate = 0.1;
       options.sendDefaultPii = false;
       options.attachStacktrace = true;
       options.attachScreenshot = false;
+      // ignore: experimental_member_use
       options.attachViewHierarchy = false;
       options.enableAutoNativeBreadcrumbs = false;
       options.beforeSend = (event, hint) {
