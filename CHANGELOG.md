@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.138.3 - 2026-05-24
+#### Bug Fixes
+- (**sentry**) pre-bind Flutter engine to fix Windows startup hang (#52) - (0fc3d91) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.138.2 - 2026-05-23
 #### Bug Fixes
 - (**sentry**) use --dart-define for DSN/release + ignore experimental warning (#51) - (ad72ae4) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
