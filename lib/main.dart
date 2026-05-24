@@ -96,6 +96,16 @@ class _CrashErrorApp extends StatelessWidget {
 }
 
 void main() async {
+  // CRITICAL (Windows hang fix): bind to the Flutter engine via Sentry's
+  // wrapper BEFORE awaiting SentryFlutter.init. Without this, sentry-native
+  // can block startup indefinitely on Windows (no window ever shown,
+  // process sits idle with 20 threads in WaitForSingleObject) — observed
+  // 2026-05-24 with v2.138.2 on Windows Server 2025. Reproduced reliably:
+  // remove this line → install → run → 0 windows in 30s. With this line
+  // → window appears in ~1s. See sentry-dart#2491 — official workaround
+  // until sentry_flutter fixes the underlying race in their async init.
+  SentryWidgetsFlutterBinding.ensureInitialized();
+
   await SentryFlutter.init(
     (options) {
       // DSN injected at build time via --dart-define=SENTRY_DSN=...
