@@ -32,7 +32,13 @@ permissions:
   contents: read
 
 env:
-  FLUTTER_VERSION: "3.41.4"
+  # Bumped 3.41.4 → 3.41.9 to fix Windows startup hang (v2.138.2..v2.138.5
+  # series). Reproduced empirically: same source code builds a non-hanging
+  # Windows .exe on Flutter 3.41.9 and a hanging one on 3.41.4. The
+  # difference is in flutter_windows.dll (engine) — likely a platform
+  # channel race in early init that 3.41.9 fixed. See PRs #52, #54, #55
+  # for false-lead theories before the version mismatch was identified.
+  FLUTTER_VERSION: "3.41.9"
   JAVA_VERSION: "17"
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
