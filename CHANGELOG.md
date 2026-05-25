@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.138.6 - 2026-05-25
+#### Bug Fixes
+- (**ci**) bump Flutter 3.41.4 → 3.41.9 to fix Windows startup hang (#56) - (da8bc7f) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.138.5 - 2026-05-25
 #### Bug Fixes
 - (**plugins**) commit regenerated registrants — sentry_flutter native plugin was unregistered, causing Windows startup hang (#55) - (4a86b4f) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
