@@ -53,6 +53,13 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 ; Main executable
 Source: "..\build\windows\x64\runner\Release\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
+; Sentry-native out-of-process crash handler. Without it, sentry-native
+; init hangs indefinitely on Windows (no window ever shown — observed in
+; v2.138.2 / v2.138.3 installs where the previous .iss glob excluded
+; secondary .exe files). The Dart-side SentryFlutter.init blocks waiting
+; for crashpad_handler.exe to be spawned next to the main executable.
+Source: "..\build\windows\x64\runner\Release\crashpad_handler.exe"; DestDir: "{app}"; Flags: ignoreversion
+
 ; Flutter engine and dependencies
 Source: "..\build\windows\x64\runner\Release\*.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\build\windows\x64\runner\Release\data\*"; DestDir: "{app}\data"; Flags: ignoreversion recursesubdirs createallsubdirs
