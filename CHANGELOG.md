@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.138.7 - 2026-05-26
+#### Bug Fixes
+- (**ci**) bump pinned Flutter SHA to 3.41.9 to unblock iOS+macOS+Deploy (#57) - (79b41ed) - icd360sevofficial, *Claude Opus 4.7 (1M context)*, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.138.6 - 2026-05-25
 #### Bug Fixes
 - (**ci**) bump Flutter 3.41.4 → 3.41.9 to fix Windows startup hang (#56) - (da8bc7f) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
