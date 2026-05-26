@@ -619,7 +619,11 @@ jobs:
         run: |
           FLUTTER_ZIP="flutter_macos_${FL_VER}-stable.zip"
           FLUTTER_URL="https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/${FLUTTER_ZIP}"
-          EXPECTED_SHA="05fd35d2e4c29def0acb02e08e4faa6853115c3d9cf05c4e30c7e687b51f746d"
+          # Flutter 3.41.9 macOS x64 zip SHA-256. Update in lockstep with
+          # FLUTTER_VERSION above; otherwise iOS+macOS jobs fail at
+          # integrity check and Deploy to VPS gets skipped (broke v2.138.6).
+          # Fetch latest: curl .../releases_macos.json | jq for the SHA.
+          EXPECTED_SHA="eaee3b6aa6da114eb0be843ac53f4f138d3d8827779ff1e4546b345c75b9cba1"
           curl -fsSL -o "$FLUTTER_ZIP" "$FLUTTER_URL"
           ACTUAL_SHA=$(shasum -a 256 "$FLUTTER_ZIP" | cut -d' ' -f1)
           if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
@@ -723,7 +727,11 @@ jobs:
         run: |
           FLUTTER_ZIP="flutter_macos_${FL_VER}-stable.zip"
           FLUTTER_URL="https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/${FLUTTER_ZIP}"
-          EXPECTED_SHA="05fd35d2e4c29def0acb02e08e4faa6853115c3d9cf05c4e30c7e687b51f746d"
+          # Flutter 3.41.9 macOS x64 zip SHA-256. Update in lockstep with
+          # FLUTTER_VERSION above; otherwise iOS+macOS jobs fail at
+          # integrity check and Deploy to VPS gets skipped (broke v2.138.6).
+          # Fetch latest: curl .../releases_macos.json | jq for the SHA.
+          EXPECTED_SHA="eaee3b6aa6da114eb0be843ac53f4f138d3d8827779ff1e4546b345c75b9cba1"
           curl -fsSL -o "$FLUTTER_ZIP" "$FLUTTER_URL"
           ACTUAL_SHA=$(shasum -a 256 "$FLUTTER_ZIP" | cut -d' ' -f1)
           if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
