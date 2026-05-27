@@ -95,6 +95,33 @@ class _CrashErrorApp extends StatelessWidget {
   }
 }
 
+/// Starts the actual app (zone-guarded so crashes anywhere downstream
+/// route into the same handler). Idempotent at the runApp layer — calling
+/// it twice would just rebuild the widget tree; the [_appRunStarted] guard
+/// in [main] makes sure it only ever runs once per process.
+void _safeAppRun({bool sentryActive = true}) {
+  runZonedGuarded(() async {
+    try {
+      await _appMain();
+    } catch (ex, stack) {
+      LoggerService.logError('FATAL_MAIN', ex, stack);
+      if (sentryActive) {
+        try {
+          await Sentry.captureException(ex, stackTrace: stack);
+        } catch (_) {/* Sentry itself broken — already logged */}
+      }
+      runApp(_CrashErrorApp('$ex\n\n$stack'));
+    }
+  }, (error, stack) {
+    LoggerService.logError('FATAL_ZONE', error, stack);
+    if (sentryActive) {
+      try {
+        Sentry.captureException(error, stackTrace: stack);
+      } catch (_) {/* same */}
+    }
+  });
+}
+
 void main() async {
   // CRITICAL (Windows hang fix): bind to the Flutter engine via Sentry's
   // wrapper BEFORE awaiting SentryFlutter.init. Without this, sentry-native
@@ -106,55 +133,93 @@ void main() async {
   // until sentry_flutter fixes the underlying race in their async init.
   SentryWidgetsFlutterBinding.ensureInitialized();
 
-  await SentryFlutter.init(
-    (options) {
-      // DSN injected at build time via --dart-define=SENTRY_DSN=...
-      // (see .github/workflows/build-all-platforms.yml). Default falls
-      // back to the project 3 DSN so local `flutter run` still sends
-      // to Sentry; rotate by updating the GitHub secret SENTRY_DSN.
-      options.dsn = const String.fromEnvironment(
-        'SENTRY_DSN',
-        defaultValue:
-            'https://4aa6338a8fb55197d7b2594ed6e24969@sentry-mail.icd360s.de/3',
-      );
-      // Release tag injected at build time via --dart-define=SENTRY_RELEASE=…
-      // Format: mail-client-app@{version}+{build}, kept in sync with pubspec
-      // by CI (build.yml uses ${{ github.ref_name }} + ${{ github.run_number }}).
-      // Dev fallback prevents Release Health from grouping ad-hoc runs with a
-      // real shipped version.
-      options.release = const String.fromEnvironment(
-        'SENTRY_RELEASE',
-        defaultValue: 'mail-client-app@dev',
-      );
-      options.environment = kReleaseMode ? 'production' : 'development';
-      options.tracesSampleRate = 0.1;
-      options.sendDefaultPii = false;
-      options.attachStacktrace = true;
-      options.attachScreenshot = false;
-      // ignore: experimental_member_use
-      options.attachViewHierarchy = false;
-      options.enableAutoNativeBreadcrumbs = false;
-      options.beforeSend = (event, hint) {
-        event.request?.headers.clear();
-        event.request?.cookies = null;
-        return event.copyWith(user: null);
-      };
-    },
-    appRunner: () {
-      runZonedGuarded(() async {
-        try {
-          await _appMain();
-        } catch (ex, stack) {
-          LoggerService.logError('FATAL_MAIN', ex, stack);
-          await Sentry.captureException(ex, stackTrace: stack);
-          runApp(_CrashErrorApp('$ex\n\n$stack'));
-        }
-      }, (error, stack) {
-        LoggerService.logError('FATAL_ZONE', error, stack);
-        Sentry.captureException(error, stackTrace: stack);
-      });
-    },
-  );
+  // Defense-in-depth: NEVER let SentryFlutter.init block the app from
+  // showing UI. Observed in v2.138.2..v2.138.7:
+  //   - Windows: native-side spawn race → 0 windows ever
+  //   - Android: same pattern → stuck at Flutter splash logo
+  // Even though each of those had a "fix" (binding pre-init, crashpad in
+  // installer, plugin registrants, Flutter version bump, pinned SHA),
+  // any future regression in sentry_flutter, sentry-native, or the
+  // platform-channel layer would brick the app again with no recovery.
+  //
+  // Pattern: 10-second timeout on init + guard flag. If init either
+  // throws or never resolves, we run the app WITHOUT Sentry. Worst case:
+  // crash reports stop flowing for that session; app still works.
+  var appRunStarted = false;
+  void startAppOnce({required bool sentryActive}) {
+    if (appRunStarted) return;
+    appRunStarted = true;
+    _safeAppRun(sentryActive: sentryActive);
+  }
+
+  try {
+    await SentryFlutter.init(
+      (options) {
+        options.dsn = const String.fromEnvironment(
+          'SENTRY_DSN',
+          defaultValue:
+              'https://4aa6338a8fb55197d7b2594ed6e24969@sentry-mail.icd360s.de/3',
+        );
+        options.release = const String.fromEnvironment(
+          'SENTRY_RELEASE',
+          defaultValue: 'mail-client-app@dev',
+        );
+        options.environment = kReleaseMode ? 'production' : 'development';
+        options.tracesSampleRate = 0.1;
+        options.sendDefaultPii = false;
+        options.attachStacktrace = true;
+        options.attachScreenshot = false;
+        // ignore: experimental_member_use
+        options.attachViewHierarchy = false;
+        options.enableAutoNativeBreadcrumbs = false;
+
+        // CRITICAL — native crash handling OFF on Android (and as a
+        // by-product disables sentry-native crashpad spawn on Windows
+        // too, which was the v2.138.2..v2.138.7 hang root cause).
+        //
+        // sentry_flutter 8.11.0 introduced native crash capture via
+        // sentry-android-ndk / sentry-native. On Android release builds
+        // (especially Profile/Release with R8) the NDK init can block
+        // the main thread permanently — app stays on Flutter splash
+        // forever, appRunner never invoked. See sentry-dart#2499 +
+        // #2491. The 9.x line claims to fix it but reports keep coming
+        // (observed 2026-05 on our own v2.138.7 Android APK).
+        //
+        // Trade-off:
+        //   - We LOSE native segfaults / Android ANR / Windows crashpad
+        //     crash capture. Dart-level uncaught exceptions, async
+        //     errors, and explicit Sentry.captureException calls are
+        //     STILL captured normally.
+        //   - The 2 GB RAM leak hunt (original Sentry motivation) is
+        //     observable via performance traces + Dart exceptions —
+        //     not affected.
+        // Net: app stays runnable, Sentry still useful, no SDK hangs.
+        options.enableNativeCrashHandling = false;
+        // Disable ANR detection too — its watcher thread is a frequent
+        // suspect in startup races on Android even when native crash
+        // handling alone isn't the trigger. Off by default before 9.0;
+        // we go back to the pre-9.0 behavior. Re-enable when
+        // sentry_flutter#2499 is officially closed.
+        options.anrEnabled = false;
+        options.beforeSend = (event, hint) {
+          event.request?.headers.clear();
+          event.request?.cookies = null;
+          return event.copyWith(user: null);
+        };
+      },
+      appRunner: () => startAppOnce(sentryActive: true),
+    ).timeout(const Duration(seconds: 10));
+  } catch (ex, stack) {
+    // Init threw OR timed out. Either way: log + run without Sentry so
+    // the user sees a working UI instead of a Flutter splash forever.
+    LoggerService.logError('SENTRY_INIT_FAILED_FALLBACK', ex, stack);
+    startAppOnce(sentryActive: false);
+  }
+
+  // Belt-and-suspenders: if SentryFlutter.init RESOLVED but the appRunner
+  // callback was never invoked for some reason (SDK internal bug), force
+  // the app to start so we never end up showing only a splash screen.
+  startAppOnce(sentryActive: false);
 }
 
 Future<void> _checkDeviceIntegrity() async {
