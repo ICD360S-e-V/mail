@@ -189,10 +189,24 @@ jobs:
       - name: Install Linux dependencies
         run: |
           sudo apt-get update
-          # libcurl4-openssl-dev: sentry-native (sentry_flutter desktop backend)
-          # links libcurl at compile time. Without it, CMake fails with
-          # "Could NOT find CURL (missing: CURL_LIBRARY CURL_INCLUDE_DIR)".
-          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev libsecret-1-dev libcurl4-openssl-dev rpm ruby-dev
+          # Build-time deps:
+          #   libcurl4-openssl-dev    sentry-native links libcurl at compile
+          #                           ("Could NOT find CURL ..." without it)
+          #   libayatana-appindicator3-dev  required when the Flatpak bundles
+          #                           libayatana-appindicator (KDE/GNOME tray);
+          #                           keeps headers in path so the bundle's
+          #                           glue compiles cleanly
+          #   libjsoncpp-dev          some Flutter desktop plugins pull it in
+          #                           transitively; explicit avoids "fatal
+          #                           error: json/json.h" on plugin updates
+          sudo apt-get install -y \
+            clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev libstdc++-12-dev \
+            libsecret-1-dev libsecret-1-0 \
+            libcurl4-openssl-dev \
+            libayatana-appindicator3-dev \
+            libjsoncpp-dev \
+            rpm ruby-dev
           sudo gem install fpm
 
       - name: Cache native build hooks (sodium)
@@ -356,6 +370,19 @@ jobs:
             rm -rf "$GNUPGHOME"
           fi
 
+      # Raw bundle tarball for toolbox / portable / dev install — no
+      # packaging metadata, just the binary tree (`./icd360s_mail_client`
+      # + .so deps + data/). User extracts and runs from a Fedora
+      # Silverblue/Kinoite toolbox container with libgtk + libsecret
+      # available in the toolbox image.
+      - name: Build raw .tar.gz bundle
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //;s/+.*//')
+          TAR_NAME="ICD360S-Mail-Client-${VERSION}-linux-x64.tar.gz"
+          tar -C build/linux/x64/release -czf "$TAR_NAME" bundle/
+          echo "Tarball: $TAR_NAME ($(du -h "$TAR_NAME" | cut -f1))"
+          ls -la "$TAR_NAME"
+
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
@@ -365,7 +392,20 @@ jobs:
             *.deb
             *.rpm
             *.AppImage
+            *-linux-x64.tar.gz
           retention-days: 30
+
+      # Separate artifact with ONLY the raw bundle directory, named
+      # `linux-bundle`, consumed by the `build-flatpak` job downstream.
+      # Keeping it separate avoids the Flatpak job having to download
+      # the full .deb/.rpm/.AppImage zoo (saves ~80MB per run).
+      - name: Upload Linux bundle (for Flatpak job)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: linux-bundle
+          path: build/linux/x64/release/bundle/
+          retention-days: 7
+          if-no-files-found: error
 
       - name: Linux build summary
         if: always()
@@ -416,6 +456,84 @@ jobs:
         with:
           path: .cache-marker-linux
           key: build-success-linux-${{ steps.hashes.outputs.linux_hash }}
+
+  # ============================================================
+  # Flatpak Build (Fedora Silverblue / Kinoite primary target)
+  # Consumes `linux-bundle` artifact from build-linux. Uses Flathub's
+  # shared-modules for libayatana-appindicator (don't invent SHA-256s
+  # for libs that already have upstream-maintained module definitions).
+  # ============================================================
+  build-flatpak:
+    name: Flatpak
+    needs: [detect-changes, build-linux]
+    if: needs.detect-changes.outputs.linux_changed == 'true'
+    runs-on: ubuntu-latest
+    container:
+      image: bilelmoussaoui/flatpak-github-actions:freedesktop-24.08
+      options: --privileged
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Download Linux bundle
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: linux-bundle
+          path: flatpak/bundle
+
+      - name: Restore executable bit on bundle binary
+        run: |
+          # GitHub artifacts preserve content but strip POSIX exec bit;
+          # the manifest's chmod +x runs at build time but flatpak-builder
+          # also wants the source file to be readable as-is.
+          chmod +x flatpak/bundle/icd360s_mail_client
+          ls -la flatpak/bundle/icd360s_mail_client
+
+      - name: Clone Flathub shared-modules
+        run: |
+          git clone --depth 1 --branch master \
+            https://github.com/flathub/shared-modules.git \
+            flatpak/shared-modules
+          # Sanity: the file we reference in the manifest must exist
+          test -f flatpak/shared-modules/libayatana-appindicator/libayatana-appindicator-gtk3.json
+
+      - name: Compute version for bundle filename
+        id: ver
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //;s/+.*//')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build Flatpak bundle
+        uses: flatpak/flatpak-github-actions/flatpak-builder@401fe28a8384095fc1531b9d320b292f0ee45adb # v6.7
+        with:
+          bundle: ICD360S-Mail-Client-${{ steps.ver.outputs.version }}.flatpak
+          manifest-path: flatpak/de.icd360s.mailclient.yml
+          cache-key: flatpak-builder-${{ github.sha }}
+
+      - name: Upload Flatpak bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: flatpak-build
+          path: ICD360S-Mail-Client-*.flatpak
+          retention-days: 30
+
+      - name: Flatpak build summary
+        if: always()
+        run: |
+          {
+            echo "## 📦 Flatpak Build Summary"
+            echo ""
+            for f in ICD360S-Mail-Client-*.flatpak; do
+              if [ -f "$f" ]; then
+                SIZE=$(du -h "$f" | cut -f1)
+                echo "| Artifact | Size |"
+                echo "|---|---:|"
+                echo "| \`$f\` | $SIZE |"
+              fi
+            done
+            echo ""
+            echo "Manifest: \`flatpak/de.icd360s.mailclient.yml\`"
+            echo "Runtime: \`org.freedesktop.Platform//24.08\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ============================================================
   # Android Build - Per-flavor APKs + AAB, each on dedicated runner
@@ -987,7 +1105,7 @@ jobs:
   # ============================================================
   deploy:
     name: Deploy to VPS
-    needs: [build-linux, build-android, android-cache-save, build-ios, build-macos, build-windows]
+    needs: [build-linux, build-flatpak, build-android, android-cache-save, build-ios, build-macos, build-windows]
     # Only deploy on tagged releases (v*). No manual approval gate — intentional.
     if: startsWith(github.ref, 'refs/tags/v') && !cancelled() && !failure()
     runs-on: ubuntu-latest
@@ -1028,8 +1146,14 @@ jobs:
           # Linux
           mkdir -p "${DEPLOY_DIR}/linux"
           if [ -d "artifacts/linux-build" ]; then
-            # tar.gz from bundle
-            if [ -d "artifacts/linux-build/build/linux/x64/release/bundle" ]; then
+            # tar.gz — prefer the one built in the Linux job (versioned
+            # filename, contains the `bundle/` directory structure that
+            # toolbox users expect). Fall back to re-creating from bundle
+            # if the job's tar didn't end up in the artifact tree.
+            TAR=$(find "artifacts/linux-build" -maxdepth 1 -name "*-linux-x64.tar.gz" | head -1)
+            if [ -n "$TAR" ]; then
+              cp "$TAR" "${DEPLOY_DIR}/linux/icd360s-mail-linux.tar.gz"
+            elif [ -d "artifacts/linux-build/build/linux/x64/release/bundle" ]; then
               tar -czf "${DEPLOY_DIR}/linux/icd360s-mail-linux.tar.gz" -C artifacts/linux-build/build/linux/x64/release/bundle .
             fi
             # .deb
@@ -1041,6 +1165,13 @@ jobs:
             # AppImage
             APPIMAGE=$(find "artifacts/linux-build" -maxdepth 1 -name "*.AppImage" | head -1)
             [ -n "$APPIMAGE" ] && cp "$APPIMAGE" "${DEPLOY_DIR}/linux/icd360s-mail.AppImage"
+          fi
+
+          # Flatpak (single-file bundle, sandboxed; primary install for
+          # Fedora Silverblue / Kinoite users who can't install .rpm/.deb)
+          if [ -d "artifacts/flatpak-build" ]; then
+            FLATPAK=$(find "artifacts/flatpak-build" -maxdepth 1 -name "*.flatpak" | head -1)
+            [ -n "$FLATPAK" ] && cp "$FLATPAK" "${DEPLOY_DIR}/linux/icd360s-mail.flatpak"
           fi
 
           # Windows (.exe installer)
@@ -1107,6 +1238,8 @@ jobs:
           WINDOWS_HASH=$(sha_of "${DEPLOY_DIR}/windows/icd360s-mail-setup.exe")
           MACOS_HASH=$(sha_of "${DEPLOY_DIR}/macos/icd360s-mail.dmg")
           LINUX_HASH=$(sha_of "${DEPLOY_DIR}/linux/icd360s-mail.AppImage")
+          LINUX_TARGZ_HASH=$(sha_of "${DEPLOY_DIR}/linux/icd360s-mail-linux.tar.gz")
+          LINUX_FLATPAK_HASH=$(sha_of "${DEPLOY_DIR}/linux/icd360s-mail.flatpak")
           IOS_HASH=$(sha_of "${DEPLOY_DIR}/ios/icd360s-mail.ipa")
 
           CHANGELOG="Automated build for ${GITHUB_REF_NAME}. See https://github.com/${GITHUB_REPOSITORY}/releases/tag/${GITHUB_REF_NAME} for full release notes."
@@ -1118,12 +1251,16 @@ jobs:
             "download_url_macos": "https://mail.icd360s.de/downloads/mail/macos/icd360s-mail.dmg",
             "download_url_android": "https://mail.icd360s.de/downloads/mail/android/universal/app-arm64-v8a-universal-release.apk",
             "download_url_linux": "https://mail.icd360s.de/downloads/mail/linux/icd360s-mail.AppImage",
+            "download_url_linux_targz": "https://mail.icd360s.de/downloads/mail/linux/icd360s-mail-linux.tar.gz",
+            "download_url_linux_flatpak": "https://mail.icd360s.de/downloads/mail/linux/icd360s-mail.flatpak",
             "download_url_ios": "https://mail.icd360s.de/downloads/mail/ios/icd360s-mail.ipa",
             "changelog": "${CHANGELOG}",
             "sha256": "${WINDOWS_HASH}",
             "sha256_macos": "${MACOS_HASH}",
             "sha256_android": "${ANDROID_HASH}",
             "sha256_linux": "${LINUX_HASH}",
+            "sha256_linux_targz": "${LINUX_TARGZ_HASH}",
+            "sha256_linux_flatpak": "${LINUX_FLATPAK_HASH}",
             "sha256_ios": "${IOS_HASH}"
           }
           EOF
@@ -1291,13 +1428,25 @@ jobs:
           mkdir -p release
 
           # Linux
-          if [ -d "artifacts/linux-build/build/linux/x64/release/bundle" ]; then
+          # Prefer the versioned tar.gz built in the Linux job (proper
+          # filename, contains `bundle/` directory). Fall back to
+          # re-tar from the raw bundle if the job's tar isn't present.
+          TAR=$(find artifacts/linux-build/ -maxdepth 1 -name "*-linux-x64.tar.gz" | head -1)
+          if [ -n "$TAR" ]; then
+            cp "$TAR" "release/ICD360S-Mail-Client-${VERSION}-linux-x64.tar.gz"
+          elif [ -d "artifacts/linux-build/build/linux/x64/release/bundle" ]; then
             tar -czf "release/ICD360S-Mail-Client-${VERSION}-linux-x64.tar.gz" -C artifacts/linux-build/build/linux/x64/release/bundle .
           fi
           # Copy .deb, .rpm, .AppImage
           find artifacts/linux-build/ -maxdepth 1 -name "*.deb" -exec cp {} release/ \; 2>/dev/null || true
           find artifacts/linux-build/ -maxdepth 1 -name "*.rpm" -exec cp {} release/ \; 2>/dev/null || true
           find artifacts/linux-build/ -maxdepth 1 -name "*.AppImage" -exec cp {} release/ \; 2>/dev/null || true
+
+          # Flatpak (single-file bundle)
+          if [ -d "artifacts/flatpak-build" ]; then
+            FLATPAK=$(find "artifacts/flatpak-build" -maxdepth 1 -name "*.flatpak" | head -1)
+            [ -n "$FLATPAK" ] && cp "$FLATPAK" "release/ICD360S-Mail-Client-${VERSION}.flatpak"
+          fi
 
           # Android APKs (all flavors)
           for flavor in universal fdroid googleplay samsung huawei; do
