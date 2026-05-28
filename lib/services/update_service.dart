@@ -211,6 +211,19 @@ class UpdateService {
 
   static Future<UpdateInfo?> _checkForUpdatesInternal() async {
     try {
+      // Flatpak sandbox: skip the in-app updater entirely.
+      // /.flatpak-info is injected into every Flatpak app at runtime
+      // (https://docs.flatpak.org/en/latest/sandbox-permissions.html).
+      // The in-app updater needs APPIMAGE env / writable system paths,
+      // neither of which exist in the sandbox — running it surfaces a
+      // misleading "Update failed" dialog. Updates for Flatpak users
+      // come via `flatpak update` / GNOME Software / Discover.
+      if (Platform.isLinux && File('/.flatpak-info').existsSync()) {
+        LoggerService.log('UPDATE',
+            'Running under Flatpak — skipping in-app updater (use `flatpak update`).');
+        return null;
+      }
+
       // Pin baseline to currentVersion on first run so any subsequent
       // proposal strictly below the currently installed build is rejected,
       // even before the first successful update bumps the baseline.
