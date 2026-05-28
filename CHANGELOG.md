@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.139.2 - 2026-05-28
+#### Bug Fixes
+- (**update**) broaden Flatpak detection with FLATPAK_ID env fallback (#62) - (91cd5be) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.139.1 - 2026-05-28
 #### Bug Fixes
 - (**update**) skip in-app updater when running under Flatpak (#60) - (e3bfa71) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
