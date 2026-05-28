@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>de.icd360s.mailclient</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-or-later</project_license>
+  <name>ICD360S Mail Client</name>
+  <summary>Modern email client with mTLS auth, PGP, and threat detection</summary>
+
+  <description>
+    <p>
+      ICD360S Mail Client is a desktop email client built for users of the
+      ICD360S e.V. mail infrastructure. It uses mutual-TLS for IMAP and SMTP
+      authentication (no passwords sent over the wire), end-to-end PGP
+      encryption (RFC 9580 — Ed25519 signing, X25519 encryption), and
+      integrated phishing / threat detection on incoming mail.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>mTLS-only authentication — no IMAP/SMTP password ever leaves the device</li>
+      <li>End-to-end OpenPGP (multi-device key management, hardware-accelerated)</li>
+      <li>Inline PDF and image preview via PDFium (no WebView dependency)</li>
+      <li>Phishing and DKIM/SPF/DMARC inspection per message</li>
+      <li>Master-password protected credential vault (Argon2id + AES-256-GCM)</li>
+      <li>Cross-device email signature management</li>
+      <li>Self-hosted update channel with signed releases (no app-store dependency)</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">de.icd360s.mailclient.desktop</launchable>
+
+  <url type="homepage">https://icd360s.de</url>
+  <url type="bugtracker">https://github.com/ICD360S-e-V/mail/issues</url>
+
+  <developer id="de.icd360s">
+    <name>ICD360S e.V.</name>
+  </developer>
+
+  <provides>
+    <binary>icd360s_mail_client</binary>
+  </provides>
+
+  <categories>
+    <category>Network</category>
+    <category>Office</category>
+    <category>Email</category>
+  </categories>
+
+  <content_rating type="oars-1.1" />
+
+  <releases>
+    <release version="2.138.7" date="2026-05-26">
+      <description>
+        <p>Sentry crash monitoring shipped to production. Windows startup fix series resolved.</p>
+      </description>
+    </release>
+  </releases>
+</component>

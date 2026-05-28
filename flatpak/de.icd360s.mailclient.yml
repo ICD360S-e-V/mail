@@ -1,0 +1,92 @@
+app-id: de.icd360s.mailclient
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: icd360s_mail_client
+
+finish-args:
+  # IPC + network
+  - --share=ipc
+  - --share=network
+
+  # Display server
+  - --socket=wayland
+  - --socket=fallback-x11
+
+  # Hardware acceleration (Mesa/intel/amdgpu via /dev/dri)
+  - --device=dri
+
+  # Audio (notification chimes, no-op on systems without pulse)
+  - --socket=pulseaudio
+
+  # Filesystem access — XDG dirs only, NOT host-wide
+  # User-attached files come via xdg-portal (FileChooser) which uses
+  # OpenURI / OpenFile portals and does NOT need broad fs access.
+  - --filesystem=xdg-download
+  - --filesystem=xdg-documents
+
+  # System-tray support across desktops
+  # Plasma 6 uses StatusNotifierWatcher; older Plasma/GNOME extensions
+  # fall back to ayatana/canonical indicator buses. window_manager
+  # 0.5.1 does NOT integrate any of these directly (it just creates
+  # the toplevel window), so these talk-names are dormant unless we
+  # add tray_manager later — kept proactively so a future tray addition
+  # doesn't require a Flatpak permission update + re-install.
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --talk-name=org.ayatana.indicator.application
+  - --talk-name=com.canonical.indicator.application
+
+  # Desktop notifications (flutter_local_notifications via libnotify)
+  - --talk-name=org.freedesktop.Notifications
+
+  # Secret storage — flutter_secure_storage_linux talks to:
+  #   org.freedesktop.secrets   gnome-keyring (Secret Service API)
+  #   org.kde.kwalletd5         KDE Wallet legacy
+  #   org.kde.kwalletd6         KDE Plasma 6 wallet
+  # Without these the plugin silently degrades to the AES-GCM file
+  # fallback (still secure, just not session-bound).
+  - --talk-name=org.freedesktop.secrets
+  - --talk-name=org.kde.kwalletd5
+  - --talk-name=org.kde.kwalletd6
+
+  # Auto-start at login (portal-based, not direct ~/.config/autostart)
+  - --talk-name=org.freedesktop.portal.Background
+
+  # Open mailto: links from other apps
+  - --talk-name=org.freedesktop.portal.OpenURI
+
+modules:
+  # Pulled from Flathub's shared-modules repo (cloned in CI) — never
+  # bump the manifest's pinned subpaths or invent SHA-256 here. Always
+  # use the upstream-maintained module definitions.
+  - shared-modules/libayatana-appindicator/libayatana-appindicator-gtk3.json
+
+  # libsecret-1.so.0 — runtime-only (the SDK already provides headers).
+  # Flatpak runtime org.freedesktop.Platform 24.08 ships libsecret as
+  # part of the base; if a future runtime drops it we'd add a
+  # shared-modules entry here. Kept as comment for traceability.
+  # - shared-modules/libsecret/libsecret.json
+
+  - name: icd360s-mail-client
+    buildsystem: simple
+    build-commands:
+      # Stage the Flutter bundle (downloaded as `linux-bundle` artifact
+      # in CI, present at ./bundle/ inside the manifest's working dir)
+      - mkdir -p /app/bin
+      - cp -r bundle/* /app/bin/
+      - chmod +x /app/bin/icd360s_mail_client
+      # Desktop integration
+      - install -Dm644 de.icd360s.mailclient.desktop /app/share/applications/de.icd360s.mailclient.desktop
+      - install -Dm644 de.icd360s.mailclient.metainfo.xml /app/share/metainfo/de.icd360s.mailclient.metainfo.xml
+      # Icon — logo.png is 512x512 so install in matching hicolor dir
+      - install -Dm644 de.icd360s.mailclient.png /app/share/icons/hicolor/512x512/apps/de.icd360s.mailclient.png
+    sources:
+      - type: dir
+        path: ./bundle
+        dest: bundle
+      - type: file
+        path: ./de.icd360s.mailclient.desktop
+      - type: file
+        path: ./de.icd360s.mailclient.metainfo.xml
+      - type: file
+        path: ./de.icd360s.mailclient.png

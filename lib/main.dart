@@ -288,15 +288,32 @@ Future<void> _appMain() async {
   // Flutter auto-enables the plugin now — no explicit FlutterCryptography.enable() needed.
 
   // Initialize libsodium on all platforms (SecureKey, pwhash).
-  MasterVault.sodium = await SodiumSumoInit.init();
+  // Wrapped: on Linux Flatpak sandbox or stripped distros the bundled
+  // libsodium.so might fail to dlopen (missing CPU feature, missing
+  // dep). MasterVault checks `sodium != null` before any vault op and
+  // surfaces a clear error to the UI instead of crashing the app.
+  try {
+    MasterVault.sodium = await SodiumSumoInit.init();
+  } catch (ex, st) {
+    LoggerService.logError('SODIUM_INIT', ex, st);
+  }
 
   // SECURITY: Prevent screenshots and screen recording on all platforms.
   // Android: FLAG_SECURE (also set natively in MainActivity.kt)
   // iOS: UITextField isSecureTextEntry layer trick
   // Windows: SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)
   // macOS: NSWindow.sharingType = .none
-  final noScreenshot = NoScreenshot.instance;
-  await noScreenshot.screenshotOff();
+  // Wrapped: no_screenshot has no Linux backend in 1.1.0. On Linux
+  // the plugin method-channel call returns "MissingPluginException";
+  // not catching it crashes the app before runApp on Flatpak/tarball.
+  // Loss of FLAG_SECURE on Linux is acceptable — screen capture on
+  // X11/Wayland is fundamentally user-controlled at the compositor.
+  try {
+    final noScreenshot = NoScreenshot.instance;
+    await noScreenshot.screenshotOff();
+  } catch (ex, st) {
+    LoggerService.logError('NO_SCREENSHOT', ex, st);
+  }
 
   // SECURITY: Device integrity check (root/jailbreak on mobile,
   // SIP/debugger on desktop). Warn but don't block — user may have
@@ -434,25 +451,34 @@ Future<void> _appMain() async {
     LoggerService.logError('NOTIFICATION_INIT', ex, StackTrace.current);
   }
 
-  // Initialize window manager (desktop only)
+  // Initialize window manager (desktop only).
+  // Wrapped: on Linux Flatpak the X11/Wayland socket might be missing
+  // from finish-args (--socket=wayland or --socket=fallback-x11);
+  // window_manager init then hangs on a platform-channel call that
+  // never returns. Catching here lets the app fall back to the default
+  // FluentApp window (smaller, not maximized) instead of black screen.
   if (platform.isDesktop) {
-    await windowManager.ensureInitialized();
+    try {
+      await windowManager.ensureInitialized();
 
-    const windowOptions = WindowOptions(
-      size: Size(1200, 800),
-      center: true,
-      skipTaskbar: false,
-      titleBarStyle: TitleBarStyle.normal,
-      title: 'Mail Client by ICD360S e.V gemeinnützige Verein',
-    );
+      const windowOptions = WindowOptions(
+        size: Size(1200, 800),
+        center: true,
+        skipTaskbar: false,
+        titleBarStyle: TitleBarStyle.normal,
+        title: 'Mail Client by ICD360S e.V gemeinnützige Verein',
+      );
 
-    await windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.setTitle(
-          'Mail Client by ICD360S e.V gemeinnützige Verein');
-      await windowManager.maximize();
-      await windowManager.show();
-      await windowManager.focus();
-    });
+      await windowManager.waitUntilReadyToShow(windowOptions, () async {
+        await windowManager.setTitle(
+            'Mail Client by ICD360S e.V gemeinnützige Verein');
+        await windowManager.maximize();
+        await windowManager.show();
+        await windowManager.focus();
+      });
+    } catch (ex, st) {
+      LoggerService.logError('WINDOW_MANAGER_INIT', ex, st);
+    }
   }
 
   PerfMonitorService.start();

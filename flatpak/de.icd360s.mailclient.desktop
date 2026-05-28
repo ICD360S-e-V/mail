@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=ICD360S Mail Client
+GenericName=Mail Client
+Comment=Modern email client with mTLS, PGP, and threat detection
+Exec=icd360s_mail_client %U
+Icon=de.icd360s.mailclient
+Terminal=false
+Categories=Network;Office;Email;
+MimeType=x-scheme-handler/mailto;message/rfc822;
+StartupWMClass=icd360s_mail_client
+StartupNotify=true
+Keywords=email;mail;imap;smtp;pgp;icd360s;
