@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.139.0 - 2026-05-28
+#### Features
+- (**linux**) add Flatpak bundle + raw tar.gz support for Fedora Kinoite (#58) - (f0a88b4) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.138.8 - 2026-05-27
 #### Bug Fixes
 - (**sentry**) disable native crash handling + timeout init to unblock Android startup (#59) - (ff5ac83) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
