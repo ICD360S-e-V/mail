@@ -1,0 +1,9 @@
+[Flatpak Repo]
+Title=ICD360S
+Url=https://mail.icd360s.de/downloads/mail/flatpak/
+Homepage=https://icd360s.de
+Comment=ICD360S e.V. self-hosted Flatpak repository
+Description=Official Flatpak repository for ICD360S e.V. desktop applications. Updated automatically on every release of github.com/ICD360S-e-V/mail.
+Icon=https://mail.icd360s.de/downloads/mail/icd360s-logo.png
+DefaultBranch=stable
+SuggestRemoteName=icd360s

@@ -516,6 +516,45 @@ jobs:
           path: ICD360S-Mail-Client-*.flatpak
           retention-days: 30
 
+      # ──────────────────────────────────────────────────────────────────
+      # Flatpak REPO export — produces an OSTree-formatted repository
+      # tree alongside the single-file bundle. Hosting the repo (rather
+      # than handing users a .flatpak) is what unlocks:
+      #   • GNOME Software / Discover "Updates" page picks up new versions
+      #   • `flatpak remote-add icd360s …` + `flatpak update icd360s` flow
+      #   • No more "Update Issue" warning that bundle-only installs cause
+      #     when GNOME Software has no origin remote to refresh against
+      # The flatpak-builder action already builds INTO ./repo when it
+      # produces the bundle; we just refresh the summary file and tar it
+      # up so the deploy job can rsync it to the server.
+      - name: Refresh Flatpak repo summary
+        run: |
+          # Sanity-check the repo dir the action populated. Skip silently
+          # if cache restore short-circuited the build — we never want to
+          # block a release on this optional artifact.
+          if [ ! -d repo ]; then
+            echo "::warning::./repo not present (likely a cache hit). Skipping repo export."
+            exit 0
+          fi
+          flatpak build-update-repo --generate-static-deltas repo
+          # Print branch list for debugging — should show
+          # `app/de.icd360s.mailclient/x86_64/stable` (or similar).
+          ostree --repo=repo refs
+
+      - name: Tar Flatpak repo for transit
+        if: hashFiles('repo/summary') != ''
+        run: |
+          tar -cf flatpak-repo.tar -C repo .
+          ls -lh flatpak-repo.tar
+
+      - name: Upload Flatpak repo
+        if: hashFiles('flatpak-repo.tar') != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: flatpak-repo
+          path: flatpak-repo.tar
+          retention-days: 30
+
       - name: Flatpak build summary
         if: always()
         run: |
@@ -1172,6 +1211,22 @@ jobs:
           if [ -d "artifacts/flatpak-build" ]; then
             FLATPAK=$(find "artifacts/flatpak-build" -maxdepth 1 -name "*.flatpak" | head -1)
             [ -n "$FLATPAK" ] && cp "$FLATPAK" "${DEPLOY_DIR}/linux/icd360s-mail.flatpak"
+          fi
+
+          # Flatpak REPO (preferred install path — gives users `flatpak
+          # update` integration and removes the GNOME Software "Update
+          # Issue" warning that single-bundle installs trigger). Layout:
+          #   /downloads/mail/flatpak/        — OSTree repo root
+          #   /downloads/mail/flatpak/icd360s.flatpakrepo — discovery file
+          mkdir -p "${DEPLOY_DIR}/flatpak"
+          if [ -f "artifacts/flatpak-repo/flatpak-repo.tar" ]; then
+            tar -xf "artifacts/flatpak-repo/flatpak-repo.tar" -C "${DEPLOY_DIR}/flatpak/"
+            echo "Repo extracted; refs:"
+            ls -la "${DEPLOY_DIR}/flatpak/" | head -10
+          fi
+          # Discovery file (committed in-repo, copied as-is)
+          if [ -f flatpak/icd360s.flatpakrepo ]; then
+            cp flatpak/icd360s.flatpakrepo "${DEPLOY_DIR}/flatpak/icd360s.flatpakrepo"
           fi
 
           # Windows (.exe installer)
