@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.140.0 - 2026-05-31
+#### Features
+- (**flatpak**) host an OSTree repo on mail.icd360s.de so GNOME Software can track updates (#63) - (bba0507) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.139.2 - 2026-05-28
 #### Bug Fixes
 - (**update**) broaden Flatpak detection with FLATPAK_ID env fallback (#62) - (91cd5be) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
