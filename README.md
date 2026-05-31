@@ -174,13 +174,21 @@ graph LR
 </table>
 
 <details>
-<summary><kbd>Linux packages: DEB, RPM, tar.gz</kbd></summary>
+<summary><kbd>Linux packages: DEB, RPM, tar.gz, Flatpak repo</kbd></summary>
 
 | Format | Download |
 |:---|:---|
 | DEB (Ubuntu/Debian) | [icd360s-mail.deb](https://mail.icd360s.de/downloads/mail/linux/icd360s-mail.deb) |
 | RPM (Fedora/RHEL) | [icd360s-mail.rpm](https://mail.icd360s.de/downloads/mail/linux/icd360s-mail.rpm) |
 | tar.gz | [icd360s-mail-linux.tar.gz](https://mail.icd360s.de/downloads/mail/linux/icd360s-mail-linux.tar.gz) |
+
+**Flatpak (recommended for Fedora Silverblue/Kinoite + auto-updates):**
+```sh
+flatpak remote-add --if-not-exists icd360s \
+  https://mail.icd360s.de/downloads/mail/flatpak/icd360s.flatpakrepo
+flatpak install icd360s de.icd360s.mailclient
+```
+Updates land via `flatpak update` (or automatically through GNOME Software / KDE Discover). The single-file `.flatpak` bundle is still published per-release but the repo install avoids the "Update Issue" warning that bundle-only installs cause.
 
 </details>
 
