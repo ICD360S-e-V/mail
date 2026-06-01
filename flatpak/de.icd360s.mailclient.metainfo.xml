@@ -48,6 +48,31 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="2.140.0" date="2026-05-31">
+      <description>
+        <p>Self-hosted Flatpak OSTree repository at mail.icd360s.de — users can now `flatpak remote-add icd360s` once and receive future updates through GNOME Software / Discover instead of the single-bundle install path.</p>
+      </description>
+    </release>
+    <release version="2.139.2" date="2026-05-28">
+      <description>
+        <p>Broaden Flatpak detection with FLATPAK_ID env var fallback so the in-app updater is suppressed even when /.flatpak-info is unreadable under stricter portal policies.</p>
+      </description>
+    </release>
+    <release version="2.139.1" date="2026-05-28">
+      <description>
+        <p>Flatpak release: bundle libsecret-1, drop the unused Background portal claim, and skip the in-app updater when running inside the Flatpak sandbox. Fixes the "Update failed" + spinner-disappears symptom.</p>
+      </description>
+    </release>
+    <release version="2.139.0" date="2026-05-28">
+      <description>
+        <p>Initial Flatpak bundle + raw tar.gz support for Fedora Silverblue / Kinoite toolbox installs.</p>
+      </description>
+    </release>
+    <release version="2.138.8" date="2026-05-27">
+      <description>
+        <p>Sentry init hardening: disable native crash handling on Android and add a 10-second timeout so a stuck SDK init can never block app startup.</p>
+      </description>
+    </release>
     <release version="2.138.7" date="2026-05-26">
       <description>
         <p>Sentry crash monitoring shipped to production. Windows startup fix series resolved.</p>

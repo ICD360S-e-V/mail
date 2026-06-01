@@ -547,12 +547,27 @@ jobs:
           tar -cf flatpak-repo.tar -C repo .
           ls -lh flatpak-repo.tar
 
+      - name: Stage Flatpak repo discovery file alongside artifact
+        # The .flatpakrepo discovery file lives in the source tree
+        # (flatpak/), but the deploy job has no `actions/checkout` —
+        # it only consumes artifacts. Copy it next to the tar so the
+        # artifact contains both. Without this, the file is missing
+        # on the server and nginx falls back to its default landing
+        # page when a user fetches `<repo>/icd360s.flatpakrepo`,
+        # which is what broke `flatpak remote-add` for v2.140.0.
+        if: hashFiles('flatpak/icd360s.flatpakrepo') != ''
+        run: |
+          cp flatpak/icd360s.flatpakrepo ./icd360s.flatpakrepo
+          ls -lh icd360s.flatpakrepo
+
       - name: Upload Flatpak repo
         if: hashFiles('flatpak-repo.tar') != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: flatpak-repo
-          path: flatpak-repo.tar
+          path: |
+            flatpak-repo.tar
+            icd360s.flatpakrepo
           retention-days: 30
 
       - name: Flatpak build summary
@@ -1224,9 +1239,11 @@ jobs:
             echo "Repo extracted; refs:"
             ls -la "${DEPLOY_DIR}/flatpak/" | head -10
           fi
-          # Discovery file (committed in-repo, copied as-is)
-          if [ -f flatpak/icd360s.flatpakrepo ]; then
-            cp flatpak/icd360s.flatpakrepo "${DEPLOY_DIR}/flatpak/icd360s.flatpakrepo"
+          # Discovery file — sourced from the same `flatpak-repo`
+          # artifact (the build-flatpak job stages it alongside the
+          # tar). No `actions/checkout` needed in this deploy job.
+          if [ -f "artifacts/flatpak-repo/icd360s.flatpakrepo" ]; then
+            cp "artifacts/flatpak-repo/icd360s.flatpakrepo" "${DEPLOY_DIR}/flatpak/icd360s.flatpakrepo"
           fi
 
           # Windows (.exe installer)
