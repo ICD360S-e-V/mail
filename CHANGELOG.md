@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.140.1 - 2026-06-01
+#### Bug Fixes
+- (**flatpak**) ship .flatpakrepo to the server and keep metainfo releases in sync (#67) - (db31dd0) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.140.0 - 2026-05-31
 #### Features
 - (**flatpak**) host an OSTree repo on mail.icd360s.de so GNOME Software can track updates (#63) - (bba0507) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*

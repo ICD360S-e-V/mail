@@ -48,6 +48,11 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="2.140.1" date="2026-06-01">
+      <description>
+        <p>Maintenance release. See the GitHub release notes for details.</p>
+      </description>
+    </release>
     <release version="2.140.0" date="2026-05-31">
       <description>
         <p>Self-hosted Flatpak OSTree repository at mail.icd360s.de — users can now `flatpak remote-add icd360s` once and receive future updates through GNOME Software / Discover instead of the single-bundle install path.</p>
