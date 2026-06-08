@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.141.0 - 2026-06-08
+#### Features
+- (**master-vault**) server-bound Argon2id salt sync across devices (#70) - (1e0732c) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.140.1 - 2026-06-01
 #### Bug Fixes
 - (**flatpak**) ship .flatpakrepo to the server and keep metainfo releases in sync (#67) - (db31dd0) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
