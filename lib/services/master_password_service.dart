@@ -313,8 +313,16 @@ class MasterPasswordService {
 
     // Unlock credential session + MasterVault.
     await AccountService.unlockSession(password);
+    // For salt sync: thread the first enrolled account's email through so
+    // the vault's Argon2id salt aligns with whatever any other device of
+    // the same user already bound on the server. See MasterVaultMetaService.
+    final boundEmail = await _primaryBoundEmail();
     try {
-      await vault.unlock(password);
+      if (boundEmail != null) {
+        await vault.unlockBoundTo(password, boundEmail);
+      } else {
+        await vault.unlock(password);
+      }
 
       // After vault unlock, sync PHC salt with vault's actual salt.
       // setMasterPassword generates salt_A for the PHC, but the vault
@@ -336,7 +344,7 @@ class MasterPasswordService {
       // This happens after factory reset when vault file persists but
       // the password hash was regenerated.
       try {
-        await vault.deleteAndRecreate(password);
+        await vault.deleteAndRecreate(password, boundEmail: boundEmail);
         LoggerService.log('AUTH',
             '✓ Vault recreated after MAC error');
 
@@ -436,8 +444,17 @@ class MasterPasswordService {
         // PortableSecureStorage to the password-locked MasterVault.
         // MUST run BEFORE CertificateService.restoreFromSecureStorage()
         // so that the cert is in the new vault before the cache pull.
+        // For salt sync: pass the first enrolled account email through so
+        // a fresh vault (re-install) aligns with the server-bound salt of
+        // any other device of the same user. On existing vaults this
+        // additionally back-fills the bound salt on the server.
         try {
-          await MasterVault.instance.unlock(password);
+          final boundEmail = await _primaryBoundEmail();
+          if (boundEmail != null) {
+            await MasterVault.instance.unlockBoundTo(password, boundEmail);
+          } else {
+            await MasterVault.instance.unlock(password);
+          }
         } catch (vaultEx, vaultSt) {
           LoggerService.logError('AUTH', vaultEx, vaultSt);
           // Don't fail the password verification on vault unlock errors
@@ -536,6 +553,29 @@ class MasterPasswordService {
     final mod = s.length % 4;
     final padded = mod == 0 ? s : s + ('=' * (4 - mod));
     return Uint8List.fromList(base64.decode(padded));
+  }
+
+  /// Returns the lowercase username of the first enrolled account, used as
+  /// the "boundEmail" identifier for server-side Argon2id salt sync. The
+  /// vault is per-device (not per-account), but the server keeps one bound
+  /// salt per account; we standardise on the first-enrolled account so
+  /// every device of the same user agrees on which salt to use.
+  ///
+  /// Returns `null` if no account is enrolled yet (e.g. during the very
+  /// first onboarding before any cert is issued), or on any error loading
+  /// the accounts file — in both cases the caller should fall back to the
+  /// legacy [MasterVault.unlock] path which uses a local random salt.
+  static Future<String?> _primaryBoundEmail() async {
+    try {
+      final accounts = await AccountService().loadAccountsAsync();
+      if (accounts.isEmpty) return null;
+      return accounts.first.username.toLowerCase();
+    } catch (ex) {
+      LoggerService.logWarning('AUTH',
+          'Could not determine primary bound email for salt-sync ($ex) — '
+          'using legacy unlock path');
+      return null;
+    }
   }
 }
 

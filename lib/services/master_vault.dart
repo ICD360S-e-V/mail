@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sodium/sodium_sumo.dart';
 
 import 'logger_service.dart';
+import 'master_vault_meta_service.dart';
 import 'portable_secure_storage.dart';
 
 /// Master-password-protected secrets vault (macOS only).
@@ -147,6 +148,95 @@ class MasterVault {
     }
   }
 
+  /// Same contract as [unlock], but threads through a [boundEmail] used for
+  /// server-side Argon2id salt sync (see [MasterVaultMetaService]).
+  ///
+  ///   - If the vault file does not exist, the fresh vault is created with
+  ///     the salt that the server has bound for [boundEmail] (and binds the
+  ///     locally-generated salt if no server-side salt exists yet).
+  ///   - If the vault file does exist, the salt is loaded from disk as usual,
+  ///     but we still attempt an opportunistic upload — first device of a
+  ///     pre-existing vault gets its salt bound to the server so the next
+  ///     fresh install of another device of the same user can align.
+  ///
+  /// Callers that do not yet know the account (e.g. the legacy first-boot
+  /// path) should keep calling [unlock] — this method only adds value once
+  /// at least one account is enrolled.
+  Future<void> unlockBoundTo(String masterPassword, String boundEmail) async {
+    if (isUnlocked) {
+      // Already unlocked — still try to reconcile the salt in case this is
+      // the first call since the salt-sync feature was added.
+      await _reconcileSaltWithServer(boundEmail);
+      return;
+    }
+    if (_unlocking) return;
+    _unlocking = true;
+    _assertSodium();
+    LoggerService.log('MASTER_VAULT',
+        'Unlocking vault (format=v0x04, crypto=sodium, boundEmail=$boundEmail)…');
+    try {
+      final path = await _path();
+      final file = File(path);
+
+      if (!await file.exists()) {
+        await _createFreshVault(masterPassword, boundEmail: boundEmail);
+        await _runMigrationFromLegacyStorage();
+        await _persist();
+        LoggerService.log('MASTER_VAULT',
+            '✓ Fresh vault created and unlocked '
+            '(${_cache!.length} entries after migration), boundEmail=$boundEmail');
+        return;
+      }
+
+      final blob = await file.readAsBytes();
+      if (blob.isEmpty || blob[0] == _legacyBuggyFormatVersion) {
+        LoggerService.logWarning('MASTER_VAULT',
+            'Detected corrupt/buggy vault file — deleting and recreating');
+        await file.delete();
+        _wipeKeys();
+        _cache = null;
+        _argon2Salt = null;
+        await _createFreshVault(masterPassword, boundEmail: boundEmail);
+        await _runMigrationFromLegacyStorage();
+        await _persist();
+        LoggerService.log('MASTER_VAULT',
+            '✓ Fresh vault recreated after corruption recovery (boundEmail=$boundEmail)');
+        return;
+      }
+
+      if (blob[0] == _legacyV3FormatVersion) {
+        await _migrateFromV3(blob, masterPassword);
+        await _reconcileSaltWithServer(boundEmail);
+        return;
+      }
+
+      if (blob[0] == _formatVersion) {
+        await _loadAndDecryptV4(blob, masterPassword);
+      } else {
+        throw StateError('Unknown vault format: 0x${blob[0].toRadixString(16)}');
+      }
+
+      if (!_migrationDone) {
+        await _runMigrationFromLegacyStorage();
+        if (_migrationDone) await _persist();
+      }
+
+      // Existing vault loaded — opportunistically push our salt to the server.
+      await _reconcileSaltWithServer(boundEmail);
+
+      LoggerService.log('MASTER_VAULT',
+          '✓ Vault unlocked (${_cache!.length} entries), boundEmail=$boundEmail');
+    } catch (ex, st) {
+      _wipeKeys();
+      _cache = null;
+      _argon2Salt = null;
+      LoggerService.logError('MASTER_VAULT', ex, st);
+      rethrow;
+    } finally {
+      _unlocking = false;
+    }
+  }
+
   Future<void> unlockWithKey(Uint8List masterKey) async {
     if (isUnlocked) return;
     if (_unlocking) return;
@@ -183,7 +273,8 @@ class MasterVault {
     }
   }
 
-  Future<void> deleteAndRecreate(String masterPassword) async {
+  Future<void> deleteAndRecreate(String masterPassword,
+      {String? boundEmail}) async {
     _assertSodium();
     final path = await _path();
     final file = File(path);
@@ -194,10 +285,10 @@ class MasterVault {
     _wipeKeys();
     _cache = null;
     _argon2Salt = null;
-    await _createFreshVault(masterPassword);
+    await _createFreshVault(masterPassword, boundEmail: boundEmail);
     await _persist();
     LoggerService.log('MASTER_VAULT',
-        '✓ Fresh vault created after deleteAndRecreate');
+        '✓ Fresh vault created after deleteAndRecreate (boundEmail=$boundEmail)');
   }
 
   void lock() {
@@ -638,15 +729,65 @@ class MasterVault {
     try { await Process.run('/bin/chmod', ['600', path]); } catch (_) {}
   }
 
-  Future<void> _createFreshVault(String pwd) async {
+  Future<void> _createFreshVault(String pwd, {String? boundEmail}) async {
     final s = sodium!;
     LoggerService.log('MASTER_VAULT', 'Creating fresh vault file (v0x04 sodium)');
     _cache = {};
     _dataKey = s.secureRandom(_dataKeyBytes);
-    _argon2Salt = _randomBytes(_argon2SaltBytes);
+
+    // Generate a local random salt as the offline fallback. If we know which
+    // account this vault is being bound to, ask the server whether another
+    // device of the same user has already bound a salt — and use it if so.
+    // This is the missing piece that lets the same master password derive
+    // the same master key (and thus PgpSync blob KEK) on every device.
+    Uint8List salt = _randomBytes(_argon2SaltBytes);
+    if (boundEmail != null) {
+      final remote = await MasterVaultMetaService.fetchOrBindSalt(
+        email: boundEmail,
+        localFallback: salt,
+      );
+      if (remote != null) {
+        salt = remote;
+        LoggerService.log('MASTER_VAULT',
+            'Vault salt aligned with server-bound salt for $boundEmail');
+      } else {
+        LoggerService.logWarning('MASTER_VAULT',
+            'Salt sync unavailable for $boundEmail — using local random '
+            '(will retry on next unlock)');
+      }
+    }
+    _argon2Salt = salt;
+
     final vaultMasterKey = await deriveMasterKey(pwd, _argon2Salt!);
     _kek = await _deriveKEKFromMasterKeyBytes(vaultMasterKey);
     for (var i = 0; i < vaultMasterKey.length; i++) vaultMasterKey[i] = 0;
+  }
+
+  /// Opportunistic salt-sync: try to bind the *current* local salt to the
+  /// server for [boundEmail]. Server enforces first-write-wins, so if any
+  /// other device of this user has already bound a different salt, this is
+  /// a no-op (we keep our local salt — the existing local vault wouldn't
+  /// be re-keyable without losing data anyway). Used for back-filling
+  /// existing vaults that pre-date the salt-sync rollout.
+  Future<void> _reconcileSaltWithServer(String boundEmail) async {
+    if (_argon2Salt == null) return;
+    try {
+      final won = await MasterVaultMetaService.uploadSalt(
+        boundEmail,
+        _argon2Salt!,
+      );
+      if (won) {
+        LoggerService.log('MASTER_VAULT',
+            '✓ Local salt bound to server for $boundEmail (first device)');
+      }
+      // 409 → server already has a (different) salt for this user.
+      // We keep our local salt; the user's other devices will fetch the
+      // server's salt on their next fresh vault, so they'll align with
+      // whoever bound first.
+    } catch (ex) {
+      LoggerService.logWarning('MASTER_VAULT',
+          'Salt reconciliation skipped for $boundEmail (network): $ex');
+    }
   }
 
   // ── v0x03 → v0x04 migration ─────────────────────────────────────
