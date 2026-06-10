@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.142.0 - 2026-06-10
+#### Features
+- (**pgp**) self-contained v2 sync blob (passphrase + armor) for zero-touch multi-device (#71) - (3b5c46c) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.141.0 - 2026-06-08
 #### Features
 - (**master-vault**) server-bound Argon2id salt sync across devices (#70) - (1e0732c) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
