@@ -54,7 +54,14 @@ class PgpKeyService {
   // Decryption failed" even after server-side pubkey reconciliation.
   static final Map<String, dynamic> _recipientKeyCache = {};
   static final Map<String, DateTime> _recipientKeyCacheAt = {};
-  static const _recipientCacheTtl = Duration(minutes: 5);
+  // 1 h matches the GnuPG WKD spec default and the industry norm for
+  // OpenPGP public-key caching. Public keys change at most once a year
+  // (key rotation) so 5-min was needlessly aggressive — every send
+  // after that interval paid an extra mTLS round-trip to
+  // /api/pubkeys/<user>.asc. Cache is invalidated explicitly on
+  // pubkey republish and on receive-side ratchet mismatches, so a
+  // longer TTL doesn't make stale-key situations worse.
+  static const _recipientCacheTtl = Duration(hours: 1);
   // Negative cache: tracks failed lookups to avoid hammering the server,
   // but expires after 30s so keys uploaded during the session are found.
   static final Map<String, DateTime> _negativeCache = {};
