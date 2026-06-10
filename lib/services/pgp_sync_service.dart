@@ -25,6 +25,43 @@ class PgpSyncException implements Exception {
       : 'PgpSyncException: $message';
 }
 
+/// Decoded contents of a sync server blob.
+///
+/// **v2 (current format)** — plaintext is a JSON object
+/// `{"v": 2, "passphrase": "<hex>", "armor": "<armored key>"}`. The
+/// server stores `passphrase` *inside* the blob so any device that can
+/// derive the blob KEK (i.e. shares the master password + bound salt)
+/// gets both the armored key AND the S2K passphrase needed to unwrap
+/// it. This is the equivalent of ProtonMail's KeySalt + encrypted
+/// private key tuple, scaled down to a single self-contained blob.
+///
+/// **v1 (legacy)** — plaintext is the raw armored key. [passphrase] is
+/// `null`. Callers must derive the passphrase from local state (the
+/// per-device random stored in the vault) — that's the pre-migration
+/// state we transition users *out of* on next launch.
+class PgpBlob {
+  /// Armored OpenPGP private key (S2K-encrypted with [passphrase] when
+  /// non-null, or with whatever the legacy local random was for v1).
+  final String armor;
+
+  /// S2K passphrase that unwraps [armor]. `null` for v1 blobs — caller
+  /// must look up the legacy `pgp_passphrase_v1` from MasterVault.
+  final String? passphrase;
+
+  /// Wire format version of the blob plaintext (1 or 2).
+  final int format;
+
+  const PgpBlob({
+    required this.armor,
+    required this.passphrase,
+    required this.format,
+  });
+
+  /// `true` when this blob was decoded from v2 plaintext — fresh-device
+  /// installs can use it directly without any local-state lookup.
+  bool get isSelfContained => format >= 2 && passphrase != null;
+}
+
 /// Zero-knowledge PGP private key sync across devices.
 ///
 /// Architecture (ProtonMail/Tuta/Bitwarden pattern):
@@ -144,6 +181,59 @@ class PgpSyncService {
     LoggerService.log(
         tag, 'encryptAndUpload OK: version=$nextVersion for $email');
     return true;
+  }
+
+  /// V2-aware fetch. Decrypts the blob and returns a [PgpBlob] whose
+  /// shape depends on the format encoded in the plaintext:
+  ///
+  ///   * **v2** plaintext is `{"v":2,"passphrase":"<hex>","armor":"<armor>"}`
+  ///     — the blob is self-contained. Fresh-device installs can decrypt
+  ///     the armor with the embedded passphrase directly.
+  ///
+  ///   * **v1** plaintext is the raw armored key. [PgpBlob.passphrase] is
+  ///     `null`; the caller must look up the legacy per-device random
+  ///     from local storage. After the first successful load, the
+  ///     caller should re-upload a v2 blob so subsequent fresh-device
+  ///     installs get the self-contained version.
+  ///
+  /// Returns `null` if the server has no blob for [email].
+  static Future<PgpBlob?> fetchBlob(String email) async {
+    final tag = 'PGP_SYNC';
+    final plaintext = await downloadAndDecrypt(email);
+    if (plaintext == null) return null;
+    try {
+      final decoded = jsonDecode(plaintext);
+      if (decoded is Map<String, dynamic>) {
+        final v = decoded['v'];
+        final passphrase = decoded['passphrase'];
+        final armor = decoded['armor'];
+        if (v is int && v >= 2 && passphrase is String && armor is String) {
+          LoggerService.log(tag, 'fetchBlob: v$v self-contained for $email');
+          return PgpBlob(armor: armor, passphrase: passphrase, format: v);
+        }
+      }
+    } catch (_) {
+      // Not JSON → legacy v1 raw armor.
+    }
+    LoggerService.log(tag, 'fetchBlob: v1 legacy (armor-only) for $email');
+    return PgpBlob(armor: plaintext, passphrase: null, format: 1);
+  }
+
+  /// V2 upload. Wraps `{passphrase, armor}` as JSON v2 plaintext, then
+  /// AES-GCM-encrypts under the blob KEK with the same wire format as
+  /// the legacy uploader. The resulting blob is self-contained — every
+  /// device that derives the same blob KEK can recover both halves.
+  static Future<bool> uploadBlob(String email, PgpBlob blob) async {
+    if (blob.passphrase == null) {
+      throw const PgpSyncException(
+          'uploadBlob requires a non-null passphrase (only v2 blobs are written)');
+    }
+    final plaintext = jsonEncode({
+      'v': 2,
+      'passphrase': blob.passphrase,
+      'armor': blob.armor,
+    });
+    return encryptAndUpload(email, plaintext);
   }
 
   /// Delete the blob on the server (for reset / key-rotation scenarios).

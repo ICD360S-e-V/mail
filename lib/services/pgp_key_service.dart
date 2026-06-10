@@ -164,6 +164,15 @@ class PgpKeyService {
           }
           // Fall through to key generation below (will create v4 key)
         } else {
+          // Ensure the sync server has the v2 blob (passphrase + armor)
+          // so future fresh-device installs can decrypt zero-touch.
+          // Fire and forget — failure is logged but doesn't block the
+          // key load. The next startup retries via
+          // [migrateExistingKeysToServer].
+          _ensureServerHasV2Blob(email, passphrase, existingArmor).then(
+              (_) {},
+              onError: (e) => LoggerService.logWarning('PGP',
+                  '_ensureServerHasV2Blob background error for $email: $e'));
           _privateKeys[key] = privateKey;
           _publicKeys[key] = privateKey.publicKey;
           if (_activeEmail == null) {
@@ -178,12 +187,40 @@ class PgpKeyService {
       }
     }
 
-    // NEW DEVICE FLOW: vault is empty — try fetching an existing key from the
-    // sync server before generating a brand-new one.
+    // NEW DEVICE FLOW: vault has no local armor → consult the sync
+    // server. v2 (self-contained) blobs let us decrypt with no local
+    // state. v1 (legacy armor-only) blobs require us to look up the
+    // per-device random passphrase, which a fresh device does NOT have
+    // — in that case we cannot proceed, and we must NOT fall through
+    // to fresh-key generation because that would overwrite the v1
+    // blob + republish a new public key, orphaning every historical
+    // mail.
+    PgpBlob? syncedBlob;
+    bool downloadFailedTransiently = false;
     try {
-      final syncedArmor = await PgpSyncService.downloadAndDecrypt(email);
-      if (syncedArmor != null) {
-        final privateKey = OpenPGP.decryptPrivateKey(syncedArmor, passphrase);
+      syncedBlob = await PgpSyncService.fetchBlob(email);
+    } catch (ex) {
+      downloadFailedTransiently = true;
+      LoggerService.logWarning('PGP',
+          'PgpSyncService.fetchBlob failed for $email '
+          '(network/blob-KEK mismatch; will attempt fresh key gen as last resort): $ex');
+    }
+
+    if (syncedBlob != null) {
+      try {
+        final syncPassphrase = syncedBlob.passphrase;
+        if (syncPassphrase == null) {
+          // v1 legacy blob. We can only decrypt it if THIS device happens
+          // to be the originating device with the matching random.
+          throw StateError(
+              'Server has only a v1 (legacy armor-only) blob for $email and '
+              'this device has no matching passphrase. Open and unlock the '
+              'app on the originating device first — it will upload a v2 '
+              'blob containing the passphrase, after which this device works.');
+        }
+        final syncedArmor = syncedBlob.armor;
+        final privateKey =
+            OpenPGP.decryptPrivateKey(syncedArmor, syncPassphrase);
         if (privateKey.publicKey.keyPacket.isV6Key) {
           LoggerService.log('PGP',
               '⚠ Sync server returned v6 key for $email — discarding, will generate v4');
@@ -192,22 +229,43 @@ class PgpKeyService {
             await vault.write(key: '${_vaultKeyV6Backup}_$key', value: syncedArmor);
             LoggerService.log('PGP', 'v6 sync key backed up for decrypt fallback');
           }
+          // v6 is a known dart_pg bug → safe to fall through and regenerate
+          // as v4 (we keep the v6 armor in the backup slot for old-mail
+          // decrypt, the new v4 keypair takes over going forward).
         } else {
-          LoggerService.log('PGP', 'Fetched PGP key from sync server for $email (new device)');
+          LoggerService.log('PGP', 'Fetched PGP key from sync server for $email (new device, v${syncedBlob.format})');
+          // Persist the passphrase from the blob as THIS device's local
+          // passphrase, then persist the armor. Subsequent local-armor
+          // loads use the same passphrase.
+          await vault.write(key: _vaultKeyPassphrase, value: syncPassphrase);
           await vault.write(key: _vaultKey(email), value: syncedArmor);
           _privateKeys[key] = privateKey;
           _publicKeys[key] = privateKey.publicKey;
           if (_activeEmail == null) {
             _activeEmail = key;
-            await _startWorker(syncedArmor, passphrase);
+            await _startWorker(syncedArmor, syncPassphrase);
           }
           return privateKey;
         }
+      } catch (ex) {
+        // HARD STOP: the server has a blob for this user, but we cannot
+        // unwrap it. Generating a new keypair would clobber the existing
+        // blob + the existing public key. Surface a clear error.
+        LoggerService.logWarning('PGP',
+            '⛔ Server has a PGP blob for $email but local cannot unwrap it: $ex. '
+            'Refusing to generate a fresh keypair (would overwrite the existing '
+            'blob and orphan all historical mail). Update + relaunch on the '
+            'originating device first.');
+        throw StateError(
+            'PGP key sync incomplete for $email. The server has an encrypted '
+            'PGP blob for this account, but this device cannot decrypt it. '
+            'Launch the app on the originating device with the latest update '
+            'first, then come back here.');
       }
+    }
+
+    if (!downloadFailedTransiently) {
       LoggerService.log('PGP', 'No key blob on sync server for $email — will generate new key');
-    } catch (ex) {
-      LoggerService.logWarning('PGP',
-          'PgpSyncService.downloadAndDecrypt failed for $email (falling back to local gen): $ex');
     }
 
     // FIRST DEVICE FLOW (or v6→v4 migration): generate a fresh v4 keypair.
@@ -225,13 +283,17 @@ class PgpKeyService {
       await _startWorker(armoredKey, passphrase);
     }
 
-    // Upload encrypted blob so other devices can fetch this key.
+    // Upload v2 self-contained blob (passphrase + armor) so other
+    // devices can fetch this key with no local state lookup.
     try {
-      await PgpSyncService.encryptAndUpload(email, armoredKey);
-      LoggerService.log('PGP', 'PGP key blob uploaded to sync server for $email');
+      await PgpSyncService.uploadBlob(
+          email,
+          PgpBlob(
+              armor: armoredKey, passphrase: passphrase, format: 2));
+      LoggerService.log('PGP', 'PGP v2 blob uploaded to sync server for $email');
     } catch (ex) {
       LoggerService.logWarning('PGP',
-          'PgpSyncService.encryptAndUpload failed for $email (key still saved locally): $ex');
+          'PgpSyncService.uploadBlob failed for $email (key still saved locally): $ex');
     }
 
     await _uploadPublicKey(privateKey.publicKey, email);
@@ -257,12 +319,28 @@ class PgpKeyService {
             await MasterVault.instance.read(key: _vaultKey(email));
         if (existingArmor == null) continue;
 
-        // 1) Upload the encrypted private-key blob if not on server yet.
-        final alreadySynced = await PgpSyncService.hasServerBlob(email);
-        if (!alreadySynced) {
-          await PgpSyncService.encryptAndUpload(email, existingArmor);
-          LoggerService.log('PGP',
-              'Migration: uploaded PGP blob to sync server for $email');
+        // 1) Ensure the server has a v2 (self-contained) blob. If the
+        //    server already has a v1 blob from an earlier client version,
+        //    overwrite it with v2 — fresh-device installs need the
+        //    passphrase to come WITH the blob. The local armor and
+        //    passphrase are unchanged.
+        try {
+          final existing = await PgpSyncService.fetchBlob(email);
+          if (existing == null || !existing.isSelfContained) {
+            await PgpSyncService.uploadBlob(
+                email,
+                PgpBlob(
+                    armor: existingArmor,
+                    passphrase: passphrase,
+                    format: 2));
+            LoggerService.log('PGP',
+                existing == null
+                    ? 'Migration: uploaded v2 PGP blob (first upload) for $email'
+                    : 'Migration: upgraded v1 → v2 PGP blob for $email');
+          }
+        } catch (ex) {
+          LoggerService.logWarning('PGP',
+              'Migration: blob upload/upgrade failed for $email (non-fatal, will retry next launch): $ex');
         }
 
         // 2) Republish our local public key to the server unconditionally.
@@ -717,6 +795,45 @@ class PgpKeyService {
 
   // ── Helpers ──────────────────────────────────────────────────────
 
+  /// Idempotent: upload a v2 (self-contained) blob to the sync server
+  /// if the server is currently missing a blob OR holds an older
+  /// v1 (armor-only) blob. After this completes successfully, any
+  /// fresh-device install that shares the master password can recover
+  /// the key without any local-state lookup.
+  static Future<void> _ensureServerHasV2Blob(
+      String email, String passphrase, String armor) async {
+    final existing = await PgpSyncService.fetchBlob(email);
+    if (existing != null && existing.isSelfContained) {
+      return; // Server already has a v2 blob — nothing to do.
+    }
+    await PgpSyncService.uploadBlob(
+        email,
+        PgpBlob(
+            armor: armor, passphrase: passphrase, format: 2));
+    LoggerService.log(
+        'PGP',
+        existing == null
+            ? '✓ Uploaded first v2 blob for $email'
+            : '✓ Upgraded v1 → v2 blob for $email');
+  }
+
+  /// Returns the per-account S2K passphrase used to wrap the OpenPGP
+  /// private key.
+  ///
+  /// **By design this is a random 32-byte secret stored in the local
+  /// vault**, NOT derived from the master password. The passphrase is
+  /// the same on every device because we ship it inside the sync blob
+  /// (v2 format, AES-GCM-protected by the blob KEK), so the per-device
+  /// vault entry is just a convenience cache for the current device.
+  /// First device generates it; every other device picks it up out of
+  /// the v2 blob it downloads from the server.
+  ///
+  /// (We do NOT HKDF-derive it from the master key. Tying the S2K
+  /// passphrase to the master password sounds elegant but means every
+  /// password change requires re-armoring the OpenPGP key — a
+  /// dart_pg API call that has its own failure modes. With the blob
+  /// carrying the passphrase, password changes only re-wrap the blob
+  /// KEK and the armor stays bit-identical.)
   static Future<String> _getOrCreatePassphrase() async {
     final vault = MasterVault.instance;
     var passphrase = await vault.read(key: _vaultKeyPassphrase);
@@ -760,3 +877,4 @@ class PgpKeyService {
     }
   }
 }
+
