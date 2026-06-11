@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.142.1 - 2026-06-11
+#### Performance Improvements
+- (**pgp**) raise recipient pubkey cache TTL from 5 min to 1 h (#72) - (96fbf92) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.142.0 - 2026-06-10
 #### Features
 - (**pgp**) self-contained v2 sync blob (passphrase + armor) for zero-touch multi-device (#71) - (3b5c46c) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
