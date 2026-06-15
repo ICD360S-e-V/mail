@@ -43,7 +43,7 @@ dependencies:
   cryptography_flutter: ^2.3.2
   sodium: ^4.0.2  # libsodium: SecureKey with mlock + sodium_memzero for vault keys
   path: ^1.9.0  # Path manipulation
-  flutter_secure_storage: ^10.1.0  # Secure password storage (Keychain/Credential Manager)
+  flutter_secure_storage: ^10.3.1  # Secure password storage (Keychain/Credential Manager)
   http: ^1.2.0  # HTTP client for certificate download API
   path_provider: ^2.1.5  # Cross-platform app data directories
 
@@ -68,7 +68,7 @@ dependencies:
   pdf: ^3.11.1  # PDF generation for printing images
 
   # PDF Viewer - native PDFium rendering (no WebView dependency)
-  pdfrx: ^2.3.3  # Native PDF viewer for Windows/macOS/Linux/Android/iOS
+  pdfrx: ^2.4.4  # Native PDF viewer for Windows/macOS/Linux/Android/iOS
 
   # Document Scanner — primary: uses VisionKit on iOS, ML Kit on Android
   # (ML Kit requires Google Play Services — works on standard Android).
@@ -94,14 +94,14 @@ dependencies:
   # Self-hosted instance at https://sentry-mail.icd360s.de (project ID 3,
   # mail-client-app). PII scrubbed in beforeSend hook (lib/main.dart) —
   # NO IP, NO user email, NO request headers/cookies sent.
-  sentry_flutter: ^9.0.0
+  sentry_flutter: ^9.22.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
   flutter_lints: ^6.0.0
-  msix: ^3.16.0  # Windows installer package
+  msix: ^3.17.0  # Windows installer package
 
 flutter:
   uses-material-design: true
