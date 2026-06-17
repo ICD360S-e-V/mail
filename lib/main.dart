@@ -95,6 +95,30 @@ class _CrashErrorApp extends StatelessWidget {
   }
 }
 
+// Hardcoded fallback DSN. Public by design — Sentry DSNs are not secrets,
+// they only identify the project + auth a write-only ingest endpoint.
+const _fallbackSentryDsn =
+    'https://4aa6338a8fb55197d7b2594ed6e24969@sentry-mail.icd360s.de/3';
+
+/// Resolves SENTRY_DSN from --dart-define with defensive validation.
+/// SentryFlutter.init throws FormatException on invalid DSNs (including
+/// strings polluted with a leading BOM (U+FEFF) or unresolved placeholders
+/// like `[path]`), which then takes the whole init down. We strip BOM,
+/// trim, and require Uri.tryParse + scheme=https + a publickey@host
+/// shape before passing to Sentry. Otherwise fall back to [_fallbackSentryDsn]
+/// so a broken CI secret never bricks crash reporting.
+String _resolveSentryDsn() {
+  const fromEnv = String.fromEnvironment('SENTRY_DSN');
+  final cleaned = fromEnv.replaceAll('\u{FEFF}', '').trim();
+  if (cleaned.isEmpty) return _fallbackSentryDsn;
+  final uri = Uri.tryParse(cleaned);
+  if (uri == null || uri.scheme != 'https' || uri.userInfo.isEmpty || uri.host.isEmpty) {
+    LoggerService.log('SENTRY_DSN', 'Rejected env DSN (${cleaned.length} chars) — using fallback');
+    return _fallbackSentryDsn;
+  }
+  return cleaned;
+}
+
 /// Starts the actual app (zone-guarded so crashes anywhere downstream
 /// route into the same handler). Idempotent at the runApp layer — calling
 /// it twice would just rebuild the widget tree; the [_appRunStarted] guard
@@ -155,11 +179,7 @@ void main() async {
   try {
     await SentryFlutter.init(
       (options) {
-        options.dsn = const String.fromEnvironment(
-          'SENTRY_DSN',
-          defaultValue:
-              'https://4aa6338a8fb55197d7b2594ed6e24969@sentry-mail.icd360s.de/3',
-        );
+        options.dsn = _resolveSentryDsn();
         options.release = const String.fromEnvironment(
           'SENTRY_RELEASE',
           defaultValue: 'mail-client-app@dev',
