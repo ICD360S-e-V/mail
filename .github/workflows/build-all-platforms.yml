@@ -774,6 +774,10 @@ jobs:
     needs: [detect-changes, analyze]
     if: needs.detect-changes.outputs.apple_changed == 'true'
     runs-on: macos-latest
+    # Non-blocking on PRs so a transient Xcode/MSVC/toolchain regression
+    # cannot stall an otherwise-green review. Still strict on tag pushes
+    # (release builds), where every platform artifact must be present.
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -882,6 +886,8 @@ jobs:
     needs: [detect-changes, analyze]
     if: needs.detect-changes.outputs.apple_changed == 'true'
     runs-on: macos-latest
+    # See build-ios for the rationale on PR-only continue-on-error.
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -1028,6 +1034,10 @@ jobs:
     needs: [detect-changes, analyze]
     if: needs.detect-changes.outputs.windows_changed == 'true'
     runs-on: windows-latest
+    # See build-ios for the rationale on PR-only continue-on-error.
+    # Particularly useful because MSVC toolchain bumps on windows-latest
+    # have already broken our builds twice this year out of our control.
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
