@@ -1,0 +1,842 @@
+name: Build Extras Platforms (Android + iOS + macOS + Windows)
+
+# Extras workflow — the slower platforms. Runs in parallel with
+# `build-all-platforms.yml` (priority Linux + Flatpak). Priority
+# finishes first so the GitHub UI's Download button activates on its
+# artifacts within ~8 minutes. On tag push, priority CREATES the
+# GitHub Release; this workflow uploads its own assets to that release
+# via `gh release upload --clobber` as each platform finishes.
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+    paths:
+      - 'lib/**'
+      - 'android/**'
+      - 'ios/**'
+      - 'macos/**'
+      - 'windows/**'
+      - 'pubspec.yaml'
+      - 'pubspec.lock'
+      - 'enough_mail_fork/**'
+      - '.github/workflows/build-extras-platforms.yml'
+  workflow_dispatch:
+
+# Concurrency: PR / branch pushes share a group and cancel the previous
+# run on new commits (saves CI minutes). Tag pushes (v*) get an isolated
+# group per tag AND opt out of cancellation so a release build is never
+# killed by a concurrent dependabot PR — that's how v2.136.11 and v2.137.0
+# were lost previously (PR sync triggered cancel-in-progress on the tag run).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+
+# SECURITY: Default least-privilege permissions for all jobs.
+# Individual jobs override as needed (e.g., 'release' needs contents: write).
+permissions:
+  contents: read
+
+env:
+  # Bumped 3.41.4 → 3.41.9 to fix Windows startup hang (v2.138.2..v2.138.5
+  # series). Reproduced empirically: same source code builds a non-hanging
+  # Windows .exe on Flutter 3.41.9 and a hanging one on 3.41.4. The
+  # difference is in flutter_windows.dll (engine) — likely a platform
+  # channel race in early init that 3.41.9 fixed. See PRs #52, #54, #55
+  # for false-lead theories before the version mismatch was identified.
+  FLUTTER_VERSION: "3.41.9"
+  JAVA_VERSION: "17"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  # ============================================================
+  # Detect Changes - Smart cache detection to skip unchanged platforms
+  # ============================================================
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      linux_changed: ${{ steps.check.outputs.linux_changed }}
+      android_changed: ${{ steps.check.outputs.android_changed }}
+      apple_changed: ${{ steps.check.outputs.apple_changed }}
+      windows_changed: ${{ steps.check.outputs.windows_changed }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Compute platform hashes
+        id: hashes
+        run: |
+          # Hash shared code (lib/, pubspec.*, assets/, enough_mail_fork/)
+          SHARED_HASH=$(find lib/ pubspec.yaml pubspec.lock assets/ enough_mail_fork/ -type f -print0 2>/dev/null | sort -z | xargs -0 cat 2>/dev/null | sha256sum | cut -d' ' -f1)
+          echo "shared_hash=$SHARED_HASH" >> "$GITHUB_OUTPUT"
+
+          # Hash platform-specific dirs
+          LINUX_HASH=$(find linux/ -type f -print0 | sort -z | xargs -0 cat | sha256sum | cut -d' ' -f1)
+          ANDROID_HASH=$(find android/ -type f -print0 | sort -z | xargs -0 cat | sha256sum | cut -d' ' -f1)
+          APPLE_HASH=$(find ios/ macos/ -type f -print0 | sort -z | xargs -0 cat | sha256sum | cut -d' ' -f1)
+          WINDOWS_HASH=$(find windows/ -type f -print0 | sort -z | xargs -0 cat | sha256sum | cut -d' ' -f1)
+
+          echo "linux_hash=${SHARED_HASH:0:16}${LINUX_HASH:0:16}" >> "$GITHUB_OUTPUT"
+          echo "android_hash=${SHARED_HASH:0:16}${ANDROID_HASH:0:16}" >> "$GITHUB_OUTPUT"
+          echo "apple_hash=${SHARED_HASH:0:16}${APPLE_HASH:0:16}" >> "$GITHUB_OUTPUT"
+          echo "windows_hash=${SHARED_HASH:0:16}${WINDOWS_HASH:0:16}" >> "$GITHUB_OUTPUT"
+
+      - name: Check Linux cache
+        id: cache-linux
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: .cache-marker-linux
+          key: build-success-linux-${{ steps.hashes.outputs.linux_hash }}
+          lookup-only: true
+
+      - name: Check Android cache
+        id: cache-android
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: .cache-marker-android
+          key: build-success-android-${{ steps.hashes.outputs.android_hash }}
+          lookup-only: true
+
+      - name: Check Apple cache
+        id: cache-apple
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: .cache-marker-apple
+          key: build-success-apple-${{ steps.hashes.outputs.apple_hash }}
+          lookup-only: true
+
+      - name: Check Windows cache
+        id: cache-windows
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: .cache-marker-windows
+          key: build-success-windows-${{ steps.hashes.outputs.windows_hash }}
+          lookup-only: true
+
+      - name: Determine what changed
+        id: check
+        env:
+          CACHE_LINUX: ${{ steps.cache-linux.outputs.cache-hit }}
+          CACHE_ANDROID: ${{ steps.cache-android.outputs.cache-hit }}
+          CACHE_APPLE: ${{ steps.cache-apple.outputs.cache-hit }}
+          CACHE_WINDOWS: ${{ steps.cache-windows.outputs.cache-hit }}
+        run: |
+          # If cache hit, platform hasn't changed since last successful build
+          if [ "$CACHE_LINUX" = "true" ]; then
+            echo "linux_changed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Linux: skipping (no changes since last successful build)"
+          else
+            echo "linux_changed=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Linux: will build"
+          fi
+
+          if [ "$CACHE_ANDROID" = "true" ]; then
+            echo "android_changed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Android: skipping (no changes since last successful build)"
+          else
+            echo "android_changed=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Android: will build"
+          fi
+
+          if [ "$CACHE_APPLE" = "true" ]; then
+            echo "apple_changed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Apple: skipping (no changes since last successful build)"
+          else
+            echo "apple_changed=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Apple: will build"
+          fi
+
+          if [ "$CACHE_WINDOWS" = "true" ]; then
+            echo "windows_changed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Windows: skipping (no changes since last successful build)"
+          else
+            echo "windows_changed=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Windows: will build"
+          fi
+
+  # ============================================================
+  # Static Analysis - catch type errors and lint warnings early
+  # ============================================================
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Run flutter analyze
+        run: flutter analyze --no-fatal-infos
+
+  # ============================================================
+  # Android Build - Per-flavor APKs + AAB, each on dedicated runner
+  # ============================================================
+  build-android:
+    name: Android (${{ matrix.flavor }}${{ matrix.format == 'aab' && ' AAB' || '' }})
+    needs: [detect-changes, analyze]
+    if: needs.detect-changes.outputs.android_changed == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # APKs per flavor (split-per-abi, obfuscated)
+          - flavor: universal
+            format: apk
+            build_args: "--split-per-abi --obfuscate --split-debug-info=build/symbols"
+          - flavor: fdroid
+            format: apk
+            build_args: "--split-per-abi --obfuscate --split-debug-info=build/symbols"
+          - flavor: googleplay
+            format: apk
+            build_args: "--split-per-abi --obfuscate --split-debug-info=build/symbols"
+          - flavor: samsung
+            format: apk
+            build_args: "--split-per-abi --obfuscate --split-debug-info=build/symbols"
+          - flavor: huawei
+            format: apk
+            build_args: "--split-per-abi --obfuscate --split-debug-info=build/symbols"
+          # AAB doar pentru Google Play
+          - flavor: googleplay
+            format: aab
+            build_args: "--obfuscate --split-debug-info=build/symbols"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Java
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Cache Gradle
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      # SECURITY (M7): Pass secrets via env vars so they are never interpolated
+      # directly into the shell script body. A secret containing special chars,
+      # a newline, or the heredoc marker itself cannot break out of the
+      # command/heredoc this way — bash reads the value from the environment
+      # as a literal string.
+      - name: Decode keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          printf '%s' "$KEYSTORE_B64" | base64 -d > android/upload-keystore.jks
+
+      - name: Create key.properties
+        env:
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          # Use printf instead of a heredoc so there is no risk of a marker
+          # collision. Env vars are expanded by bash (not by the Actions
+          # template engine), so they are treated as literal strings.
+          {
+            printf 'storePassword=%s\n' "$STORE_PASSWORD"
+            printf 'keyPassword=%s\n' "$KEY_PASSWORD"
+            printf 'keyAlias=%s\n' "$KEY_ALIAS"
+            printf 'storeFile=../upload-keystore.jks\n'
+          } > android/key.properties
+          chmod 600 android/key.properties
+
+      - name: Restore native build hooks (sodium)
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: .dart_tool/hooks_runner/
+          key: native-hooks-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: |
+            native-hooks-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Resolve Flutter dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Compile Android ${{ matrix.flavor }} ${{ matrix.format }} (release)
+        env:
+          BUILD_FORMAT: ${{ matrix.format }}
+          BUILD_FLAVOR: ${{ matrix.flavor }}
+          BUILD_ARGS: ${{ matrix.build_args }}
+        run: |
+          flutter build "$BUILD_FORMAT" --release \
+            --flavor "$BUILD_FLAVOR" $BUILD_ARGS \
+            --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} \
+            --dart-define=SENTRY_RELEASE=mail-client-app@${{ github.ref_name }}+${{ github.run_number }}
+
+      - name: Upload Android ${{ matrix.flavor }} ${{ matrix.format }} artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: android-${{ matrix.flavor }}-${{ matrix.format }}
+          path: |
+            build/app/outputs/flutter-apk/*${{ matrix.flavor }}*.apk
+            build/app/outputs/bundle/${{ matrix.flavor }}Release/*.aab
+            build/symbols/
+          retention-days: 30
+
+      - name: Android ${{ matrix.flavor }} ${{ matrix.format }} build summary
+        if: always()
+        env:
+          BUILD_FORMAT: ${{ matrix.format }}
+          BUILD_FLAVOR: ${{ matrix.flavor }}
+        run: |
+          {
+            echo "## 🤖 Android Build Summary — $BUILD_FLAVOR ($BUILD_FORMAT)"
+            echo ""
+            echo "| Artifact | Size | Status |"
+            echo "|----------|-----:|:------:|"
+            for f in build/app/outputs/flutter-apk/*${BUILD_FLAVOR}*.apk \
+                     build/app/outputs/bundle/${BUILD_FLAVOR}Release/*.aab; do
+              if [ -f "$f" ]; then
+                NAME=$(basename "$f")
+                SIZE=$(du -h "$f" | cut -f1)
+                echo "| \`$NAME\` | $SIZE | ✅ |"
+              fi
+            done
+            echo ""
+            echo "### Build steps completed"
+            echo "- ✅ Java 17 + Flutter SDK installed"
+            echo "- ✅ Keystore decoded from CI secrets"
+            echo "- ✅ Flutter build $BUILD_FORMAT --flavor $BUILD_FLAVOR (release)"
+            echo "- ✅ Uploaded as android-$BUILD_FLAVOR-$BUILD_FORMAT artifact"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Save Android cache marker (runs after all matrix jobs)
+  android-cache-save:
+    name: Android Cache Save
+    needs: [detect-changes, build-android]
+    if: needs.detect-changes.outputs.android_changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          sparse-checkout: |
+            lib
+            pubspec.yaml
+            pubspec.lock
+            assets
+            android
+
+      - name: Compute Android hash
+        id: hashes
+        run: |
+          SHARED_HASH=$(find lib/ pubspec.yaml pubspec.lock assets/ enough_mail_fork/ -type f -print0 2>/dev/null | sort -z | xargs -0 cat 2>/dev/null | sha256sum | cut -d' ' -f1)
+          ANDROID_HASH=$(find android/ -type f -print0 | sort -z | xargs -0 cat | sha256sum | cut -d' ' -f1)
+          echo "android_hash=${SHARED_HASH:0:16}${ANDROID_HASH:0:16}" >> "$GITHUB_OUTPUT"
+
+      - name: Save cache marker
+        run: |
+          mkdir -p .cache-marker-android
+          echo "$GITHUB_SHA" > .cache-marker-android/sha
+
+      - name: Save Android build cache
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: .cache-marker-android
+          key: build-success-android-${{ steps.hashes.outputs.android_hash }}
+
+  # ============================================================
+  # iOS Build
+  # ============================================================
+  build-ios:
+    name: iOS
+    needs: [detect-changes, analyze]
+    if: needs.detect-changes.outputs.apple_changed == 'true'
+    runs-on: macos-latest
+    # Non-blocking on PRs: a transient Xcode/Flutter SHA regression on
+    # this runner shouldn't fail an otherwise-green code review. On tag
+    # push we want every artifact, so the conditional flips to strict.
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Cache Flutter SDK
+        id: cache-flutter-ios
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: ~/flutter
+          key: flutter-${{ runner.os }}-${{ runner.arch }}-${{ env.FLUTTER_VERSION }}
+
+      - name: Install Flutter (manual)
+        if: steps.cache-flutter-ios.outputs.cache-hit != 'true'
+        env:
+          FL_VER: ${{ env.FLUTTER_VERSION }}
+        run: |
+          FLUTTER_ZIP="flutter_macos_${FL_VER}-stable.zip"
+          FLUTTER_URL="https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/${FLUTTER_ZIP}"
+          # Flutter 3.41.9 macOS x64 zip SHA-256. Update in lockstep with
+          # FLUTTER_VERSION above; otherwise iOS+macOS jobs fail at
+          # integrity check (broke v2.138.6).
+          # Fetch latest: curl .../releases_macos.json | jq for the SHA.
+          EXPECTED_SHA="eaee3b6aa6da114eb0be843ac53f4f138d3d8827779ff1e4546b345c75b9cba1"
+          curl -fsSL -o "$FLUTTER_ZIP" "$FLUTTER_URL"
+          ACTUAL_SHA=$(shasum -a 256 "$FLUTTER_ZIP" | cut -d' ' -f1)
+          if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
+            echo "::error::Flutter SDK integrity check FAILED!"
+            echo "Expected: $EXPECTED_SHA"
+            echo "Actual:   $ACTUAL_SHA"
+            exit 1
+          fi
+          echo "✓ Flutter SDK SHA-256 verified"
+          unzip -q "$FLUTTER_ZIP" -d "$HOME"
+          rm "$FLUTTER_ZIP"
+
+      - name: Add Flutter to PATH
+        run: echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Flutter precache
+        if: steps.cache-flutter-ios.outputs.cache-hit != 'true'
+        run: flutter precache --ios
+
+      - name: Cache pub dependencies
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: pub-${{ runner.os }}-
+
+      - name: Cache CocoaPods
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: |
+            ios/Pods
+            ~/Library/Caches/CocoaPods
+          key: pods-ios-${{ hashFiles('ios/Podfile.lock') }}
+          restore-keys: pods-ios-
+
+      - name: Cache native build hooks (sodium)
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: .dart_tool/hooks_runner/
+          key: native-hooks-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: |
+            native-hooks-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Resolve Flutter dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Compile iOS Runner.app (no codesign)
+        run: |
+          export PATH="$HOME/flutter/bin:$PATH"
+          flutter build ios --release --no-codesign \
+            --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} \
+            --dart-define=SENTRY_RELEASE=mail-client-app@${{ github.ref_name }}+${{ github.run_number }}
+
+      - name: Package iOS .ipa from Runner.app
+        run: |
+          mkdir -p build/ios/Payload
+          cp -r build/ios/iphoneos/Runner.app build/ios/Payload/
+          cd build/ios && zip -r ../icd360s-mail.ipa Payload/
+
+      - name: Upload iOS artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ios-build
+          path: build/icd360s-mail.ipa
+          retention-days: 30
+
+      - name: iOS build summary
+        if: always()
+        run: |
+          {
+            echo "## iOS Build Summary"
+            echo ""
+            if [ -f "build/icd360s-mail.ipa" ]; then
+              SIZE=$(du -h build/icd360s-mail.ipa | cut -f1)
+              echo "- ✅ icd360s-mail.ipa ($SIZE)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ============================================================
+  # macOS Build
+  # ============================================================
+  build-macos:
+    name: macOS
+    needs: [detect-changes, analyze]
+    if: needs.detect-changes.outputs.apple_changed == 'true'
+    runs-on: macos-latest
+    # See build-ios for the PR-only continue-on-error rationale.
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Cache Flutter SDK
+        id: cache-flutter-macos
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: ~/flutter
+          key: flutter-${{ runner.os }}-${{ runner.arch }}-${{ env.FLUTTER_VERSION }}
+
+      - name: Install Flutter (manual)
+        if: steps.cache-flutter-macos.outputs.cache-hit != 'true'
+        env:
+          FL_VER: ${{ env.FLUTTER_VERSION }}
+        run: |
+          FLUTTER_ZIP="flutter_macos_${FL_VER}-stable.zip"
+          FLUTTER_URL="https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/${FLUTTER_ZIP}"
+          # Flutter 3.41.9 macOS x64 zip SHA-256. Update in lockstep with
+          # FLUTTER_VERSION above; otherwise iOS+macOS jobs fail at
+          # integrity check (broke v2.138.6).
+          # Fetch latest: curl .../releases_macos.json | jq for the SHA.
+          EXPECTED_SHA="eaee3b6aa6da114eb0be843ac53f4f138d3d8827779ff1e4546b345c75b9cba1"
+          curl -fsSL -o "$FLUTTER_ZIP" "$FLUTTER_URL"
+          ACTUAL_SHA=$(shasum -a 256 "$FLUTTER_ZIP" | cut -d' ' -f1)
+          if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
+            echo "::error::Flutter SDK integrity check FAILED!"
+            echo "Expected: $EXPECTED_SHA"
+            echo "Actual:   $ACTUAL_SHA"
+            exit 1
+          fi
+          echo "✓ Flutter SDK SHA-256 verified"
+          unzip -q "$FLUTTER_ZIP" -d "$HOME"
+          rm "$FLUTTER_ZIP"
+
+      - name: Add Flutter to PATH
+        run: echo "$HOME/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Flutter precache
+        if: steps.cache-flutter-macos.outputs.cache-hit != 'true'
+        run: flutter precache --macos
+
+      - name: Cache pub dependencies
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: ~/.pub-cache
+          key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: pub-${{ runner.os }}-
+
+      - name: Cache CocoaPods
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: |
+            macos/Pods
+            ~/Library/Caches/CocoaPods
+          key: pods-macos-${{ hashFiles('macos/Podfile.lock') }}
+          restore-keys: pods-macos-
+
+      - name: Restore native build hooks (sodium)
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: .dart_tool/hooks_runner/
+          key: native-hooks-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: |
+            native-hooks-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Resolve Flutter dependencies
+        run: |
+          export PATH="$HOME/flutter/bin:$PATH"
+          flutter pub get --enforce-lockfile
+
+      - name: Configure macOS signing for CI (manual, no team)
+        run: |
+          sed -i '' 's/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g' macos/Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/"CODE_SIGN_IDENTITY\[sdk=macosx\*\]" = "Apple Development"/"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-"/g' macos/Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/DEVELOPMENT_TEAM = B42ZX94AKL/DEVELOPMENT_TEAM = ""/g' macos/Runner.xcodeproj/project.pbxproj
+
+      - name: Compile macOS .app bundle (release)
+        run: |
+          export PATH="$HOME/flutter/bin:$PATH"
+          flutter build macos --release \
+            --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} \
+            --dart-define=SENTRY_RELEASE=mail-client-app@${{ github.ref_name }}+${{ github.run_number }}
+
+      - name: Ad-hoc sign macOS app
+        run: |
+          codesign --force --deep --sign - build/macos/Build/Products/Release/icd360s_mail_client.app
+
+      - name: Create macOS .dmg (with /Applications symlink)
+        run: |
+          DMG_STAGING="$(mktemp -d)"
+          cp -R build/macos/Build/Products/Release/icd360s_mail_client.app "$DMG_STAGING/"
+          ln -s /Applications "$DMG_STAGING/Applications"
+          hdiutil create -volname "ICD360S Mail Client" \
+            -srcfolder "$DMG_STAGING" \
+            -ov -format UDZO -fs APFS \
+            build/icd360s-mail.dmg
+          rm -rf "$DMG_STAGING"
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: macos-build
+          path: build/icd360s-mail.dmg
+          retention-days: 30
+
+      - name: macOS build summary
+        if: always()
+        run: |
+          {
+            echo "## macOS Build Summary"
+            echo ""
+            if [ -f "build/icd360s-mail.dmg" ]; then
+              SIZE=$(du -h build/icd360s-mail.dmg | cut -f1)
+              echo "- ✅ icd360s-mail.dmg ($SIZE)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Compute Apple hash
+        if: success()
+        id: hashes
+        run: |
+          SHARED_HASH=$(find lib/ pubspec.yaml pubspec.lock assets/ enough_mail_fork/ -type f -print0 2>/dev/null | sort -z | xargs -0 cat 2>/dev/null | sha256sum | cut -d' ' -f1)
+          APPLE_HASH=$(find ios/ macos/ -type f -print0 | sort -z | xargs -0 cat | sha256sum | cut -d' ' -f1)
+          echo "apple_hash=${SHARED_HASH:0:16}${APPLE_HASH:0:16}" >> "$GITHUB_OUTPUT"
+
+      - name: Save cache marker
+        if: success()
+        run: |
+          mkdir -p .cache-marker-apple
+          echo "$GITHUB_SHA" > .cache-marker-apple/sha
+
+      - name: Save Apple build cache
+        if: success()
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: .cache-marker-apple
+          key: build-success-apple-${{ steps.hashes.outputs.apple_hash }}
+
+  # ============================================================
+  # Windows Build
+  # ============================================================
+  build-windows:
+    name: Windows
+    needs: [detect-changes, analyze]
+    if: needs.detect-changes.outputs.windows_changed == 'true'
+    runs-on: windows-latest
+    # See build-ios for the PR-only continue-on-error rationale.
+    # MSVC toolchain bumps on windows-latest have broken our builds
+    # twice in 2026 out of our control (#77 fixes the latest one).
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Cache native build hooks (sodium)
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: .dart_tool/hooks_runner/
+          key: native-hooks-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: |
+            native-hooks-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Resolve Flutter dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Compile Windows release binary
+        run: |
+          flutter build windows --release `
+            --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} `
+            --dart-define=SENTRY_RELEASE=mail-client-app@${{ github.ref_name }}+${{ github.run_number }}
+
+      # SECURITY: Download VC++ Redistributable from Microsoft with pinned SHA-256.
+      # Previously this binary was committed to the repo (windows/redist/vc_redist.x64.exe),
+      # which created a supply-chain risk: anyone who could push to the repo could
+      # replace it with a trojanized version that the installer would silently run
+      # with admin privileges on every user's machine.
+      #
+      # Now we fetch it fresh from Microsoft and verify the SHA-256. If the hash
+      # changes (Microsoft publishes a new build), this step fails — update the
+      # hash here AFTER auditing the new binary.
+      - name: Cache VC++ Redistributable
+        id: cache-vcredist
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: windows/redist/vc_redist.x64.exe
+          key: vcredist-cc0ff0eb1dc3f5188ae6300faef32bf5beeba4bdd6e8e445a9184072096b713b
+
+      - name: Download VC++ Redistributable (verified)
+        if: steps.cache-vcredist.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $expectedHash = "cc0ff0eb1dc3f5188ae6300faef32bf5beeba4bdd6e8e445a9184072096b713b"
+          $url = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
+          $dest = "windows/redist/vc_redist.x64.exe"
+          New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
+          Write-Host "Downloading $url ..."
+          Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
+          $actualHash = (Get-FileHash $dest -Algorithm SHA256).Hash.ToLower()
+          Write-Host "Expected: $expectedHash"
+          Write-Host "Actual:   $actualHash"
+          if ($actualHash -ne $expectedHash) {
+            Write-Error "VC++ Redistributable hash mismatch! Microsoft may have published a new build. Audit the new binary and update the expected hash in build-all-platforms.yml."
+            exit 1
+          }
+          Write-Host "✓ VC++ Redistributable verified"
+
+      - name: Build Inno Setup installer
+        run: |
+          choco install innosetup -y --no-progress
+          iscc windows/installer.iss
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: windows-build
+          path: build/installer/*.exe
+          retention-days: 30
+
+      - name: Windows build summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## 🪟 Windows Build Summary"
+            echo ""
+            echo "| Artifact | Size | Status |"
+            echo "|----------|-----:|:------:|"
+            for f in build/installer/*.exe; do
+              if [ -f "$f" ]; then
+                NAME=$(basename "$f")
+                SIZE=$(du -h "$f" | cut -f1)
+                echo "| \`$NAME\` | $SIZE | ✅ |"
+              fi
+            done
+            echo ""
+            if [ -d "build/windows/x64/runner/Release" ]; then
+              BUNDLE_SIZE=$(du -sh build/windows/x64/runner/Release | cut -f1)
+              echo "**Flutter bundle**: $BUNDLE_SIZE"
+              echo ""
+            fi
+            echo "### Build steps completed"
+            echo "- ✅ Flutter SDK installed"
+            echo "- ✅ flutter pub get --enforce-lockfile"
+            echo "- ✅ flutter build windows --release"
+            echo "- ✅ VC++ Redistributable downloaded + SHA-256 verified"
+            echo "- ✅ Inno Setup installer compiled"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Compute Windows hash
+        if: success()
+        id: hashes
+        shell: bash
+        run: |
+          SHARED_HASH=$(find lib/ pubspec.yaml pubspec.lock assets/ enough_mail_fork/ -type f -print0 2>/dev/null | sort -z | xargs -0 cat 2>/dev/null | sha256sum | cut -d' ' -f1)
+          WINDOWS_HASH=$(find windows/ -type f -print0 | sort -z | xargs -0 cat | sha256sum | cut -d' ' -f1)
+          echo "windows_hash=${SHARED_HASH:0:16}${WINDOWS_HASH:0:16}" >> "$GITHUB_OUTPUT"
+
+      - name: Save cache marker
+        if: success()
+        shell: bash
+        run: |
+          mkdir -p .cache-marker-windows
+          echo "$GITHUB_SHA" > .cache-marker-windows/sha
+
+      - name: Save Windows build cache
+        if: success()
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: .cache-marker-windows
+          key: build-success-windows-${{ steps.hashes.outputs.windows_hash }}
+
+
+  # ============================================================
+  # Release upload — add extras assets to the GitHub Release that
+  # the priority workflow (`build-all-platforms.yml`) creates first.
+  # Only runs on tag push and only if at least one extras build
+  # actually succeeded.
+  # ============================================================
+  release-upload-extras:
+    name: Release upload (extras)
+    needs: [build-android, android-cache-save, build-ios, build-macos, build-windows]
+    if: always() && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all extras artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          path: artifacts/
+
+      - name: Stage upload set
+        id: stage
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p upload
+
+          # Android APKs (5 flavors).
+          for flavor in universal fdroid googleplay samsung huawei; do
+            if [ -d "artifacts/android-${flavor}-apk" ]; then
+              find "artifacts/android-${flavor}-apk" -name "*.apk" -exec cp {} upload/ \; 2>/dev/null || true
+            fi
+          done
+
+          # Android AAB (Google Play).
+          if [ -d "artifacts/android-googleplay-aab" ]; then
+            find "artifacts/android-googleplay-aab" -name "*.aab" -exec cp {} upload/ \; 2>/dev/null || true
+          fi
+
+          # iOS (.ipa)
+          if [ -d "artifacts/ios-build" ]; then
+            IPA=$(find "artifacts/ios-build" -name "*.ipa" | head -1)
+            [ -n "$IPA" ] && cp "$IPA" "upload/ICD360S-Mail-Client-${VERSION}.ipa"
+          fi
+
+          # macOS (.dmg)
+          if [ -d "artifacts/macos-build" ]; then
+            DMG=$(find "artifacts/macos-build" -name "*.dmg" | head -1)
+            [ -n "$DMG" ] && cp "$DMG" "upload/ICD360S-Mail-Client-${VERSION}.dmg"
+          fi
+
+          # Windows (.exe installer)
+          if [ -d "artifacts/windows-build" ]; then
+            EXE=$(find "artifacts/windows-build" -name "*.exe" | head -1)
+            [ -n "$EXE" ] && cp "$EXE" "upload/ICD360S-Mail-Client-Setup-${VERSION}.exe"
+          fi
+
+          count=$(find upload/ -mindepth 1 -maxdepth 1 -type f | wc -l)
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "## Extras assets staged: $count"
+          ls -lah upload/
+
+      - name: Wait for priority release to exist
+        if: steps.stage.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # Priority workflow creates the release with Linux + Flatpak +
+          # SBOM and release notes. Poll until it shows up (max 25 min).
+          # Beyond that we assume priority failed and bail with an error
+          # so the run goes red and a maintainer notices.
+          for i in $(seq 1 150); do
+            if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              echo "✓ Release $TAG exists, proceeding with upload"
+              exit 0
+            fi
+            echo "  release $TAG not yet present, sleeping 10s (attempt $i/150)"
+            sleep 10
+          done
+          echo "::error::Release $TAG did not appear in 25 minutes — priority workflow likely failed"
+          exit 1
+
+      - name: Upload extras to release
+        if: steps.stage.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # --clobber overwrites any same-named asset (idempotent reruns).
+          gh release upload "$TAG" upload/* --clobber --repo "$GITHUB_REPOSITORY"
+          echo "## Uploaded $(ls upload/ | wc -l) extras assets to release $TAG" >> "$GITHUB_STEP_SUMMARY"
