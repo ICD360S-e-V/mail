@@ -32,6 +32,16 @@ set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 # Use Unicode for all projects.
 add_definitions(-DUNICODE -D_UNICODE)
 
+# Silence MSVC 14.51's hard deprecation of <experimental/coroutine>,
+# <experimental/generator>, and <experimental/resumable>. The static_assert
+# in those headers turns into error C2338 / STL1011, taking down any
+# subproject that transitively includes cppwinrt — which today means
+# flutter_local_notifications_windows and permission_handler_windows.
+# The macro is the escape hatch Microsoft documented for this transition;
+# remove once both plugins move to the C++20 <coroutine> header.
+# Tracking: flutter/flutter#186452, microsoft/cppwinrt#1520.
+add_definitions(-D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 # Compilation settings that should be applied to most targets.
 #
 # Be cautious about adding new options here, as plugins use this function by
