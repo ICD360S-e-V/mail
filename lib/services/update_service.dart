@@ -4,27 +4,23 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
 import 'package:url_launcher/url_launcher.dart';
-import 'le_issuer_check.dart';
 import 'logger_service.dart';
 import 'localization_service.dart';
-import 'package:pointycastle/asn1/asn1_parser.dart';
-import 'package:pointycastle/asn1/primitives/asn1_integer.dart';
-import 'package:pointycastle/asn1/primitives/asn1_sequence.dart';
-import 'package:pointycastle/digests/sha256.dart';
-import 'package:pointycastle/ecc/api.dart';
-import 'package:pointycastle/ecc/curves/secp256r1.dart';
-import 'package:pointycastle/signers/ecdsa_signer.dart';
-import 'package:pointycastle/api.dart' as pc_api;
-import 'pinned_security_context.dart';
 import 'version_baseline.dart';
 
 /// Auto-update service for checking and installing updates
 class UpdateService {
-  static const String updateUrl = 'https://mail.icd360s.de/updates/version.json';
+  /// GitHub Releases is the canonical update channel since 2026-06-17.
+  /// The legacy `https://mail.icd360s.de/updates/version.json` flow was
+  /// retired together with the per-host ECDSA signing — see PR #74 and
+  /// the follow-up that swapped both check + download to GitHub.
+  static const String updateUrl =
+      'https://api.github.com/repos/ICD360S-e-V/mail/releases/latest';
   static const String currentVersion = '2.142.1';
 
   // Progress callback for UI updates
@@ -52,44 +48,15 @@ class UpdateService {
   /// and computes its SHA-256. If it does not match this value, the install
   /// is refused — even if the APK passed SHA-256 file integrity check.
   ///
-  /// This defends against a scenario where the update server (or any
+  /// This defends against a scenario where the update channel (or any
   /// intermediate) is compromised and serves a malicious APK signed by a
-  /// different key: the file hash would match (attacker rewrites version.json),
-  /// but the cert hash would NOT match this hardcoded value.
+  /// different key: the file hash would match (attacker rewrites the
+  /// GitHub release metadata), but the cert hash would NOT match this
+  /// hardcoded value.
   ///
   /// To rotate this value: extract the new cert with
   ///   openssl x509 -in cert.pem -outform DER | sha256sum
   /// and update both this constant and a new release.
-  /// Base64-encoded raw uncompressed ECDSA P-256 public key (65 bytes,
-  /// format `0x04 || X || Y`) used to verify the detached signature on
-  /// `version.json`.
-  ///
-  /// Rotated 2026-05-16: the previous keypair (whose pubkey started with
-  /// `BOaKDVWITCwis2+9tVGN…`) signed up to v2.136.1; its private key was
-  /// lost so the active version.json froze for 5 days and no client could
-  /// auto-update past v2.136.1. New keypair generated offline and
-  /// installed at `/root/.icd360s/release_signing/version_signing_priv.pem`
-  /// on mail.icd360s.de; a systemd path-watcher (`sign-version-json.path`)
-  /// auto-signs every `version.json.draft` that CI rsyncs into
-  /// `/var/www/html/downloads/mail/`.
-  ///
-  /// Trust-model note: by living on mail.icd360s.de the key is no longer
-  /// strictly "offline" — a root compromise of that host can forge update
-  /// metadata. Acceptable because the same host already terminates IMAP/
-  /// SMTP, holds the user CA, and is the canonical source of binaries, so
-  /// a root compromise there is game-over regardless. Follow-up: migrate
-  /// signing into CI using `VERSION_SIGNING_PRIVATE_KEY` GitHub Secret so
-  /// the key never lives on the mail host.
-  ///
-  /// To rotate again: generate a new keypair, ship a release whose pinned
-  /// key is the NEW one, then on the server replace
-  /// `/root/.icd360s/release_signing/version_signing_priv.pem` and trigger
-  /// `systemctl start sign-version-json.service` to re-sign the current
-  /// draft. Clients on older releases stay pinned to the previous key and
-  /// must be updated out-of-band (manual download).
-  static const String _versionJsonPublicKey =
-      'BI+YZXuq+/fhMPMVYU3J4mKrzghAqEF0cInvGUHJ1PRezIU8PwA/02p/w/Q6gzrq/+SwcxEJBHOmzLioyscxIqA=';
-
   static const String _expectedApkCertSha256 =
       'ff9c4a92347693745a06a20cc15310e897145dad6b719cbe724eda093a6195b5';
 
@@ -104,96 +71,50 @@ class UpdateService {
   static const MethodChannel _apkVerifyChannel =
       MethodChannel('de.icd360s.mailclient/apk_verify');
 
-  /// Validate server certificate — only accept trusted Let's Encrypt issuers.
-  /// Uses the shared `isTrustedLetsEncryptIssuer` helper.
-  /// Verify an ECDSA P-256 / SHA-256 detached signature against a
-  /// message using the hardcoded `_versionJsonPublicKey`.
-  ///
-  /// Signature format: ASN.1 DER (the openssl `dgst -sha256 -sign`
-  /// default). Pure Dart, no native code, no extra dependencies
-  /// (pointycastle is already pulled in by other services).
-  static bool _verifyVersionJsonSignature(
-      Uint8List message, Uint8List derSignature) {
-    try {
-      final pubBytes = base64.decode(_versionJsonPublicKey);
-      if (pubBytes.length != 65 || pubBytes[0] != 0x04) {
-        LoggerService.log('UPDATE',
-            '❌ version.json verify: malformed pinned public key');
-        return false;
-      }
-
-      final curve = ECCurve_secp256r1();
-      BigInt toBigInt(List<int> bytes) {
-        final hex =
-            bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-        return BigInt.parse(hex, radix: 16);
-      }
-
-      final x = toBigInt(pubBytes.sublist(1, 33));
-      final y = toBigInt(pubBytes.sublist(33, 65));
-      final point = curve.curve.createPoint(x, y);
-      final pubKey = ECPublicKey(point, curve);
-
-      final parser = ASN1Parser(derSignature);
-      final asn1 = parser.nextObject();
-      if (asn1 is! ASN1Sequence ||
-          asn1.elements == null ||
-          asn1.elements!.length != 2) {
-        LoggerService.log('UPDATE',
-            '❌ version.json verify: signature is not an ASN.1 SEQUENCE of 2');
-        return false;
-      }
-      final rEl = asn1.elements![0];
-      final sEl = asn1.elements![1];
-      if (rEl is! ASN1Integer || sEl is! ASN1Integer) {
-        LoggerService.log('UPDATE',
-            '❌ version.json verify: signature components not INTEGERs');
-        return false;
-      }
-      final ecSig = ECSignature(rEl.integer!, sEl.integer!);
-
-      // SHA-256 of the message, then ECDSA verify on the hash.
-      final hash = SHA256Digest().process(message);
-
-      final signer = ECDSASigner();
-      signer.init(false, pc_api.PublicKeyParameter<ECPublicKey>(pubKey));
-      return signer.verifySignature(hash, ecSig);
-    } catch (ex, st) {
-      LoggerService.logError('UPDATE', ex, st);
-      return false;
-    }
-  }
-
-  static bool _validateCertificate(X509Certificate cert, String host, int port) {
-    if (host != 'mail.icd360s.de') return false;
-    return isTrustedLetsEncryptIssuer(cert.issuer);
-  }
-
-  /// Verify that an update download URL is allowed: must be HTTPS and pointed
-  /// at mail.icd360s.de.
-  ///
-  /// SECURITY: version.json is served from our server, but the `download_url`
-  /// field inside it is JSON data that an attacker who compromised the server
-  /// (or any future intermediate write path) could redirect to:
-  ///   - http://attacker.com/...   — cleartext, leaks user IP, no TLS check
-  ///   - https://github.com/.../release.exe — bypasses our domain pinning
-  ///
-  /// This check rejects both. Combined with the mandatory SHA-256 hash check
-  /// after download (and APK cert verification on Android, see H4), this
-  /// makes the update path defense-in-depth secure.
+  /// Whitelist of hosts that may serve update binaries. GitHub redirects
+  /// `github.com/.../releases/download/...` to `objects.githubusercontent.com`,
+  /// so both must pass. Any other host is rejected even if the URL would
+  /// otherwise look like a valid asset link.
   static bool _isAllowedDownloadUrl(String url) {
     if (url.contains('\x00') || url.contains('@') || url.contains('\\')) {
       return false;
     }
     try {
       final uri = Uri.parse(url);
+      const allowedHosts = {'github.com', 'objects.githubusercontent.com'};
       return uri.scheme == 'https' &&
-          uri.host == 'mail.icd360s.de' &&
+          allowedHosts.contains(uri.host) &&
           (uri.port == 443 || uri.port == 0) &&
           uri.userInfo.isEmpty;
     } catch (_) {
       return false;
     }
+  }
+
+  /// Pick the asset filename to download for this platform. Returns null
+  /// when the platform has no in-app updater (iOS opens TestFlight via
+  /// browser; mobile web has no install path).
+  static String? _expectedAssetName(String version) {
+    if (Platform.isWindows) {
+      return 'ICD360S-Mail-Client-Setup-$version.exe';
+    }
+    if (Platform.isMacOS) {
+      return 'ICD360S-Mail-Client-$version.dmg';
+    }
+    if (Platform.isLinux) {
+      // AppImage is self-contained and works on any glibc-based distro.
+      // Flatpak users are intercepted earlier in checkForUpdates() and
+      // routed to `flatpak update`.
+      return 'ICD360S-Mail-Client-x86_64.AppImage';
+    }
+    if (Platform.isAndroid) {
+      // Default to arm64 universal — covers ~95% of modern devices.
+      // The PackageManager rejects an ABI mismatch with a clear error;
+      // an ABI-aware selector is a follow-up (needs a method channel
+      // to query Build.SUPPORTED_ABIS).
+      return 'app-arm64-v8a-universal-release.apk';
+    }
+    return null;
   }
 
   /// Check if update is available
@@ -235,104 +156,99 @@ class UpdateService {
       await VersionBaseline.initialize(currentVersion);
       LoggerService.log('UPDATE', 'Checking for updates at $updateUrl');
 
-      // Download version.json from server
-      final client = PinnedSecurityContext.createHttpClient()
-        ..badCertificateCallback = _validateCertificate;
+      // GitHub's API uses well-known CAs (DigiCert), not Let's Encrypt,
+      // so we cannot use [PinnedSecurityContext] here. The system trust
+      // store validates the chain. Integrity of the install is still
+      // enforced by the per-asset SHA-256 digest (from the API) and, on
+      // Android, by [_expectedApkCertSha256] which pins our signing key.
+      final client = HttpClient()
+        ..userAgent = 'ICD360S-Mail-Client/$currentVersion';
       try {
-        // Download version.json AND its detached ECDSA signature, then
-        // verify before trusting any field. Defends against compromise
-        // of mail.icd360s.de itself: an attacker who controls the
-        // server can serve any JSON, but cannot forge a valid signature
-        // without the offline private key.
         final request = await client.getUrl(Uri.parse(updateUrl));
+        request.headers.set('Accept', 'application/vnd.github+json');
+        request.headers.set('X-GitHub-Api-Version', '2022-11-28');
         final response = await request.close();
 
-        if (response.statusCode == 200) {
-          final jsonBytes = Uint8List.fromList(
-              await response.fold<List<int>>(<int>[], (acc, c) {
-            acc.addAll(c);
-            return acc;
-          }));
+        if (response.statusCode != 200) {
+          LoggerService.log('UPDATE',
+              '❌ GitHub API returned ${response.statusCode} for $updateUrl');
+          return null;
+        }
 
-          final sigUrl = '$updateUrl.sig';
-          final sigReq = await client.getUrl(Uri.parse(sigUrl));
-          final sigResp = await sigReq.close();
-          if (sigResp.statusCode != 200) {
-            LoggerService.log('UPDATE',
-                '❌ REJECTED: $sigUrl returned ${sigResp.statusCode}');
-            return null;
+        final body = await response.transform(utf8.decoder).join();
+        final json = jsonDecode(body) as Map<String, dynamic>;
+
+        // GitHub tags follow `v<semver>`; strip the leading `v` for
+        // _isNewerVersion which expects bare semver. Fall back to the
+        // raw tag if there is no `v` prefix so a future tagging change
+        // does not break update detection.
+        final tagName = (json['tag_name'] as String?) ?? '';
+        final latestVersion =
+            tagName.startsWith('v') ? tagName.substring(1) : tagName;
+        if (latestVersion.isEmpty) {
+          LoggerService.log('UPDATE', '❌ Release has empty tag_name');
+          return null;
+        }
+        final changelog = (json['body'] as String?) ?? '';
+
+        final expectedName = _expectedAssetName(latestVersion);
+        if (expectedName == null) {
+          LoggerService.log('UPDATE',
+              'Platform ${Platform.operatingSystem} has no in-app updater asset');
+          return null;
+        }
+
+        final assets = (json['assets'] as List<dynamic>?) ?? const [];
+        Map<String, dynamic>? matched;
+        for (final raw in assets) {
+          final asset = raw as Map<String, dynamic>;
+          if (asset['name'] == expectedName) {
+            matched = asset;
+            break;
           }
-          final sigBytes = Uint8List.fromList(
-              await sigResp.fold<List<int>>(<int>[], (acc, c) {
-            acc.addAll(c);
-            return acc;
-          }));
+        }
+        if (matched == null) {
+          LoggerService.log('UPDATE',
+              '❌ Asset $expectedName not found in release $tagName');
+          return null;
+        }
 
-          if (!_verifyVersionJsonSignature(jsonBytes, sigBytes)) {
-            LoggerService.log('UPDATE',
-                '❌ REJECTED: version.json signature verification FAILED');
-            return null;
-          }
-          LoggerService.log('UPDATE', '✓ version.json signature verified');
+        final downloadUrl = matched['browser_download_url'] as String;
+        // GitHub started shipping `digest: "sha256:..."` per asset in
+        // late 2024. Older releases (or assets uploaded by tooling that
+        // does not set it) come back without it — treat as missing and
+        // let the mandatory check in _downloadWithProgress refuse the
+        // install rather than silently skipping integrity verification.
+        String? sha256Hash;
+        final digest = matched['digest'] as String?;
+        if (digest != null && digest.startsWith('sha256:')) {
+          sha256Hash = digest.substring('sha256:'.length);
+        }
 
-          final jsonString = utf8.decode(jsonBytes);
-          final json = jsonDecode(jsonString) as Map<String, dynamic>;
+        LoggerService.log('UPDATE',
+            'Latest version: $latestVersion (current: $currentVersion)');
 
-          final latestVersion = json['version'] as String;
-          final changelog = json['changelog'] as String?;
+        if (!_isAllowedDownloadUrl(downloadUrl)) {
+          LoggerService.log('UPDATE',
+              '❌ REJECTED: download_url not on GitHub: $downloadUrl');
+          return null;
+        }
 
-          // Pick the right download URL AND SHA-256 for the current platform.
-          // Bug fix: previously the SHA-256 was always read from the
-          // generic 'sha256' field (Windows). On macOS/Linux/Android the
-          // hash mismatched the actual binary, causing every update to be
-          // rejected as "file corrupted or tampered".
-          String downloadUrl;
-          String? sha256Hash;
-          if (Platform.isAndroid) {
-            downloadUrl = (json['download_url_android'] as String?) ?? json['download_url'] as String;
-            sha256Hash = (json['sha256_android'] as String?) ?? json['sha256'] as String?;
-          } else if (Platform.isIOS) {
-            downloadUrl = (json['download_url_ios'] as String?) ?? json['download_url'] as String;
-            sha256Hash = (json['sha256_ios'] as String?) ?? json['sha256'] as String?;
-          } else if (Platform.isMacOS) {
-            downloadUrl = (json['download_url_macos'] as String?) ?? json['download_url'] as String;
-            sha256Hash = (json['sha256_macos'] as String?) ?? json['sha256'] as String?;
-          } else if (Platform.isLinux) {
-            downloadUrl = (json['download_url_linux'] as String?) ?? json['download_url'] as String;
-            sha256Hash = (json['sha256_linux'] as String?) ?? json['sha256'] as String?;
-          } else {
-            // Windows / fallback — use the generic 'sha256' field
-            downloadUrl = json['download_url'] as String;
-            sha256Hash = json['sha256'] as String?;
-          }
-
-          LoggerService.log('UPDATE', 'Latest version: $latestVersion (current: $currentVersion)');
-
-          // SECURITY: Reject any download_url that is not HTTPS to mail.icd360s.de.
-          // Defense against a compromised version.json that points elsewhere.
-          if (!_isAllowedDownloadUrl(downloadUrl)) {
-            LoggerService.log('UPDATE',
-                '❌ REJECTED: download_url is not HTTPS to mail.icd360s.de: $downloadUrl');
-            return null;
-          }
-
-          // Compare versions
-          // L2 anti-rollback: refuse to even surface a candidate
-          // version that is below our persisted monotonic baseline.
-          // See VersionBaseline / CWE-1328.
-          if (!await VersionBaseline.isAcceptable(latestVersion)) {
-            LoggerService.log('UPDATE',
-                '❌ REJECTED candidate $latestVersion: below persisted baseline');
-            return null;
-          }
-          if (_isNewerVersion(latestVersion, currentVersion)) {
-            return UpdateInfo(
-              version: latestVersion,
-              downloadUrl: downloadUrl,
-              changelog: changelog ?? '',
-              sha256Hash: sha256Hash,
-            );
-          }
+        // L2 anti-rollback: refuse to even surface a candidate version
+        // below our persisted monotonic baseline. See VersionBaseline /
+        // CWE-1328.
+        if (!await VersionBaseline.isAcceptable(latestVersion)) {
+          LoggerService.log('UPDATE',
+              '❌ REJECTED candidate $latestVersion: below persisted baseline');
+          return null;
+        }
+        if (_isNewerVersion(latestVersion, currentVersion)) {
+          return UpdateInfo(
+            version: latestVersion,
+            downloadUrl: downloadUrl,
+            changelog: changelog,
+            sha256Hash: sha256Hash,
+          );
         }
       } finally {
         client.close();
@@ -441,20 +357,25 @@ class UpdateService {
     // constructs an UpdateInfo manually.
     if (!_isAllowedDownloadUrl(updateInfo.downloadUrl)) {
       LoggerService.log('UPDATE',
-          '❌ REJECTED: download_url is not HTTPS to mail.icd360s.de: ${updateInfo.downloadUrl}');
+          '❌ REJECTED: download_url not on GitHub: ${updateInfo.downloadUrl}');
       onProgress?.call(0, 0, 'Update rejected: invalid download URL');
       return null;
     }
 
     // SECURITY: SHA-256 hash is mandatory — reject updates without integrity verification
     if (updateInfo.sha256Hash == null || updateInfo.sha256Hash!.isEmpty) {
-      LoggerService.log('UPDATE', '❌ REJECTED: No SHA-256 hash in version.json — cannot verify update integrity');
+      LoggerService.log('UPDATE',
+          '❌ REJECTED: GitHub asset has no digest — cannot verify integrity');
       onProgress?.call(0, 0, 'Update rejected: missing integrity hash');
       return null;
     }
 
-    final client = PinnedSecurityContext.createHttpClient()
-      ..badCertificateCallback = _validateCertificate;
+    // Plain HttpClient — GitHub uses DigiCert (not Let's Encrypt) so the
+    // ISRG-only PinnedSecurityContext would fail validation. System trust
+    // store + the mandatory SHA-256 check below + Android APK cert pin
+    // keep this defense-in-depth.
+    final client = HttpClient()
+      ..userAgent = 'ICD360S-Mail-Client/$currentVersion';
     try {
       final request = await client.getUrl(Uri.parse(updateInfo.downloadUrl));
       final response = await request.close();
