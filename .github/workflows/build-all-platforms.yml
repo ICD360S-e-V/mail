@@ -771,7 +771,12 @@ jobs:
   # ============================================================
   build-ios:
     name: iOS
-    needs: [detect-changes, analyze]
+    # Tier-2 platform: gated behind Linux + Android so a Linux failure
+    # cancels iOS before we burn a slow macos-latest runner. On tag
+    # pushes (release builds) both gates are strict; on PR the gates
+    # are non-blocking so iOS still runs whenever the priority builds
+    # do, even after a green-but-with-warnings Linux run.
+    needs: [detect-changes, analyze, build-linux, build-android]
     if: needs.detect-changes.outputs.apple_changed == 'true'
     runs-on: macos-latest
     # Non-blocking on PRs so a transient Xcode/MSVC/toolchain regression
@@ -883,7 +888,8 @@ jobs:
   # ============================================================
   build-macos:
     name: macOS
-    needs: [detect-changes, analyze]
+    # See build-ios for the tier-2 gating rationale.
+    needs: [detect-changes, analyze, build-linux, build-android]
     if: needs.detect-changes.outputs.apple_changed == 'true'
     runs-on: macos-latest
     # See build-ios for the rationale on PR-only continue-on-error.
@@ -1031,7 +1037,8 @@ jobs:
   # ============================================================
   build-windows:
     name: Windows
-    needs: [detect-changes, analyze]
+    # See build-ios for the tier-2 gating rationale.
+    needs: [detect-changes, analyze, build-linux, build-android]
     if: needs.detect-changes.outputs.windows_changed == 'true'
     runs-on: windows-latest
     # See build-ios for the rationale on PR-only continue-on-error.
