@@ -9,14 +9,6 @@ name: Build Priority Platforms (Linux + Flatpak)
 on:
   push:
     tags: ['v*']
-  pull_request:
-    paths:
-      - 'lib/**'
-      - 'linux/**'
-      - 'pubspec.yaml'
-      - 'pubspec.lock'
-      - 'enough_mail_fork/**'
-      - '.github/workflows/build-all-platforms.yml'
   workflow_dispatch:
 
 # Concurrency: PR / branch pushes share a group and cancel the previous
