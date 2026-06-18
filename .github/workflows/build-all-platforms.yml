@@ -226,7 +226,8 @@ jobs:
         run: |
           flutter build linux --release \
             --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} \
-            --dart-define=SENTRY_RELEASE=mail-client-app@${{ github.ref_name }}+${{ github.run_number }}
+            --dart-define=SENTRY_RELEASE=mail-client-app@${{ github.ref_name }}+${{ github.run_number }} \
+            --dart-define=STARTUP_DIAG_KEY=${{ secrets.MAIL_STARTUP_DIAG_KEY }}
 
       # SECURITY (M9): Declare libsecret-1-0 as a runtime dependency.
       # flutter_secure_storage_linux requires libsecret to use the system

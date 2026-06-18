@@ -25,6 +25,9 @@ import 'services/master_vault.dart';
 import 'services/localization_service.dart';
 import 'services/macos_bundle_migration.dart';
 import 'services/platform_service.dart';
+import 'services/startup_diagnostics.dart';
+import 'services/log_upload_service.dart';
+import 'services/update_service.dart';
 import 'views/auth_wrapper.dart';
 
 /// Error app shown when another instance is already running
@@ -281,6 +284,7 @@ Future<void> _checkDeviceIntegrity() async {
 
 Future<void> _appMain() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await StartupDiagnostics.init();
 
   // SECURITY (B5, v2.30.0): cryptography_flutter still in pubspec — provides
   // platform-native crypto acceleration for Argon2id / AES-GCM / HKDF used by
@@ -293,7 +297,11 @@ Future<void> _appMain() async {
   // dep). MasterVault checks `sodium != null` before any vault op and
   // surfaces a clear error to the UI instead of crashing the app.
   try {
-    MasterVault.sodium = await SodiumSumoInit.init();
+    MasterVault.sodium = await StartupDiagnostics.stepWithTimeout(
+      'SodiumSumoInit',
+      const Duration(seconds: 8),
+      () => SodiumSumoInit.init(),
+    );
   } catch (ex, st) {
     LoggerService.logError('SODIUM_INIT', ex, st);
   }
@@ -310,7 +318,11 @@ Future<void> _appMain() async {
   // X11/Wayland is fundamentally user-controlled at the compositor.
   try {
     final noScreenshot = NoScreenshot.instance;
-    await noScreenshot.screenshotOff();
+    await StartupDiagnostics.stepWithTimeout(
+      'NoScreenshot',
+      const Duration(seconds: 3),
+      () => noScreenshot.screenshotOff(),
+    );
   } catch (ex, st) {
     LoggerService.logError('NO_SCREENSHOT', ex, st);
   }
@@ -318,7 +330,11 @@ Future<void> _appMain() async {
   // SECURITY: Device integrity check (root/jailbreak on mobile,
   // SIP/debugger on desktop). Warn but don't block — user may have
   // legitimate reasons (developer device, pentesting).
-  await _checkDeviceIntegrity();
+  await StartupDiagnostics.stepWithTimeout(
+    'DeviceIntegrity',
+    const Duration(seconds: 5),
+    () => _checkDeviceIntegrity(),
+  );
 
   // One-time macOS bundle ID migration (com.example.icd360sMailClient
   // → de.icd360s.mailclient, introduced in v2.25.0). MUST run before
@@ -326,11 +342,20 @@ Future<void> _appMain() async {
   // other path_provider entry point — otherwise the new bundle dir
   // is read while empty and the user appears to be logged out.
   // No-op on non-macOS platforms.
-  await MacOSBundleMigration.runIfNeeded();
+  await StartupDiagnostics.stepWithTimeout(
+    'MacOSBundleMigration',
+    const Duration(seconds: 3),
+    () => MacOSBundleMigration.runIfNeeded(),
+  );
 
   // Global Flutter error handler — replaces grey screen with visible error
   // In release mode, Flutter shows grey screen by default; this overrides it
   FlutterError.onError = (details) {
+    StartupDiagnostics.log(
+      'error',
+      'FLUTTER',
+      '${details.exception}\n${details.stack ?? ''}',
+    );
     LoggerService.logError('FLUTTER_ERROR', details.exception, details.stack ?? StackTrace.current);
   };
 
@@ -392,7 +417,11 @@ Future<void> _appMain() async {
 
   // Initialize platform-specific paths (needed for iOS/Android)
   try {
-    await platform.initialize();
+    await StartupDiagnostics.stepWithTimeout(
+      'PlatformInit',
+      const Duration(seconds: 3),
+      () => platform.initialize(),
+    );
   } catch (ex) {
     LoggerService.logError('PLATFORM_INIT', ex, StackTrace.current);
   }
@@ -446,7 +475,11 @@ Future<void> _appMain() async {
 
   // Initialize notifications (wrapped for GrapheneOS/custom ROM compatibility)
   try {
-    await NotificationService.initialize();
+    await StartupDiagnostics.stepWithTimeout(
+      'NotificationInit',
+      const Duration(seconds: 3),
+      () => NotificationService.initialize(),
+    );
   } catch (ex) {
     LoggerService.logError('NOTIFICATION_INIT', ex, StackTrace.current);
   }
@@ -459,7 +492,11 @@ Future<void> _appMain() async {
   // FluentApp window (smaller, not maximized) instead of black screen.
   if (platform.isDesktop) {
     try {
-      await windowManager.ensureInitialized();
+      await StartupDiagnostics.stepWithTimeout(
+        'WindowManagerInit',
+        const Duration(seconds: 5),
+        () => windowManager.ensureInitialized(),
+      );
 
       const windowOptions = WindowOptions(
         size: Size(1200, 800),
@@ -469,13 +506,17 @@ Future<void> _appMain() async {
         title: 'Mail Client by ICD360S e.V gemeinnützige Verein',
       );
 
-      await windowManager.waitUntilReadyToShow(windowOptions, () async {
-        await windowManager.setTitle(
-            'Mail Client by ICD360S e.V gemeinnützige Verein');
-        await windowManager.maximize();
-        await windowManager.show();
-        await windowManager.focus();
-      });
+      await StartupDiagnostics.stepWithTimeout(
+        'WindowManagerShow',
+        const Duration(seconds: 5),
+        () => windowManager.waitUntilReadyToShow(windowOptions, () async {
+          await windowManager.setTitle(
+              'Mail Client by ICD360S e.V gemeinnützige Verein');
+          await windowManager.maximize();
+          await windowManager.show();
+          await windowManager.focus();
+        }),
+      );
     } catch (ex, st) {
       LoggerService.logError('WINDOW_MANAGER_INIT', ex, st);
     }
@@ -483,6 +524,21 @@ Future<void> _appMain() async {
 
   PerfMonitorService.start();
   runApp(const MyApp());
+
+  // 3 s after runApp, ship the encrypted transcript to the per-platform
+  // endpoint. Never blocks the UI: fire-and-forget. Skipped silently if
+  // STARTUP_DIAG_KEY wasn't passed via --dart-define at build time
+  // (the local `flutter run` case).
+  unawaited(Future<void>.delayed(const Duration(seconds: 3), () async {
+    try {
+      final deviceId = await LogUploadService.getDeviceId();
+      await StartupDiagnostics.uploadToServer(
+        appVersion: UpdateService.currentVersion,
+        deviceId: deviceId,
+        username: null,
+      );
+    } catch (_) {/* never bubble to the running app */}
+  }));
 }
 
 class MyApp extends StatelessWidget {
