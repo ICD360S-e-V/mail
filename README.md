@@ -182,13 +182,63 @@ graph LR
 | RPM (Fedora/RHEL) | [icd360s-mail.rpm](https://mail.icd360s.de/downloads/mail/linux/icd360s-mail.rpm) |
 | tar.gz | [icd360s-mail-linux.tar.gz](https://mail.icd360s.de/downloads/mail/linux/icd360s-mail-linux.tar.gz) |
 
-**Flatpak (recommended for Fedora Silverblue/Kinoite + auto-updates):**
-```sh
-flatpak remote-add --if-not-exists icd360s \
-  https://mail.icd360s.de/downloads/mail/flatpak/icd360s.flatpakrepo
-flatpak install icd360s de.icd360s.mailclient
+**Flatpak (recommended for Fedora Silverblue/Kinoite — install once, auto-update forever):**
+
+OSTree repo published to GitHub Pages on every tag: [`https://icd360s-e-v.github.io/mail/icd360s-mail.flatpakrepo`](https://icd360s-e-v.github.io/mail/icd360s-mail.flatpakrepo)
+
+**1. Add the remote (one-time):**
+
+```bash
+flatpak remote-add --user --if-not-exists icd360s-mail \
+  https://icd360s-e-v.github.io/mail/icd360s-mail.flatpakrepo
 ```
-Updates land via `flatpak update` (or automatically through GNOME Software / KDE Discover). The single-file `.flatpak` bundle is still published per-release but the repo install avoids the "Update Issue" warning that bundle-only installs cause.
+
+**2. Install:**
+
+```bash
+flatpak install --user icd360s-mail de.icd360s.mailclient
+```
+
+**3. Manual update:**
+
+```bash
+flatpak update --user
+```
+
+KDE Discover / GNOME Software pick up new versions on their normal periodic check too — no further action needed.
+
+**4. Aggressive auto-check every 60 seconds (systemd user timer):**
+
+```bash
+mkdir -p ~/.config/systemd/user
+
+cat > ~/.config/systemd/user/flatpak-update-mail.service <<'SVC'
+[Unit]
+Description=Flatpak update for ICD360S Mail
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/flatpak update --user --noninteractive -y icd360s-mail
+SVC
+
+cat > ~/.config/systemd/user/flatpak-update-mail.timer <<'TIM'
+[Unit]
+Description=Check Mail Flatpak update every 1 minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+TIM
+
+systemctl --user daemon-reload
+systemctl --user enable --now flatpak-update-mail.timer
+```
+
+Check timer status: `systemctl --user list-timers | grep mail`
 
 </details>
 
