@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.144.0 - 2026-06-18
+#### Features
+- (**diag**) harden startup transcript (single-instance + crash recovery + µs + user binding) (#86) - (cb5b790) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.143.0 - 2026-06-18
 #### Features
 - (**diag**) encrypted startup transcript across all platforms (#83) - (be305f4) - icd360sevofficial, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
