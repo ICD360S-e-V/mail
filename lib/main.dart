@@ -300,7 +300,7 @@ Future<void> _appMain() async {
     MasterVault.sodium = await StartupDiagnostics.stepWithTimeout<SodiumSumo>(
       'SodiumSumoInit',
       const Duration(seconds: 8),
-      () => SodiumSumoInit.init(),
+      () async => SodiumSumoInit.init(),
     );
   } catch (ex, st) {
     LoggerService.logError('SODIUM_INIT', ex, st);
