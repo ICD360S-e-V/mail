@@ -13,6 +13,7 @@ import '../services/device_registration_service.dart';
 import '../services/pgp_key_service.dart';
 import '../services/update_service.dart';
 import '../services/master_vault.dart';
+import '../services/startup_diagnostics.dart';
 import '../utils/pii_redactor.dart';
 
 /// Email provider for managing email accounts and messages
@@ -150,6 +151,10 @@ class EmailProvider with ChangeNotifier {
     if (_accounts.isNotEmpty) {
       _currentAccount = _accounts.first;
       LoggerService.log('PROVIDER', 'Current account set to: ${_currentAccount!.username}');
+      // Bind user identity to the startup transcript so the next-boot
+      // crash-recovery upload (and any in-session writes) carry the IMAP
+      // username — same pattern as Sentry's `scope.setUser` post-login.
+      StartupDiagnostics.setUsername(_currentAccount!.username);
 
       // IMPORTANT: Notify UI immediately so accounts appear in the
       // navigation pane while folders are still loading. Without this,
@@ -685,6 +690,7 @@ class EmailProvider with ChangeNotifier {
     LoggerService.log('UI', 'User selected: ${account.username}/$folder');
     _currentAccount = account;
     _currentFolder = folder;
+    StartupDiagnostics.setUsername(account.username);
     // Set active PGP key for decrypt (per-account keys).
     // MUST await: fetchEmails decrypts incoming mail inline, so the
     // worker must hold THIS account's private key before we fetch.

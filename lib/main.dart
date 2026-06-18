@@ -426,50 +426,64 @@ Future<void> _appMain() async {
     LoggerService.logError('PLATFORM_INIT', ex, StackTrace.current);
   }
 
-  // SINGLE INSTANCE CHECK - only on desktop (mobile OS handles this)
+  // SINGLE INSTANCE CHECK - only on desktop (mobile OS handles this).
+  // Wrapped in stepWithTimeout to surface filesystem hangs (slow disk, AV
+  // scanning the lock file, sandbox FS quirks). 3 s is generous — every
+  // op inside is a single file stat/read/write on the user's appDataPath.
   if (platform.isDesktop) {
-    final appDataPath = platform.appDataPath;
-    final lockFile = File(p.join(appDataPath, '.app_lock'));
+    try {
+      await StartupDiagnostics.stepWithTimeout(
+        'SingleInstanceCheck',
+        const Duration(seconds: 3),
+        () async {
+          final appDataPath = platform.appDataPath;
+          final lockFile = File(p.join(appDataPath, '.app_lock'));
 
-    if (await lockFile.exists()) {
-      try {
-        final lockContent = await lockFile.readAsString();
-        final lockTime = int.tryParse(lockContent) ?? 0;
-        final now = DateTime.now().millisecondsSinceEpoch;
-        final ageSeconds = (now - lockTime) / 1000;
+          if (await lockFile.exists()) {
+            try {
+              final lockContent = await lockFile.readAsString();
+              final lockTime = int.tryParse(lockContent) ?? 0;
+              final now = DateTime.now().millisecondsSinceEpoch;
+              final ageSeconds = (now - lockTime) / 1000;
 
-        if (ageSeconds < 5) {
-          LoggerService.log('SINGLE_INSTANCE', 'App already running (lock age: ${ageSeconds.toStringAsFixed(1)}s)');
-          runApp(const _SingleInstanceErrorApp());
-          await Future.delayed(const Duration(seconds: 3));
-          exit(1);
-        } else {
-          LoggerService.log('SINGLE_INSTANCE', 'Stale lock file detected (age: ${ageSeconds.toStringAsFixed(1)}s) - deleting');
-          await lockFile.delete();
-        }
-      } catch (_) {
-        await lockFile.delete();
-      }
-    }
+              if (ageSeconds < 5) {
+                LoggerService.log('SINGLE_INSTANCE', 'App already running (lock age: ${ageSeconds.toStringAsFixed(1)}s)');
+                runApp(const _SingleInstanceErrorApp());
+                await Future.delayed(const Duration(seconds: 3));
+                exit(1);
+              } else {
+                LoggerService.log('SINGLE_INSTANCE', 'Stale lock file detected (age: ${ageSeconds.toStringAsFixed(1)}s) - deleting');
+                await lockFile.delete();
+              }
+            } catch (_) {
+              await lockFile.delete();
+            }
+          }
 
-    final dir = lockFile.parent;
-    if (!await dir.exists()) {
-      await dir.create(recursive: true);
-    }
-    final lockTimestamp = DateTime.now().millisecondsSinceEpoch.toString();
-    await lockFile.writeAsString(lockTimestamp);
-    LoggerService.log('SINGLE_INSTANCE', 'Lock file created');
+          final dir = lockFile.parent;
+          if (!await dir.exists()) {
+            await dir.create(recursive: true);
+          }
+          final lockTimestamp = DateTime.now().millisecondsSinceEpoch.toString();
+          await lockFile.writeAsString(lockTimestamp);
+          LoggerService.log('SINGLE_INSTANCE', 'Lock file created');
 
-    // Clean up lock file on exit (SIGINT, SIGTERM)
-    ProcessSignal.sigint.watch().listen((_) async {
-      try { await lockFile.delete(); } catch (_) {}
-      exit(0);
-    });
-    if (!Platform.isWindows) {
-      ProcessSignal.sigterm.watch().listen((_) async {
-        try { await lockFile.delete(); } catch (_) {}
-        exit(0);
-      });
+          // Clean up lock file on exit (SIGINT, SIGTERM). Stream subscriptions
+          // are synchronous registrations — they don't block.
+          ProcessSignal.sigint.watch().listen((_) async {
+            try { await lockFile.delete(); } catch (_) {}
+            exit(0);
+          });
+          if (!Platform.isWindows) {
+            ProcessSignal.sigterm.watch().listen((_) async {
+              try { await lockFile.delete(); } catch (_) {}
+              exit(0);
+            });
+          }
+        },
+      );
+    } catch (ex, st) {
+      LoggerService.logError('SINGLE_INSTANCE_CHECK', ex, st);
     }
   }
 
