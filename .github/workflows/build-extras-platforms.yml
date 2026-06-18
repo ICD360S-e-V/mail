@@ -163,21 +163,16 @@ jobs:
   # ============================================================
   analyze:
     name: Analyze
-    runs-on: ubuntu-latest
+    # Self-hosted runner — Flutter at /opt/flutter; no subosito wrapper.
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Install Flutter
-        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
-
-      - name: Resolve dependencies
-        run: flutter pub get --enforce-lockfile
-
-      - name: Run flutter analyze
-        run: flutter analyze --no-fatal-infos
+      - name: Resolve dependencies + analyze
+        run: |
+          export PATH="/opt/flutter/bin:/opt/flutter/bin/cache/dart-sdk/bin:$PATH"
+          flutter pub get --enforce-lockfile
+          flutter analyze --no-fatal-infos
 
   # ============================================================
   # Android Build - Per-flavor APKs + AAB, each on dedicated runner
@@ -186,7 +181,15 @@ jobs:
     name: Android (${{ matrix.flavor }}${{ matrix.format == 'aab' && ' AAB' || '' }})
     needs: [detect-changes, analyze]
     if: needs.detect-changes.outputs.android_changed == 'true'
-    runs-on: ubuntu-latest
+    # Self-hosted runner has Android SDK 34/35 + NDK 26.3.11579264 at
+    # /opt/android-sdk and JDK 17 Temurin at /usr/lib/jvm/java-17-openjdk-amd64.
+    # /etc/profile.d/*.sh exports JAVA_HOME and ANDROID_SDK_ROOT for login
+    # shells but Actions doesn't run a login shell — re-export below.
+    runs-on: [self-hosted, linux, x64]
+    env:
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+      ANDROID_SDK_ROOT: /opt/android-sdk
+      ANDROID_HOME: /opt/android-sdk
     strategy:
       fail-fast: false
       matrix:
@@ -214,26 +217,10 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Set up Java
-        uses: actions/setup-java@ad2b38190b15e4d6bdf0c97fb4fca8412226d287 # v5.3.0
-        with:
-          distribution: 'temurin'
-          java-version: ${{ env.JAVA_VERSION }}
-
-      - name: Install Flutter
-        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
-
-      - name: Cache Gradle
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: gradle-${{ runner.os }}-
+      # JDK 17 + Flutter pre-installed on the self-hosted runner. Gradle
+      # caches live in ~/.gradle/{caches,wrapper} on the persistent NVMe.
+      # The actions/cache wrapper added round-trips to GitHub's cache
+      # backend — pure overhead when the disk already keeps the state.
 
       # SECURITY (M7): Pass secrets via env vars so they are never interpolated
       # directly into the shell script body. A secret containing special chars,
@@ -263,23 +250,14 @@ jobs:
           } > android/key.properties
           chmod 600 android/key.properties
 
-      - name: Restore native build hooks (sodium)
-        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
-        with:
-          path: .dart_tool/hooks_runner/
-          key: native-hooks-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pubspec.lock') }}
-          restore-keys: |
-            native-hooks-${{ runner.os }}-${{ runner.arch }}-
-
-      - name: Resolve Flutter dependencies
-        run: flutter pub get --enforce-lockfile
-
-      - name: Compile Android ${{ matrix.flavor }} ${{ matrix.format }} (release)
+      - name: Resolve Flutter dependencies + compile Android
         env:
           BUILD_FORMAT: ${{ matrix.format }}
           BUILD_FLAVOR: ${{ matrix.flavor }}
           BUILD_ARGS: ${{ matrix.build_args }}
         run: |
+          export PATH="/opt/flutter/bin:/opt/flutter/bin/cache/dart-sdk/bin:$PATH"
+          flutter pub get --enforce-lockfile
           flutter build "$BUILD_FORMAT" --release \
             --flavor "$BUILD_FLAVOR" $BUILD_ARGS \
             --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} \

@@ -147,21 +147,17 @@ jobs:
   # ============================================================
   analyze:
     name: Analyze
-    runs-on: ubuntu-latest
+    # Self-hosted runner on 10.10.10.60 — Flutter pre-installed in /opt/flutter,
+    # Dart 3.11.5 via the SDK. No subosito/flutter-action, no provisioning step.
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Install Flutter
-        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
-
-      - name: Resolve dependencies
-        run: flutter pub get --enforce-lockfile
-
-      - name: Run flutter analyze
-        run: flutter analyze --no-fatal-infos
+      - name: Resolve dependencies + analyze
+        run: |
+          export PATH="/opt/flutter/bin:/opt/flutter/bin/cache/dart-sdk/bin:$PATH"
+          flutter pub get --enforce-lockfile
+          flutter analyze --no-fatal-infos
 
   # ============================================================
   # Linux Build - .deb, .rpm, AppImage
@@ -170,52 +166,25 @@ jobs:
     name: Linux
     needs: [detect-changes, analyze]
     if: needs.detect-changes.outputs.linux_changed == 'true'
-    runs-on: ubuntu-latest
+    # Self-hosted runner. clang/cmake/ninja/libgtk/libsecret/libcurl/
+    # libayatana/libjsoncpp/rpm/ruby/fpm are pre-installed (see /opt and
+    # /etc/profile.d/*.sh on 10.10.10.60). Only project-local pubspec
+    # state needs (re)hydrating on each run.
+    runs-on: [self-hosted, linux, x64]
+    env:
+      # Ubuntu 26.04 ships clang-21 which makes -Wdeprecated-declarations
+      # a hard error by default; some Flutter plugins (tray_manager,
+      # appindicator glue) still call deprecated GTK APIs. Demoting back
+      # to a warning unblocks the build without touching plugin sources.
+      CFLAGS: "-Wno-error=deprecated-declarations"
+      CXXFLAGS: "-Wno-error=deprecated-declarations"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Install Flutter
-        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
-
-      - name: Install Linux dependencies
+      - name: Resolve Flutter dependencies + compile Linux release binary
         run: |
-          sudo apt-get update
-          # Build-time deps:
-          #   libcurl4-openssl-dev    sentry-native links libcurl at compile
-          #                           ("Could NOT find CURL ..." without it)
-          #   libayatana-appindicator3-dev  required when the Flatpak bundles
-          #                           libayatana-appindicator (KDE/GNOME tray);
-          #                           keeps headers in path so the bundle's
-          #                           glue compiles cleanly
-          #   libjsoncpp-dev          some Flutter desktop plugins pull it in
-          #                           transitively; explicit avoids "fatal
-          #                           error: json/json.h" on plugin updates
-          sudo apt-get install -y \
-            clang cmake ninja-build pkg-config \
-            libgtk-3-dev liblzma-dev libstdc++-12-dev \
-            libsecret-1-dev libsecret-1-0 \
-            libcurl4-openssl-dev \
-            libayatana-appindicator3-dev \
-            libjsoncpp-dev \
-            rpm ruby-dev
-          sudo gem install fpm
-
-      - name: Cache native build hooks (sodium)
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
-        with:
-          path: .dart_tool/hooks_runner/
-          key: native-hooks-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pubspec.lock') }}
-          restore-keys: |
-            native-hooks-${{ runner.os }}-${{ runner.arch }}-
-
-      - name: Resolve Flutter dependencies
-        run: flutter pub get --enforce-lockfile
-
-      - name: Compile Linux release binary
-        run: |
+          export PATH="/opt/flutter/bin:/opt/flutter/bin/cache/dart-sdk/bin:$PATH"
+          flutter pub get --enforce-lockfile
           flutter build linux --release \
             --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} \
             --dart-define=SENTRY_RELEASE=mail-client-app@${{ github.ref_name }}+${{ github.run_number }} \
@@ -462,10 +431,11 @@ jobs:
     name: Flatpak
     needs: [detect-changes, build-linux]
     if: needs.detect-changes.outputs.linux_changed == 'true'
-    runs-on: ubuntu-latest
-    container:
-      image: bilelmoussaoui/flatpak-github-actions:freedesktop-24.08
-      options: --privileged
+    # Self-hosted runner. flatpak 1.16.6, flatpak-builder 1.4.8, freedesktop
+    # runtime/sdk 24.08 are pre-installed. ~/.cache/flatpak-builder/build/
+    # stays warm across runs (libmpv-style stacks survive). No container
+    # wrapper, no flatpak/flatpak-github-actions action — both wipe state.
+    runs-on: [self-hosted, linux, x64]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -485,6 +455,7 @@ jobs:
 
       - name: Clone Flathub shared-modules
         run: |
+          rm -rf flatpak/shared-modules
           git clone --depth 1 --branch master \
             https://github.com/flathub/shared-modules.git \
             flatpak/shared-modules
@@ -498,11 +469,21 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Build Flatpak bundle
-        uses: flatpak/flatpak-github-actions/flatpak-builder@401fe28a8384095fc1531b9d320b292f0ee45adb # v6.7
-        with:
-          bundle: ICD360S-Mail-Client-${{ steps.ver.outputs.version }}.flatpak
-          manifest-path: flatpak/de.icd360s.mailclient.yml
-          cache-key: flatpak-builder-${{ github.sha }}
+        working-directory: flatpak
+        run: |
+          set -euo pipefail
+          # Output dirs go away every build; the module cache underneath
+          # (~/.cache/flatpak-builder/build/) intentionally stays warm.
+          # NOTE: do NOT pass --force-clean — that wipes the warm cache
+          # and forces libmpv-style stacks to recompile from source.
+          rm -rf ../build ../repo
+          flatpak-builder --user --install-deps-from=flathub \
+            --repo=../repo --ccache \
+            ../build de.icd360s.mailclient.yml
+          flatpak build-bundle ../repo \
+            ../ICD360S-Mail-Client-${{ steps.ver.outputs.version }}.flatpak \
+            de.icd360s.mailclient
+          ls -lh ../ICD360S-Mail-Client-${{ steps.ver.outputs.version }}.flatpak
 
       - name: Upload Flatpak bundle
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
