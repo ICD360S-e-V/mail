@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.143.0 - 2026-06-18
+#### Features
+- (**diag**) encrypted startup transcript across all platforms (#83) - (be305f4) - icd360sevofficial, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.142.2 - 2026-06-17
 #### Bug Fixes
 - (**windows**) silence MSVC 14.51 hard deprecation of <experimental/coroutine> (#77) - (2afac31) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
