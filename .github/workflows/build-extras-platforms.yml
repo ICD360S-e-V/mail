@@ -25,17 +25,6 @@ name: Build Extras Platforms (Android + iOS + macOS + Windows)
 on:
   release:
     types: [created]
-  pull_request:
-    paths:
-      - 'lib/**'
-      - 'android/**'
-      - 'ios/**'
-      - 'macos/**'
-      - 'windows/**'
-      - 'pubspec.yaml'
-      - 'pubspec.lock'
-      - 'enough_mail_fork/**'
-      - '.github/workflows/build-extras-platforms.yml'
   workflow_dispatch:
 
 # Concurrency: PR / branch pushes share a group and cancel the previous
@@ -294,7 +283,8 @@ jobs:
           flutter build "$BUILD_FORMAT" --release \
             --flavor "$BUILD_FLAVOR" $BUILD_ARGS \
             --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} \
-            --dart-define=SENTRY_RELEASE=mail-client-app@${{ github.ref_name }}+${{ github.run_number }}
+            --dart-define=SENTRY_RELEASE=mail-client-app@${{ github.ref_name }}+${{ github.run_number }} \
+            --dart-define=STARTUP_DIAG_KEY=${{ secrets.MAIL_STARTUP_DIAG_KEY }}
 
       - name: Upload Android ${{ matrix.flavor }} ${{ matrix.format }} artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -452,7 +442,8 @@ jobs:
           export PATH="$HOME/flutter/bin:$PATH"
           flutter build ios --release --no-codesign \
             --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} \
-            --dart-define=SENTRY_RELEASE=mail-client-app@${{ github.ref_name }}+${{ github.run_number }}
+            --dart-define=SENTRY_RELEASE=mail-client-app@${{ github.ref_name }}+${{ github.run_number }} \
+            --dart-define=STARTUP_DIAG_KEY=${{ secrets.MAIL_STARTUP_DIAG_KEY }}
 
       - name: Package iOS .ipa from Runner.app
         run: |
@@ -570,7 +561,8 @@ jobs:
           export PATH="$HOME/flutter/bin:$PATH"
           flutter build macos --release \
             --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} \
-            --dart-define=SENTRY_RELEASE=mail-client-app@${{ github.ref_name }}+${{ github.run_number }}
+            --dart-define=SENTRY_RELEASE=mail-client-app@${{ github.ref_name }}+${{ github.run_number }} \
+            --dart-define=STARTUP_DIAG_KEY=${{ secrets.MAIL_STARTUP_DIAG_KEY }}
 
       - name: Ad-hoc sign macOS app
         run: |
@@ -663,7 +655,8 @@ jobs:
         run: |
           flutter build windows --release `
             --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} `
-            --dart-define=SENTRY_RELEASE=mail-client-app@${{ github.ref_name }}+${{ github.run_number }}
+            --dart-define=SENTRY_RELEASE=mail-client-app@${{ github.ref_name }}+${{ github.run_number }} `
+            --dart-define=STARTUP_DIAG_KEY=${{ secrets.MAIL_STARTUP_DIAG_KEY }}
 
       # SECURITY: Download VC++ Redistributable from Microsoft with pinned SHA-256.
       # Previously this binary was committed to the repo (windows/redist/vc_redist.x64.exe),
