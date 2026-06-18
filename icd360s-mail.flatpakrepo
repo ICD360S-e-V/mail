@@ -1,0 +1,7 @@
+[Flatpak Repo]
+Title=ICD360S e.V. Mail Client
+Url=https://icd360s-e-v.github.io/mail/repo/
+Homepage=https://github.com/ICD360S-e-V/mail
+Comment=Mail Client Auto-Update Repository
+Description=Auto-update Flatpak repository for the ICD360S e.V. encrypted mail client.
+NoDeps=true
