@@ -564,6 +564,83 @@ jobs:
             echo "Manifest: \`flatpak/de.icd360s.mailclient.yml\`"
             echo "Runtime: \`org.freedesktop.Platform//24.08\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # ============================================================
+  # FLATPAK auto-update repo → GitHub Pages
+  # ============================================================
+  #
+  # Publishes the OSTree repository to GitHub Pages so KDE Discover
+  # / `flatpak update` picks up new releases automatically — the user
+  # only adds the remote once and never has to uninstall + reinstall
+  # the .flatpak bundle by hand again.
+  #
+  # The repo is also reachable via the standard Discover "Updates"
+  # tab on Fedora Kinoite / Silverblue / Bazzite / GNOME Software,
+  # so an out-of-date version surfaces a notification automatically.
+  deploy-flatpak-pages:
+    name: Publish Flatpak repo to GitHub Pages
+    needs: build-flatpak
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: flatpak-repo
+          path: in/
+
+      - name: Assemble gh-pages publish tree
+        run: |
+          mkdir -p pages-out/repo
+          tar -xf in/flatpak-repo.tar -C pages-out/repo
+          cat > pages-out/icd360s-mail.flatpakrepo <<'EOF'
+          [Flatpak Repo]
+          Title=ICD360S e.V. Mail Client
+          Url=https://icd360s-e-v.github.io/mail/repo/
+          Homepage=https://github.com/ICD360S-e-V/mail
+          Comment=Mail Client Auto-Update Repository
+          Description=Auto-update Flatpak repository for the ICD360S e.V. encrypted mail client.
+          NoDeps=true
+          EOF
+          cat > pages-out/index.html <<'EOF'
+          <!doctype html>
+          <html lang="de">
+          <head>
+            <meta charset="utf-8">
+            <title>ICD360S e.V. Mail — Flatpak Repo</title>
+            <style>
+              body { font-family: -apple-system, system-ui, sans-serif; max-width: 720px; margin: 4rem auto; padding: 0 1rem; line-height: 1.55; color: #222; }
+              code, pre { background: #f4f4f4; border-radius: 4px; font-size: 0.9rem; }
+              code { padding: 0.1rem 0.35rem; }
+              pre { padding: 1rem; overflow-x: auto; }
+              a { color: #1a73e8; }
+            </style>
+          </head>
+          <body>
+            <h1>ICD360S e.V. Mail — Flatpak Repository</h1>
+            <p>Auto-Update für den Mail-Client. Einmal hinzufügen, danach läuft <code>flatpak update</code> automatisch beim nächsten Release.</p>
+            <h2>Installation</h2>
+            <pre>flatpak remote-add --user --if-not-exists icd360s-mail \
+            https://icd360s-e-v.github.io/mail/icd360s-mail.flatpakrepo
+          flatpak install --user icd360s-mail de.icd360s.mailclient</pre>
+            <h2>Update</h2>
+            <pre>flatpak update --user</pre>
+            <p>Quellcode: <a href="https://github.com/ICD360S-e-V/mail">github.com/ICD360S-e-V/mail</a></p>
+          </body>
+          </html>
+          EOF
+
+      - name: Deploy to gh-pages branch
+        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e # v4.1.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: pages-out
+          publish_branch: gh-pages
+          keep_files: false
+          enable_jekyll: false
+          commit_message: "deploy: flatpak repo ${{ github.ref_name }}"
+
   # ============================================================
   # SBOM - Generate CycloneDX Software Bill of Materials
   # ============================================================
