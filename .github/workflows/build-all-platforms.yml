@@ -580,7 +580,10 @@ jobs:
   deploy-flatpak-pages:
     name: Publish Flatpak repo to GitHub Pages
     needs: build-flatpak
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Also publish on workflow_dispatch so the first OSTree deploy can be
+    # triggered without needing a fresh tag. The Release job still gates
+    # on tag-only.
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write
