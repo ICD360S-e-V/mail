@@ -162,3 +162,6 @@ clickhouse-listen-ipv4-only.xml
 docker-compose.override.yml
 journal-upload-recover.service
 journal-upload-recover.sh
+builder_linux_android
+builder_linux_android.pub
+# (above lines added for self-hosted runner access)
