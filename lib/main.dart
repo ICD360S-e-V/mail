@@ -297,7 +297,7 @@ Future<void> _appMain() async {
   // dep). MasterVault checks `sodium != null` before any vault op and
   // surfaces a clear error to the UI instead of crashing the app.
   try {
-    MasterVault.sodium = await StartupDiagnostics.stepWithTimeout(
+    MasterVault.sodium = await StartupDiagnostics.stepWithTimeout<SodiumSumo>(
       'SodiumSumoInit',
       const Duration(seconds: 8),
       () => SodiumSumoInit.init(),

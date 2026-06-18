@@ -29,7 +29,6 @@ class StartupDiagnostics {
 
   static final List<Map<String, Object?>> _logs = [];
   static IOSink? _sink;
-  static String? _logFilePath;
   static bool _initFailed = false;
 
   /// Open the on-disk transcript. Safe to call multiple times.
@@ -38,11 +37,10 @@ class StartupDiagnostics {
     try {
       final dir = await getApplicationSupportDirectory();
       final f = File('${dir.path}${Platform.pathSeparator}startup.log');
-      _logFilePath = f.path;
       // Truncate previous run — we only care about the most recent boot.
       _sink = f.openWrite(mode: FileMode.write);
       _writeLine('=== boot ${DateTime.now().toUtc().toIso8601String()} ===');
-      _writeLine('platform=${_platformTag()} pid=$pid');
+      _writeLine('platform=${_platformTag()} pid=$pid path=${f.path}');
     } catch (e, st) {
       _initFailed = true;
       // Best-effort fallback: keep in-memory log; transcript is optional.
