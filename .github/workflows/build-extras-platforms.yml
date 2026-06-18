@@ -1,14 +1,30 @@
 name: Build Extras Platforms (Android + iOS + macOS + Windows)
 
-# Extras workflow — the slower platforms. Runs in parallel with
-# `build-all-platforms.yml` (priority Linux + Flatpak). Priority
-# finishes first so the GitHub UI's Download button activates on its
-# artifacts within ~8 minutes. On tag push, priority CREATES the
-# GitHub Release; this workflow uploads its own assets to that release
-# via `gh release upload --clobber` as each platform finishes.
+# Extras workflow — the slower platforms. Triggered ONLY after the
+# GitHub Release for a tag is published by the priority workflow,
+# never in parallel with it:
+#
+#   tag push v*
+#     ↓
+#   build-all-platforms.yml (priority) builds Linux + Flatpak + SBOM
+#   and PUBLISHES the GitHub Release for the tag with those assets.
+#     ↓
+#   GitHub fires a `release: created` event.
+#     ↓
+#   This workflow builds Android + iOS + macOS + Windows and adds them
+#   to the existing release via `gh release upload --clobber`.
+#
+# Outcome: the GitHub Release page is alive ~8 minutes after the tag
+# push with Linux + Flatpak downloadable, and the slower runners only
+# spin up after the release exists. A priority failure means no
+# release is created and extras never runs — no half-baked release
+# ever leaves the channel.
+#
+# Pull requests still trigger extras directly so reviewers see slow
+# platforms build before the merge.
 on:
-  push:
-    tags: ['v*']
+  release:
+    types: [created]
   pull_request:
     paths:
       - 'lib/**'
@@ -759,7 +775,10 @@ jobs:
   release-upload-extras:
     name: Release upload (extras)
     needs: [build-android, android-cache-save, build-ios, build-macos, build-windows]
-    if: always() && startsWith(github.ref, 'refs/tags/v')
+    # Only on the `release: created` trigger — that's the only time a
+    # release exists for us to upload to. PR / workflow_dispatch runs
+    # skip this job.
+    if: always() && github.event_name == 'release'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -810,26 +829,6 @@ jobs:
           echo "## Extras assets staged: $count"
           ls -lah upload/
 
-      - name: Wait for priority release to exist
-        if: steps.stage.outputs.count != '0'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-        run: |
-          # Priority workflow creates the release with Linux + Flatpak +
-          # SBOM and release notes. Poll until it shows up (max 25 min).
-          # Beyond that we assume priority failed and bail with an error
-          # so the run goes red and a maintainer notices.
-          for i in $(seq 1 150); do
-            if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-              echo "✓ Release $TAG exists, proceeding with upload"
-              exit 0
-            fi
-            echo "  release $TAG not yet present, sleeping 10s (attempt $i/150)"
-            sleep 10
-          done
-          echo "::error::Release $TAG did not appear in 25 minutes — priority workflow likely failed"
-          exit 1
 
       - name: Upload extras to release
         if: steps.stage.outputs.count != '0'
