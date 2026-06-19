@@ -638,11 +638,12 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
-        with:
-          name: flatpak-repo
-          path: in/
-
+      # Order matters: checkout MUST come before download-artifact.
+      # actions/checkout defaults to `clean: true` → runs `git clean -ffdx`
+      # which deletes untracked files like the just-downloaded `in/` tree.
+      # If the order is download-then-checkout, `in/flatpak-repo.tar`
+      # gets wiped between steps (observed empirically on v2.144.3 run
+      # 27816297652). Putting checkout first sidesteps the cleanup race.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           # Need .github/flatpak-pubkey.b64 to embed in the .flatpakrepo;
@@ -650,6 +651,11 @@ jobs:
           sparse-checkout: |
             .github/flatpak-pubkey.b64
           sparse-checkout-cone-mode: false
+
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: flatpak-repo
+          path: in/
 
       - name: Assemble gh-pages publish tree
         run: |
