@@ -877,9 +877,25 @@ jobs:
       # node20 upstream and triggers a deprecation warning under the
       # forced-Node24 runtime. gh CLI is pre-installed on all runners
       # and natively uses Node 24, so no warning.
+      # The Extras workflow (Android + iOS + macOS + Windows) is gated on
+      # `release: created`. GitHub deliberately suppresses workflow
+      # triggering when an event is dispatched by the default
+      # GITHUB_TOKEN — without this, every release would cascade builds
+      # forever. Effect for us: when this step uses `secrets.GITHUB_TOKEN`,
+      # the release IS created but the Extras workflow NEVER fires, so
+      # every release ships Linux/Flatpak only. Confirmed dormant for
+      # the entire v2.144.x series.
+      #
+      # Fix: use a personal access token in `secrets.RELEASE_PAT` (scope
+      # `repo`). When present, the release-created event is authored by
+      # the PAT owner instead of the bot and Extras fires normally. The
+      # `||` fallback keeps the step working before the secret is set —
+      # without RELEASE_PAT, behavior is the pre-fix status quo
+      # (release created, Extras silent), so the change is safe to land
+      # before the secret exists.
       - name: Create GitHub Release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
           NOTES_PATH: ${{ steps.notes.outputs.notes_path }}
           RELEASE_NAME: ${{ steps.notes.outputs.release_name }}
         run: |
