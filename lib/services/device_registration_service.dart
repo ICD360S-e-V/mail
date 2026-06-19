@@ -246,10 +246,12 @@ class DeviceRegistrationService {
         payload['last_seen'] = DateTime.now().toUtc().toIso8601String();
       }
 
-      ioClient ??= PinnedSecurityContext.createHttpClient()
-        ..connectionTimeout = const Duration(seconds: 5)
-        ..idleTimeout = const Duration(seconds: 1);
-      ioClient.badCertificateCallback = _validateCertificate;
+      if (ioClient == null) {
+        ioClient = PinnedSecurityContext.createHttpClient()
+          ..connectionTimeout = const Duration(seconds: 5)
+          ..idleTimeout = const Duration(seconds: 1);
+        ioClient.badCertificateCallback = _validateCertificate;
+      }
       client = IOClient(ioClient);
 
       final response = await client
@@ -325,10 +327,12 @@ class DeviceRegistrationService {
       if (useMtls) {
         ioClient = MtlsService.createMtlsHttpClient();
       }
-      ioClient ??= PinnedSecurityContext.createHttpClient()
-        ..connectionTimeout = const Duration(seconds: 5)
-        ..idleTimeout = const Duration(seconds: 1);
-      ioClient.badCertificateCallback = _validateCertificate;
+      if (ioClient == null) {
+        ioClient = PinnedSecurityContext.createHttpClient()
+          ..connectionTimeout = const Duration(seconds: 5)
+          ..idleTimeout = const Duration(seconds: 1);
+        ioClient.badCertificateCallback = _validateCertificate;
+      }
       client = IOClient(ioClient);
 
       if (useMtls) {
