@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.144.3 - 2026-06-19
+#### Bug Fixes
+- (**flatpak**) add RuntimeRepo= to .flatpakref so GUI store can install - (896e02c) - ICD360S e.V., *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.144.2 - 2026-06-19
 #### Bug Fixes
 - (**flatpak**) GPG-sign OSTree commits + embed pubkey in .flatpakref/.flatpakrepo - (8a0ad6c) - ICD360S e.V., *Claude Opus 4.7 (1M context)*
