@@ -8,6 +8,21 @@ import 'certificate_expiry_monitor.dart';
 import 'logger_service.dart';
 import 'master_vault.dart';
 
+/// Per-user mTLS cert + private key + CA bundle, decrypted from secure
+/// storage. Used by [MtlsService.createMtlsHttpClientFor] to build a
+/// SecurityContext for an account that isn't the singleton
+/// `_currentUsername`.
+class UserCertBundle {
+  final Uint8List clientCert;
+  final Uint8List clientKey;
+  final Uint8List caCert;
+  const UserCertBundle({
+    required this.clientCert,
+    required this.clientKey,
+    required this.caCert,
+  });
+}
+
 /// Service for downloading per-user certificates from server
 /// Eliminates hardcoded certificates vulnerability
 class CertificateService {
@@ -324,6 +339,36 @@ class CertificateService {
     } catch (ex, st) {
       LoggerService.logError('CERT-DOWNLOAD', ex, st);
       return false;
+    }
+  }
+
+  /// Read the cert + key + CA bundle for [username] from secure storage
+  /// **without** mutating the singleton ([_currentUsername],
+  /// [_clientCert] etc. stay untouched). Used by [MtlsService] to build
+  /// per-account SecurityContexts so heartbeats can present the right
+  /// client cert for every account, not just whichever user is currently
+  /// selected in the UI.
+  ///
+  /// Returns null if any of the three components is missing in storage —
+  /// caller falls back to the legacy non-mTLS path.
+  static Future<UserCertBundle?> loadBundleFor(String username) async {
+    try {
+      await _migrateLegacyGlobalKeys();
+      await _migrateUnsafeUserKeys(username);
+
+      final cert = await _secureStorage.read(key: _kStorageClientCertFor(username));
+      final key  = await _secureStorage.read(key: _kStorageClientKeyFor(username));
+      final ca   = await _secureStorage.read(key: _kStorageCaCertFor(username));
+      if (cert == null || key == null || ca == null) return null;
+
+      return UserCertBundle(
+        clientCert: Uint8List.fromList(utf8.encode(cert)),
+        clientKey:  Uint8List.fromList(utf8.encode(key)),
+        caCert:     Uint8List.fromList(utf8.encode(ca)),
+      );
+    } catch (ex, st) {
+      LoggerService.logError('CERT-DOWNLOAD', ex, st);
+      return null;
     }
   }
 

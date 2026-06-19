@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2024-2026 ICD360S e.V.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -195,14 +196,42 @@ class DeviceRegistrationService {
   /// falls back to the legacy v2.27.x path with `username` in the body
   /// and no replay protection. The server-side endpoint accepts both
   /// during the v2.27 → v2.28 transition.
+  /// Serializing queue so heartbeats fired from multiple call-sites
+  /// (initial registration loop + the 5-min Timer.periodic) chain
+  /// instead of racing into nginx's `limit_req zone=api burst=10`. Each
+  /// heartbeat waits for the previous to complete, then sleeps 200 ms
+  /// before starting — 5 req/s sustained, well under the limit even
+  /// with a 50-account session.
+  static Future<void> _heartbeatChain = Future<void>.value();
+  static const _heartbeatSpacing = Duration(milliseconds: 200);
+
   static Future<HeartbeatResult> sendHeartbeat({required String username}) async {
+    final previous = _heartbeatChain;
+    final ticket = Completer<void>();
+    _heartbeatChain = ticket.future;
+    try {
+      await previous;
+      await Future<void>.delayed(_heartbeatSpacing);
+      return await _doSendHeartbeat(username: username);
+    } finally {
+      ticket.complete();
+    }
+  }
+
+  static Future<HeartbeatResult> _doSendHeartbeat({required String username}) async {
     IOClient? client;
     HttpClient? ioClient;
     try {
       final deviceId = await getOrCreateDeviceId();
       final cleanUsername = username.replaceAll('@icd360s.de', '');
-      final useMtls = CertificateService.hasCertificates &&
-          CertificateService.currentUsername == username;
+
+      // Per-account mTLS: load the matching cert from secure storage
+      // into a cached SecurityContext (no mutation of the singleton
+      // "current user"). If the bundle is missing, fall through to the
+      // legacy username-in-body path — the server still accepts it
+      // during the v2.27 → v3.0 transition.
+      ioClient = await MtlsService.createMtlsHttpClientFor(username: username);
+      final useMtls = ioClient != null;
 
       final payload = <String, dynamic>{
         'device_id': deviceId,
@@ -217,9 +246,6 @@ class DeviceRegistrationService {
         payload['last_seen'] = DateTime.now().toUtc().toIso8601String();
       }
 
-      if (useMtls) {
-        ioClient = MtlsService.createMtlsHttpClient();
-      }
       ioClient ??= PinnedSecurityContext.createHttpClient()
         ..connectionTimeout = const Duration(seconds: 5)
         ..idleTimeout = const Duration(seconds: 1);
