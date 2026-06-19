@@ -13,6 +13,13 @@ permissions:
 jobs:
   scan:
     name: gitleaks scan
+    # Dependabot PRs run under a separate token and do not get access
+    # to repo Actions secrets, so GITLEAKS_LICENSE is empty and the
+    # gitleaks-action errors out with "missing gitleaks license".
+    # Dependabot only bumps dependency versions — no risk of new
+    # secrets being introduced — so skip the scan for these PRs.
+    # Regular PRs, pushes, and the weekly cron still run normally.
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
