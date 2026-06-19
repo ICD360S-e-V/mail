@@ -1,0 +1,136 @@
+name: Publish version.json to GitHub Release
+
+# Generates a signed version.json manifest for a release and uploads it
+# (plus the detached .sig) as release assets. The Flutter client polls
+# https://github.com/ICD360S-e-V/mail/releases/latest/download/version.json
+# to discover new versions; this workflow is the producer side of that
+# manifest. mail.icd360s.de is no longer involved.
+#
+# Manual trigger only — run AFTER the release is fully populated
+# (both Build Priority Platforms and Build Extras Platforms have
+# finished attaching their per-platform binaries). The signing
+# private key lives in the `VERSION_SIGNING_PRIVATE_KEY` secret; the
+# matching public key is pinned in `lib/services/update_service.dart`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v2.144.7)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Sign and upload version.json
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::release $TAG does not exist on $GITHUB_REPOSITORY"
+            exit 1
+          fi
+          mkdir release
+          cd release
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY"
+          echo "Downloaded assets:"
+          ls -la
+
+      - name: Generate version.json
+        env:
+          TAG: ${{ inputs.tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          BASE="https://github.com/${REPO}/releases/download/${TAG}"
+
+          pick() { ls -1 release | grep -E "$1" | head -1 || true; }
+          sha() {
+            local f="$1"
+            if [ -z "$f" ] || [ ! -f "release/$f" ]; then
+              printf ''
+            else
+              sha256sum "release/$f" | awk '{print $1}'
+            fi
+          }
+          url() {
+            local f="$1"
+            if [ -z "$f" ]; then printf ''; else printf '%s/%s' "$BASE" "$f"; fi
+          }
+
+          WIN=$(pick 'icd360s-mail-setup\.exe$')
+          MAC=$(pick 'icd360s-mail\.dmg$')
+          AND=$(pick 'app-arm64-v8a-universal-release\.apk$')
+          LINUX=$(pick 'icd360s-mail\.AppImage$')
+          LINUX_TARGZ=$(pick 'icd360s-mail-linux\.tar\.gz$')
+          FLATPAK=$(pick 'icd360s-mail\.flatpak$')
+          IOS=$(pick 'icd360s-mail\.ipa$')
+
+          echo "Detected assets:"
+          printf '  win=%s mac=%s and=%s linux=%s targz=%s flatpak=%s ios=%s\n' \
+            "$WIN" "$MAC" "$AND" "$LINUX" "$LINUX_TARGZ" "$FLATPAK" "$IOS"
+
+          cat > version.json <<EOF
+          {
+            "version": "${VERSION}",
+            "download_url": "$(url "$WIN")",
+            "download_url_macos": "$(url "$MAC")",
+            "download_url_android": "$(url "$AND")",
+            "download_url_linux": "$(url "$LINUX")",
+            "download_url_linux_targz": "$(url "$LINUX_TARGZ")",
+            "download_url_linux_flatpak": "$(url "$FLATPAK")",
+            "download_url_ios": "$(url "$IOS")",
+            "changelog": "Automated build for ${TAG}. See https://github.com/${REPO}/releases/tag/${TAG} for full release notes.",
+            "sha256": "$(sha "$WIN")",
+            "sha256_macos": "$(sha "$MAC")",
+            "sha256_android": "$(sha "$AND")",
+            "sha256_linux": "$(sha "$LINUX")",
+            "sha256_linux_targz": "$(sha "$LINUX_TARGZ")",
+            "sha256_linux_flatpak": "$(sha "$FLATPAK")",
+            "sha256_ios": "$(sha "$IOS")"
+          }
+          EOF
+
+          # Validate JSON
+          python3 -c "import json,sys; json.load(open('version.json'))"
+          echo "--- version.json ---"
+          cat version.json
+
+      - name: Sign version.json with ECDSA P-256
+        env:
+          VERSION_SIGNING_PRIVATE_KEY: ${{ secrets.VERSION_SIGNING_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${VERSION_SIGNING_PRIVATE_KEY}" ]; then
+            echo "::error::VERSION_SIGNING_PRIVATE_KEY secret is not set"
+            exit 1
+          fi
+          umask 077
+          printf '%s\n' "$VERSION_SIGNING_PRIVATE_KEY" > priv.pem
+          openssl dgst -sha256 -sign priv.pem -out version.json.sig version.json
+          openssl ec -in priv.pem -pubout -out pub.pem 2>/dev/null
+          openssl dgst -sha256 -verify pub.pem -signature version.json.sig version.json
+          rm -f priv.pem pub.pem
+          echo "✓ Detached signature created and verified locally"
+          ls -la version.json version.json.sig
+
+      - name: Upload version.json + .sig as release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" version.json version.json.sig --clobber --repo "$GITHUB_REPOSITORY"
+          echo "::notice::Published version.json for $TAG"
+          echo "  Manifest:  https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/version.json"
+          echo "  Signature: https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/version.json.sig"
+          echo "  Latest:    https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/version.json"
