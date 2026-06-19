@@ -480,16 +480,43 @@ jobs:
           flatpak-builder --user --install-deps-from=flathub \
             --repo=../repo --ccache \
             ../build de.icd360s.mailclient.yml
-          flatpak build-bundle ../repo \
+          # --runtime-repo lets a sideloaded .flatpak at least know where
+          # the runtime came from. For the actual app-update path we ship
+          # the .flatpakref companion below — installing the .flatpakref
+          # auto-adds the SuggestRemoteName remote pointing at the Pages
+          # OSTree repo, after which `flatpak update` picks up new tags
+          # automatically. A bare .flatpak bundle install can never be
+          # updated in place (see flatpak/flatpak#552).
+          flatpak build-bundle \
+            --runtime-repo=https://icd360s-e-v.github.io/mail/icd360s-mail.flatpakrepo \
+            ../repo \
             ../ICD360S-Mail-Client-${{ steps.ver.outputs.version }}.flatpak \
             de.icd360s.mailclient
-          ls -lh ../ICD360S-Mail-Client-${{ steps.ver.outputs.version }}.flatpak
+          cat > ../de.icd360s.mailclient.flatpakref <<'REFEOF'
+          [Flatpak Ref]
+          Title=ICD360S e.V. Mail Client
+          Name=de.icd360s.mailclient
+          Branch=master
+          Url=https://icd360s-e-v.github.io/mail/repo/
+          SuggestRemoteName=icd360s-mail
+          Homepage=https://github.com/ICD360S-e-V/mail
+          Description=ICD360S e.V. Mail-Client — installs with auto-update wired to the GitHub Pages OSTree repo.
+          IsRuntime=false
+          REFEOF
+          ls -lh ../ICD360S-Mail-Client-${{ steps.ver.outputs.version }}.flatpak ../de.icd360s.mailclient.flatpakref
 
       - name: Upload Flatpak bundle
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: flatpak-build
           path: ICD360S-Mail-Client-*.flatpak
+          retention-days: 30
+
+      - name: Upload Flatpak ref descriptor
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: flatpakref
+          path: de.icd360s.mailclient.flatpakref
           retention-days: 30
 
       # ──────────────────────────────────────────────────────────────────
@@ -731,6 +758,15 @@ jobs:
           if [ -d "artifacts/flatpak-build" ]; then
             FLATPAK=$(find "artifacts/flatpak-build" -maxdepth 1 -name "*.flatpak" | head -1)
             [ -n "$FLATPAK" ] && cp "$FLATPAK" "release/ICD360S-Mail-Client-${VERSION}.flatpak"
+          fi
+
+          # Flatpak .flatpakref — the update-capable installer. Users
+          # should prefer this over the .flatpak bundle (bundles cannot
+          # auto-update; see flatpak/flatpak#552). Installing the
+          # .flatpakref auto-adds the Pages OSTree repo as a remote.
+          if [ -d "artifacts/flatpakref" ]; then
+            FLATPAKREF=$(find "artifacts/flatpakref" -maxdepth 1 -name "*.flatpakref" | head -1)
+            [ -n "$FLATPAKREF" ] && cp "$FLATPAKREF" "release/de.icd360s.mailclient.flatpakref"
           fi
 
           # Android, iOS, macOS, Windows artifacts are produced by the
