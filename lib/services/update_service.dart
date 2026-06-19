@@ -8,9 +8,9 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
 import 'package:url_launcher/url_launcher.dart';
-import 'le_issuer_check.dart';
 import 'logger_service.dart';
 import 'localization_service.dart';
+import 'mtls_service.dart';
 import 'package:pointycastle/asn1/asn1_parser.dart';
 import 'package:pointycastle/asn1/primitives/asn1_integer.dart';
 import 'package:pointycastle/asn1/primitives/asn1_sequence.dart';
@@ -104,8 +104,6 @@ class UpdateService {
   static const MethodChannel _apkVerifyChannel =
       MethodChannel('de.icd360s.mailclient/apk_verify');
 
-  /// Validate server certificate — only accept trusted Let's Encrypt issuers.
-  /// Uses the shared `isTrustedLetsEncryptIssuer` helper.
   /// Verify an ECDSA P-256 / SHA-256 detached signature against a
   /// message using the hardcoded `_versionJsonPublicKey`.
   ///
@@ -164,9 +162,12 @@ class UpdateService {
     }
   }
 
+  /// Strict TLS validation: SPKI pin + LE issuer via [MtlsService.onBadCertificate].
+  /// Only accept certs for mail.icd360s.de that match a pinned SPKI hash AND
+  /// are signed by a known LE CA.
   static bool _validateCertificate(X509Certificate cert, String host, int port) {
     if (host != 'mail.icd360s.de') return false;
-    return isTrustedLetsEncryptIssuer(cert.issuer);
+    return MtlsService.onBadCertificate(cert, host);
   }
 
   /// Verify that an update download URL is allowed: must be HTTPS and pointed

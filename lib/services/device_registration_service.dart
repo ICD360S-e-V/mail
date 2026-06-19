@@ -10,7 +10,6 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 
 import 'certificate_service.dart';
-import 'le_issuer_check.dart';
 import 'logger_service.dart';
 import 'mtls_service.dart';
 import 'pinned_security_context.dart';
@@ -388,7 +387,7 @@ class DeviceRegistrationService {
   static bool _validateCertificate(
       X509Certificate cert, String host, int port) {
     if (host != 'mail.icd360s.de') return false;
-    return isTrustedLetsEncryptIssuer(cert.issuer);
+    return MtlsService.onBadCertificate(cert, host);
   }
 
   /// Generate a UUID v4 using Random.secure().
