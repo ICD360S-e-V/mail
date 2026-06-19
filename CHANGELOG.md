@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.144.5 - 2026-06-19
+#### Bug Fixes
+- (**client**) stagger heartbeats + per-account mTLS cert pool (#93) - (5af2813) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.144.4 - 2026-06-19
 #### Bug Fixes
 - (**ci**) swap checkout+download order in Publish Flatpak repo job (#92) - (8a63b84) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
