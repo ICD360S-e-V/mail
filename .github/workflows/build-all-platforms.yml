@@ -521,6 +521,7 @@ jobs:
           Homepage=https://github.com/ICD360S-e-V/mail
           Description=ICD360S e.V. Mail-Client — installs with auto-update wired to the GitHub Pages OSTree repo.
           IsRuntime=false
+          RuntimeRepo=https://flathub.org/repo/flathub.flatpakrepo
           GPGKey=$PUBKEY
           REFEOF
           ls -lh ../ICD360S-Mail-Client-${{ steps.ver.outputs.version }}.flatpak ../de.icd360s.mailclient.flatpakref
