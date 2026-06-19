@@ -453,6 +453,23 @@ jobs:
           chmod +x flatpak/bundle/icd360s_mail_client
           ls -la flatpak/bundle/icd360s_mail_client
 
+      - name: Import Flatpak signing GPG key (idempotent)
+        # The key (ID 244C2F8A661420E8, "ICD360S e.V. Flatpak Builds") is
+        # already on the self-hosted runner's keyring. We re-import the
+        # secret on every run so a fresh VM / rebuilt runner image can
+        # sign without manual intervention. gpg --import is idempotent.
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.FLATPAK_GPG_PRIVATE_KEY }}
+        run: |
+          if [ -z "$GPG_PRIVATE_KEY" ]; then
+            echo "::error::FLATPAK_GPG_PRIVATE_KEY secret missing"
+            exit 1
+          fi
+          mkdir -p ~/.gnupg
+          chmod 700 ~/.gnupg
+          echo "$GPG_PRIVATE_KEY" | base64 -d | gpg --batch --import 2>&1 | tail -5
+          gpg --list-secret-keys --keyid-format LONG 244C2F8A661420E8 | head -3
+
       - name: Clone Flathub shared-modules
         run: |
           rm -rf flatpak/shared-modules
@@ -477,22 +494,24 @@ jobs:
           # NOTE: do NOT pass --force-clean — that wipes the warm cache
           # and forces libmpv-style stacks to recompile from source.
           rm -rf ../build ../repo
+          # --gpg-sign on flatpak-builder + build-bundle signs every commit
+          # and bundle metadata with the ICD360S key. Without these, modern
+          # Flatpak refuses to install from custom remotes ("Can't pull from
+          # untrusted non-gpg verified remote").
           flatpak-builder --user --install-deps-from=flathub \
             --repo=../repo --ccache \
+            --gpg-sign=244C2F8A661420E8 \
             ../build de.icd360s.mailclient.yml
-          # --runtime-repo lets a sideloaded .flatpak at least know where
-          # the runtime came from. For the actual app-update path we ship
-          # the .flatpakref companion below — installing the .flatpakref
-          # auto-adds the SuggestRemoteName remote pointing at the Pages
-          # OSTree repo, after which `flatpak update` picks up new tags
-          # automatically. A bare .flatpak bundle install can never be
-          # updated in place (see flatpak/flatpak#552).
           flatpak build-bundle \
             --runtime-repo=https://icd360s-e-v.github.io/mail/icd360s-mail.flatpakrepo \
+            --gpg-sign=244C2F8A661420E8 \
             ../repo \
             ../ICD360S-Mail-Client-${{ steps.ver.outputs.version }}.flatpak \
             de.icd360s.mailclient
-          cat > ../de.icd360s.mailclient.flatpakref <<'REFEOF'
+          # Embed the public-key base64 (committed at .github/flatpak-pubkey.b64)
+          # so Flatpak auto-configures gpg-verify=true with this exact key.
+          PUBKEY=$(tr -d '\n' < "$GITHUB_WORKSPACE/.github/flatpak-pubkey.b64")
+          cat > ../de.icd360s.mailclient.flatpakref <<REFEOF
           [Flatpak Ref]
           Title=ICD360S e.V. Mail Client
           Name=de.icd360s.mailclient
@@ -502,6 +521,7 @@ jobs:
           Homepage=https://github.com/ICD360S-e-V/mail
           Description=ICD360S e.V. Mail-Client — installs with auto-update wired to the GitHub Pages OSTree repo.
           IsRuntime=false
+          GPGKey=$PUBKEY
           REFEOF
           ls -lh ../ICD360S-Mail-Client-${{ steps.ver.outputs.version }}.flatpak ../de.icd360s.mailclient.flatpakref
 
@@ -539,7 +559,9 @@ jobs:
             echo "::warning::./repo not present (likely a cache hit). Skipping repo export."
             exit 0
           fi
-          flatpak build-update-repo --generate-static-deltas repo
+          flatpak build-update-repo --generate-static-deltas \
+            --gpg-sign=244C2F8A661420E8 \
+            repo
           # Print branch list for debugging — should show
           # `app/de.icd360s.mailclient/x86_64/stable` (or similar).
           ostree --repo=repo refs
@@ -620,11 +642,20 @@ jobs:
           name: flatpak-repo
           path: in/
 
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # Need .github/flatpak-pubkey.b64 to embed in the .flatpakrepo;
+          # the deploy job otherwise only consumes artifacts.
+          sparse-checkout: |
+            .github/flatpak-pubkey.b64
+          sparse-checkout-cone-mode: false
+
       - name: Assemble gh-pages publish tree
         run: |
           mkdir -p pages-out/repo
           tar -xf in/flatpak-repo.tar -C pages-out/repo
-          cat > pages-out/icd360s-mail.flatpakrepo <<'EOF'
+          PUBKEY=$(tr -d '\n' < .github/flatpak-pubkey.b64)
+          cat > pages-out/icd360s-mail.flatpakrepo <<EOF
           [Flatpak Repo]
           Title=ICD360S e.V. Mail Client
           Url=https://icd360s-e-v.github.io/mail/repo/
@@ -632,6 +663,7 @@ jobs:
           Comment=Mail Client Auto-Update Repository
           Description=Auto-update Flatpak repository for the ICD360S e.V. encrypted mail client.
           NoDeps=true
+          GPGKey=$PUBKEY
           EOF
           cat > pages-out/index.html <<'EOF'
           <!doctype html>
