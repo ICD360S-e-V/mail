@@ -6,7 +6,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'package:crypto/crypto.dart';
-import 'le_issuer_check.dart';
 import 'logger_service.dart';
 import 'mtls_service.dart';
 import 'update_service.dart';
@@ -22,7 +21,7 @@ class LogUploadService {
   /// Validate server certificate using shared LE issuer helper.
   static bool _validateCertificate(X509Certificate cert, String host, int port) {
     if (host != 'mail.icd360s.de') return false;
-    return isTrustedLetsEncryptIssuer(cert.issuer);
+    return MtlsService.onBadCertificate(cert, host);
   }
 
   /// Get or create device ID (using CSPRNG, not PII)

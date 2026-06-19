@@ -3,8 +3,8 @@
 
 import 'dart:convert';
 import 'dart:io';
-import 'le_issuer_check.dart';
 import 'logger_service.dart';
+import 'mtls_service.dart';
 import 'pinned_security_context.dart';
 
 /// Model for a changelog section (one version)
@@ -20,11 +20,12 @@ class ChangelogService {
   static const String changelogUrl =
       'https://mail.icd360s.de/downloads/mail/changelog.json';
 
-  /// Strict TLS validation using shared LE issuer helper.
-  /// Only accept certs for mail.icd360s.de signed by a known LE CA.
+  /// Strict TLS validation: SPKI pin + LE issuer via [MtlsService.onBadCertificate].
+  /// Only accept certs for mail.icd360s.de that match a pinned SPKI hash AND
+  /// are signed by a known LE CA.
   static bool _validateCertificate(X509Certificate cert, String host, int port) {
     if (host != 'mail.icd360s.de') return false;
-    return isTrustedLetsEncryptIssuer(cert.issuer);
+    return MtlsService.onBadCertificate(cert, host);
   }
 
   /// Fetch structured changelog from server
