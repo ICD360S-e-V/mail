@@ -95,6 +95,11 @@ class MtlsService {
   ///
   /// Returns null if certificates are not yet available (call
   /// [CertificateService.downloadCertificateForUser] first).
+  ///
+  /// Uses the **currently selected** user's cert (the singleton in
+  /// [CertificateService]). For per-account mTLS — needed when
+  /// heartbeats fire for every account simultaneously, not just the
+  /// active one — use [createMtlsHttpClientFor] instead.
   static HttpClient? createMtlsHttpClient() {
     if (!CertificateService.hasCertificates) {
       return null;
@@ -111,6 +116,66 @@ class MtlsService {
       LoggerService.logError('MTLS', ex, st);
       return null;
     }
+  }
+
+  /// Per-username [SecurityContext] cache. The legacy
+  /// [createMtlsHttpClient] only knows about the singleton "current
+  /// user" cert, so heartbeat for every other account fell through to
+  /// the legacy non-mTLS path (logged server-side as `LEGACY-HEARTBEAT
+  /// no client cert presented`). Caching one context per username
+  /// lets us present the right client cert for every account without
+  /// thrashing the singleton.
+  ///
+  /// Memory: each context holds ~5–10 KB of cert bytes plus the
+  /// OpenSSL session state. 50 accounts ≈ 0.5 MB — negligible.
+  static final Map<String, SecurityContext> _contextCacheByUser = {};
+
+  /// Returns an [HttpClient] configured for mTLS with the cert
+  /// belonging to [username]. The bundle is loaded from secure storage
+  /// via [CertificateService.loadBundleFor] (which does NOT mutate the
+  /// active singleton) and the resulting context is cached. Returns
+  /// null when no cert is in storage for this user — caller should
+  /// fall back to a non-mTLS request.
+  static Future<HttpClient?> createMtlsHttpClientFor({
+    required String username,
+  }) async {
+    try {
+      var context = _contextCacheByUser[username];
+      if (context == null) {
+        final bundle = await CertificateService.loadBundleFor(username);
+        if (bundle == null) return null;
+        context = PinnedSecurityContext.create();
+        context.usePrivateKeyBytes(bundle.clientKey);
+        final fullChain = Uint8List(
+          bundle.clientCert.length + 1 + bundle.caCert.length,
+        )
+          ..setAll(0, bundle.clientCert)
+          ..[bundle.clientCert.length] = 0x0A
+          ..setAll(bundle.clientCert.length + 1, bundle.caCert);
+        context.useCertificateChainBytes(fullChain);
+        _contextCacheByUser[username] = context;
+      }
+      final client = HttpClient(context: context)
+        ..connectionTimeout = const Duration(seconds: 10)
+        ..idleTimeout = const Duration(seconds: 5);
+      client.badCertificateCallback =
+          (cert, host, port) => onBadCertificate(cert, host);
+      return client;
+    } catch (ex, st) {
+      LoggerService.logError('MTLS', ex, st);
+      return null;
+    }
+  }
+
+  /// Drop the cached SecurityContext for [username] — call on cert
+  /// rotation / logout so the next request re-reads the fresh bundle.
+  static void invalidateContextFor(String username) {
+    _contextCacheByUser.remove(username);
+  }
+
+  /// Drop ALL cached contexts — call on vault lock or full sign-out.
+  static void clearContextCache() {
+    _contextCacheByUser.clear();
   }
 
 
