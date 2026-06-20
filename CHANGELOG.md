@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.145.1 - 2026-06-20
+#### Bug Fixes
+- (**ci**) Extras release-upload uses tag input, not github.ref_name (#103) - (52cb61c) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.145.0 - 2026-06-20
 #### Features
 - (**updates**) migrate auto-update manifest to GitHub Releases (no server) (#96) - (67fa26a) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
