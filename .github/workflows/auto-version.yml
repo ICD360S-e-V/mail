@@ -54,6 +54,18 @@ jobs:
           git config user.name "release-bot"
           git config user.email "release-bot@users.noreply.github.com"
 
+      - name: Setup Flutter
+        # Needed for the pub-get refresh below, so the bump commit ships
+        # a lockfile that matches pubspec.yaml. Without this, a parallel
+        # update-lockfile.yml run races against the tag push and the tag
+        # ends up pointing at a commit with a stale lockfile — Priority
+        # then fails with `flutter pub get --enforce-lockfile` rejecting
+        # the lock (see v2.146.4 incident).
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: "3.41.4"
+          channel: stable
+
       - name: Install cocogitto
         run: |
           COG_VERSION="7.0.0"
@@ -144,6 +156,20 @@ jobs:
             git add lib/services/update_service.dart
             git commit --amend --no-edit
             echo "✓ update_service.dart synced to ${VERSION}"
+          fi
+
+          # Refresh pubspec.lock so transitive resolution matches pubspec.yaml
+          # at the tagged commit. cocogitto's bump only touches pubspec.yaml
+          # (version field); any direct-dep change merged just before now
+          # would otherwise leave the lockfile out of sync until the
+          # parallel update-lockfile.yml lands a commit AFTER the tag.
+          flutter pub get
+          if git diff --quiet pubspec.lock; then
+            echo "pubspec.lock already in sync"
+          else
+            git add pubspec.lock
+            git commit --amend --no-edit
+            echo "✓ pubspec.lock refreshed for ${VERSION}"
           fi
 
           # cog creates lightweight tags; build workflow requires annotated.
