@@ -1,40 +1,54 @@
 name: Build Extras Platforms (Android + iOS + macOS + Windows)
 
-# Extras workflow — the slower platforms. Triggered ONLY after the
-# GitHub Release for a tag is published by the priority workflow,
-# never in parallel with it:
+# Extras workflow — the slower platforms. Triggered after the Priority
+# workflow completes successfully for a tag push:
 #
 #   tag push v*
 #     ↓
 #   build-all-platforms.yml (priority) builds Linux + Flatpak + SBOM
-#   and PUBLISHES the GitHub Release for the tag with those assets.
+#   and publishes the GitHub Release for the tag with those assets.
 #     ↓
-#   GitHub fires a `release: created` event.
+#   `workflow_run` event fires when Priority completes.
 #     ↓
-#   This workflow builds Android + iOS + macOS + Windows and adds them
-#   to the existing release via `gh release upload --clobber`.
+#   This workflow filters to push-event tag runs that succeeded, then
+#   checks out the same head_sha Priority built and adds the Android +
+#   iOS + macOS + Windows artifacts to the existing release via
+#   `gh release upload --clobber`.
 #
-# Outcome: the GitHub Release page is alive ~8 minutes after the tag
-# push with Linux + Flatpak downloadable, and the slower runners only
-# spin up after the release exists. A priority failure means no
-# release is created and extras never runs — no half-baked release
-# ever leaves the channel.
+# Why workflow_run instead of `release: created`:
+#   GitHub deliberately suppresses workflow triggering when an event is
+#   dispatched by the default GITHUB_TOKEN (anti-cascade safeguard).
+#   Priority's `gh release create` runs as GITHUB_TOKEN, so the
+#   `release: created` event never fires this workflow. workflow_run is
+#   the documented 2026 best practice for in-org workflow cascades and
+#   needs no PAT/App credentials. Verified empirically: with the prior
+#   `release: created` trigger, this workflow had ZERO runs from a
+#   release event across the entire v2.144.x series.
 #
-# Pull requests still trigger extras directly so reviewers see slow
-# platforms build before the merge.
+# Outcome: GitHub Release for the tag is alive ~8 minutes after the
+# tag push with Linux + Flatpak downloadable (from Priority), and the
+# slower runners spin up automatically once Priority succeeds. A
+# Priority failure means no release is created and extras is skipped
+# by the success-conclusion filter — no half-baked release ever leaves
+# the channel.
 on:
-  release:
-    types: [created]
+  workflow_run:
+    workflows: ['Build Priority Platforms (Linux + Flatpak)']
+    types: [completed]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build extras for (e.g. v2.144.7)'
+        required: true
+        type: string
 
-# Concurrency: PR / branch pushes share a group and cancel the previous
-# run on new commits (saves CI minutes). Tag pushes (v*) get an isolated
-# group per tag AND opt out of cancellation so a release build is never
-# killed by a concurrent dependabot PR — that's how v2.136.11 and v2.137.0
-# were lost previously (PR sync triggered cancel-in-progress on the tag run).
+# Concurrency groups runs by the tag (or branch for manual dispatch).
+# Tag-push runs are never cancelled — a release in flight must complete
+# even if a later tag arrives. Manual dispatch runs against the same
+# tag are de-duplicated by group (last write wins on the new one).
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch || github.ref }}
+  cancel-in-progress: false
 
 # SECURITY: Default least-privilege permissions for all jobs.
 # Individual jobs override as needed (e.g., 'release' needs contents: write).
@@ -51,6 +65,12 @@ env:
   FLUTTER_VERSION: "3.41.9"
   JAVA_VERSION: "17"
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # Resolved tag the run is operating on, regardless of trigger source.
+  # On workflow_run, `github.ref_name` is `main` (the workflow file's
+  # branch), so we read the actual tag from the upstream run's
+  # head_branch. On workflow_dispatch the operator supplies it as
+  # input. Used in SENTRY_RELEASE and in the release upload step.
+  RESOLVED_TAG: ${{ github.event.workflow_run.head_branch || inputs.tag }}
 
 jobs:
   # ============================================================
@@ -58,6 +78,22 @@ jobs:
   # ============================================================
   detect-changes:
     name: Detect Changes
+    # Top-level gate for the entire workflow. Skipping this job cascades
+    # to all downstream jobs via `needs: detect-changes`. The same
+    # condition is also applied to `analyze` since it has no `needs:`.
+    #
+    # Allowed triggers:
+    #   - workflow_dispatch (manual rerun, any ref)
+    #   - workflow_run from Build Priority Platforms IF
+    #       a) the triggering event was a push (not a PR)
+    #       b) Priority completed successfully (no half-broken release)
+    #       c) the head_branch is a tag starting with 'v' (a release tag)
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       startsWith(github.event.workflow_run.head_branch, 'v'))
     runs-on: ubuntu-latest
     outputs:
       linux_changed: ${{ steps.check.outputs.linux_changed }}
@@ -66,6 +102,11 @@ jobs:
       windows_changed: ${{ steps.check.outputs.windows_changed }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # On workflow_run triggers `github.ref` is `main` — check out
+          # the exact commit Priority built from. workflow_dispatch falls
+          # back to the default `github.sha` for the dispatched ref.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Compute platform hashes
         id: hashes
@@ -163,9 +204,23 @@ jobs:
   # ============================================================
   analyze:
     name: Analyze
+    # Same gate as detect-changes — analyze has no `needs:` so it would
+    # otherwise run on every workflow_run completion, including PR-event
+    # ones from Priority.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       startsWith(github.event.workflow_run.head_branch, 'v'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # On workflow_run triggers `github.ref` is `main` — check out
+          # the exact commit Priority built from. workflow_dispatch falls
+          # back to the default `github.sha` for the dispatched ref.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Install Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
@@ -213,6 +268,11 @@ jobs:
             build_args: "--obfuscate --split-debug-info=build/symbols"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # On workflow_run triggers `github.ref` is `main` — check out
+          # the exact commit Priority built from. workflow_dispatch falls
+          # back to the default `github.sha` for the dispatched ref.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Set up Java
         uses: actions/setup-java@ad2b38190b15e4d6bdf0c97fb4fca8412226d287 # v5.3.0
@@ -283,7 +343,7 @@ jobs:
           flutter build "$BUILD_FORMAT" --release \
             --flavor "$BUILD_FLAVOR" $BUILD_ARGS \
             --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} \
-            --dart-define=SENTRY_RELEASE=mail-client-app@${{ github.ref_name }}+${{ github.run_number }} \
+            --dart-define=SENTRY_RELEASE=mail-client-app@${{ env.RESOLVED_TAG }}+${{ github.run_number }} \
             --dart-define=STARTUP_DIAG_KEY=${{ secrets.MAIL_STARTUP_DIAG_KEY }}
 
       - name: Upload Android ${{ matrix.flavor }} ${{ matrix.format }} artifact
@@ -332,6 +392,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           sparse-checkout: |
             lib
             pubspec.yaml
@@ -371,6 +432,11 @@ jobs:
     continue-on-error: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # On workflow_run triggers `github.ref` is `main` — check out
+          # the exact commit Priority built from. workflow_dispatch falls
+          # back to the default `github.sha` for the dispatched ref.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Cache Flutter SDK
         id: cache-flutter-ios
@@ -442,7 +508,7 @@ jobs:
           export PATH="$HOME/flutter/bin:$PATH"
           flutter build ios --release --no-codesign \
             --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} \
-            --dart-define=SENTRY_RELEASE=mail-client-app@${{ github.ref_name }}+${{ github.run_number }} \
+            --dart-define=SENTRY_RELEASE=mail-client-app@${{ env.RESOLVED_TAG }}+${{ github.run_number }} \
             --dart-define=STARTUP_DIAG_KEY=${{ secrets.MAIL_STARTUP_DIAG_KEY }}
 
       - name: Package iOS .ipa from Runner.app
@@ -482,6 +548,11 @@ jobs:
     continue-on-error: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # On workflow_run triggers `github.ref` is `main` — check out
+          # the exact commit Priority built from. workflow_dispatch falls
+          # back to the default `github.sha` for the dispatched ref.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Cache Flutter SDK
         id: cache-flutter-macos
@@ -561,7 +632,7 @@ jobs:
           export PATH="$HOME/flutter/bin:$PATH"
           flutter build macos --release \
             --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} \
-            --dart-define=SENTRY_RELEASE=mail-client-app@${{ github.ref_name }}+${{ github.run_number }} \
+            --dart-define=SENTRY_RELEASE=mail-client-app@${{ env.RESOLVED_TAG }}+${{ github.run_number }} \
             --dart-define=STARTUP_DIAG_KEY=${{ secrets.MAIL_STARTUP_DIAG_KEY }}
 
       - name: Ad-hoc sign macOS app
@@ -633,6 +704,11 @@ jobs:
     continue-on-error: ${{ github.event_name == 'pull_request' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # On workflow_run triggers `github.ref` is `main` — check out
+          # the exact commit Priority built from. workflow_dispatch falls
+          # back to the default `github.sha` for the dispatched ref.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Install Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
@@ -655,7 +731,7 @@ jobs:
         run: |
           flutter build windows --release `
             --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} `
-            --dart-define=SENTRY_RELEASE=mail-client-app@${{ github.ref_name }}+${{ github.run_number }} `
+            --dart-define=SENTRY_RELEASE=mail-client-app@${{ env.RESOLVED_TAG }}+${{ github.run_number }} `
             --dart-define=STARTUP_DIAG_KEY=${{ secrets.MAIL_STARTUP_DIAG_KEY }}
 
       # SECURITY: Download VC++ Redistributable from Microsoft with pinned SHA-256.
@@ -768,10 +844,11 @@ jobs:
   release-upload-extras:
     name: Release upload (extras)
     needs: [build-android, android-cache-save, build-ios, build-macos, build-windows]
-    # Only on the `release: created` trigger — that's the only time a
-    # release exists for us to upload to. PR / workflow_dispatch runs
-    # skip this job.
-    if: always() && github.event_name == 'release'
+    # Only on the workflow_run cascade (after Priority creates the
+    # release for a tag) or on manual workflow_dispatch with a tag
+    # input — those are the cases where a release exists for us to
+    # upload to.
+    if: always() && (github.event_name == 'workflow_run' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -784,7 +861,7 @@ jobs:
       - name: Stage upload set
         id: stage
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${RESOLVED_TAG#v}"
           mkdir -p upload
 
           # Android APKs (5 flavors).
@@ -827,7 +904,7 @@ jobs:
         if: steps.stage.outputs.count != '0'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ env.RESOLVED_TAG }}
         run: |
           # --clobber overwrites any same-named asset (idempotent reruns).
           gh release upload "$TAG" upload/* --clobber --repo "$GITHUB_REPOSITORY"
