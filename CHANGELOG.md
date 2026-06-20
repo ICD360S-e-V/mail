@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.146.0 - 2026-06-20
+#### Features
+- (**phishing**) pull blocklist from community feed (curbengh/phishing-filter), drop server-side signing (#76) - (bf89ad3) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.145.4 - 2026-06-20
 #### Bug Fixes
 - (**ci**) publish-version-json case-insensitive asset matching (#106) - (6194b97) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
