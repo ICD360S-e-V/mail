@@ -339,11 +339,16 @@ jobs:
           BUILD_FORMAT: ${{ matrix.format }}
           BUILD_FLAVOR: ${{ matrix.flavor }}
           BUILD_ARGS: ${{ matrix.build_args }}
+          # SENTRY_RELEASE goes through step env (not inline ${{ }}) so the
+          # shell never sees the workflow_run-derived RESOLVED_TAG value
+          # directly — closes a CodeQL code-injection finding on the
+          # `--dart-define=…@<TAG>+…` argument.
+          SENTRY_RELEASE: mail-client-app@${{ env.RESOLVED_TAG }}+${{ github.run_number }}
         run: |
           flutter build "$BUILD_FORMAT" --release \
             --flavor "$BUILD_FLAVOR" $BUILD_ARGS \
             --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} \
-            --dart-define=SENTRY_RELEASE=mail-client-app@${{ env.RESOLVED_TAG }}+${{ github.run_number }} \
+            --dart-define=SENTRY_RELEASE="$SENTRY_RELEASE" \
             --dart-define=STARTUP_DIAG_KEY=${{ secrets.MAIL_STARTUP_DIAG_KEY }}
 
       - name: Upload Android ${{ matrix.flavor }} ${{ matrix.format }} artifact
@@ -504,11 +509,15 @@ jobs:
         run: flutter pub get --enforce-lockfile
 
       - name: Compile iOS Runner.app (no codesign)
+        env:
+          # See Android build step — SENTRY_RELEASE through env, not inline,
+          # closes a CodeQL code-injection finding on workflow_run.head_branch.
+          SENTRY_RELEASE: mail-client-app@${{ env.RESOLVED_TAG }}+${{ github.run_number }}
         run: |
           export PATH="$HOME/flutter/bin:$PATH"
           flutter build ios --release --no-codesign \
             --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} \
-            --dart-define=SENTRY_RELEASE=mail-client-app@${{ env.RESOLVED_TAG }}+${{ github.run_number }} \
+            --dart-define=SENTRY_RELEASE="$SENTRY_RELEASE" \
             --dart-define=STARTUP_DIAG_KEY=${{ secrets.MAIL_STARTUP_DIAG_KEY }}
 
       - name: Package iOS .ipa from Runner.app
@@ -628,11 +637,15 @@ jobs:
           sed -i '' 's/DEVELOPMENT_TEAM = B42ZX94AKL/DEVELOPMENT_TEAM = ""/g' macos/Runner.xcodeproj/project.pbxproj
 
       - name: Compile macOS .app bundle (release)
+        env:
+          # See Android build step — SENTRY_RELEASE through env, not inline,
+          # closes a CodeQL code-injection finding on workflow_run.head_branch.
+          SENTRY_RELEASE: mail-client-app@${{ env.RESOLVED_TAG }}+${{ github.run_number }}
         run: |
           export PATH="$HOME/flutter/bin:$PATH"
           flutter build macos --release \
             --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} \
-            --dart-define=SENTRY_RELEASE=mail-client-app@${{ env.RESOLVED_TAG }}+${{ github.run_number }} \
+            --dart-define=SENTRY_RELEASE="$SENTRY_RELEASE" \
             --dart-define=STARTUP_DIAG_KEY=${{ secrets.MAIL_STARTUP_DIAG_KEY }}
 
       - name: Ad-hoc sign macOS app
@@ -728,10 +741,15 @@ jobs:
         run: flutter pub get --enforce-lockfile
 
       - name: Compile Windows release binary
+        env:
+          # See Android build step — SENTRY_RELEASE through env, not inline,
+          # closes a CodeQL code-injection finding on workflow_run.head_branch.
+          # PowerShell reads env vars as $env:VAR.
+          SENTRY_RELEASE: mail-client-app@${{ env.RESOLVED_TAG }}+${{ github.run_number }}
         run: |
           flutter build windows --release `
             --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} `
-            --dart-define=SENTRY_RELEASE=mail-client-app@${{ env.RESOLVED_TAG }}+${{ github.run_number }} `
+            --dart-define=SENTRY_RELEASE="$env:SENTRY_RELEASE" `
             --dart-define=STARTUP_DIAG_KEY=${{ secrets.MAIL_STARTUP_DIAG_KEY }}
 
       # SECURITY: Download VC++ Redistributable from Microsoft with pinned SHA-256.
