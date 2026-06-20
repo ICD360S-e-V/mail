@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.145.4 - 2026-06-20
+#### Bug Fixes
+- (**ci**) publish-version-json case-insensitive asset matching (#106) - (6194b97) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.145.3 - 2026-06-20
 #### Bug Fixes
 - (**android**) migrate kotlinOptions → compilerOptions DSL for Kotlin 2.4 (#105) - (7a8e083) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
