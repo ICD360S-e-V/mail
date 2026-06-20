@@ -173,28 +173,36 @@ class UpdateService {
     return MtlsService.onBadCertificate(cert, host);
   }
 
-  /// Verify that an update download URL is allowed: must be HTTPS and pointed
-  /// at mail.icd360s.de.
+  /// Verify that an update download URL is allowed: must be HTTPS and
+  /// pointed at one of the two trusted upstreams.
   ///
-  /// SECURITY: version.json is served from our server, but the `download_url`
-  /// field inside it is JSON data that an attacker who compromised the server
-  /// (or any future intermediate write path) could redirect to:
-  ///   - http://attacker.com/...   — cleartext, leaks user IP, no TLS check
-  ///   - https://github.com/.../release.exe — bypasses our domain pinning
+  /// Allowed hosts:
+  ///   - `github.com`         — canonical channel since 2026-06-20.
+  ///                            All release assets live here (PR #96).
+  ///   - `mail.icd360s.de`    — legacy channel. Retained so clients on
+  ///                            the v2.140.x..v2.144.x line can still
+  ///                            fetch a bridge release manually staged
+  ///                            on the old endpoint.
   ///
-  /// This check rejects both. Combined with the mandatory SHA-256 hash check
-  /// after download (and APK cert verification on Android, see H4), this
-  /// makes the update path defense-in-depth secure.
+  /// SECURITY: version.json is signed, but `download_url` inside it is
+  /// JSON data that an attacker who compromised the signing key would
+  /// redirect to:
+  ///   - http://attacker.com/...   — cleartext, leaks user IP, no TLS
+  ///   - https://raw.example/...   — bypasses our pinning
+  /// Both are rejected. Combined with the mandatory SHA-256 file hash
+  /// check after download and APK signing-cert verification on Android
+  /// (see H4), this keeps the install path defense-in-depth secure
+  /// even if the manifest signature is somehow forged.
   static bool _isAllowedDownloadUrl(String url) {
     if (url.contains('\x00') || url.contains('@') || url.contains('\\')) {
       return false;
     }
     try {
       final uri = Uri.parse(url);
-      return uri.scheme == 'https' &&
-          uri.host == 'mail.icd360s.de' &&
-          (uri.port == 443 || uri.port == 0) &&
-          uri.userInfo.isEmpty;
+      if (uri.scheme != 'https' || uri.userInfo.isNotEmpty) return false;
+      final isStdPort = uri.port == 443 || uri.port == 0;
+      if (!isStdPort) return false;
+      return uri.host == 'github.com' || uri.host == 'mail.icd360s.de';
     } catch (_) {
       return false;
     }
@@ -312,11 +320,12 @@ class UpdateService {
 
           LoggerService.log('UPDATE', 'Latest version: $latestVersion (current: $currentVersion)');
 
-          // SECURITY: Reject any download_url that is not HTTPS to mail.icd360s.de.
+          // SECURITY: Reject any download_url that is not HTTPS to one
+          // of our trusted hosts (github.com or mail.icd360s.de).
           // Defense against a compromised version.json that points elsewhere.
           if (!_isAllowedDownloadUrl(downloadUrl)) {
             LoggerService.log('UPDATE',
-                '❌ REJECTED: download_url is not HTTPS to mail.icd360s.de: $downloadUrl');
+                '❌ REJECTED: download_url is not HTTPS to github.com or mail.icd360s.de: $downloadUrl');
             return null;
           }
 
