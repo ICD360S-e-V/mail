@@ -65,7 +65,7 @@ dependencies:
 
   # Printing
   printing: ^5.15.0  # Native print dialog for all platforms including Windows
-  pdf: ^3.13.0  # PDF generation for printing images
+  pdf: ^3.11.1  # PDF generation (pinned: 3.13+ requires Dart 3.12, we have 3.11.5)
 
   # PDF Viewer - native PDFium rendering (no WebView dependency)
   pdfrx: ^2.4.4  # Native PDF viewer for Windows/macOS/Linux/Android/iOS
