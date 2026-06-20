@@ -749,6 +749,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # `actions: write` is needed only by the final step that
+      # dispatches the Extras workflow via `gh workflow run`.
+      # Scoped to this job; other jobs in the workflow inherit the
+      # default `contents: read` permission.
+      actions: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -941,7 +946,28 @@ jobs:
               "${FILES[@]}"
           fi
 
-
-
-
+      # Dispatch the Extras workflow now that the release exists.
+      #
+      # The previous trigger was `release: created`, which GitHub
+      # silently suppresses for events authored by the default
+      # GITHUB_TOKEN (anti-cascade safeguard). `workflow_dispatch`
+      # and `repository_dispatch` are the two documented exceptions
+      # to that rule — GITHUB_TOKEN can fire them and they DO create
+      # downstream workflow runs. Verified for the v2.144.x series:
+      # zero release-event runs of Extras before this change.
+      #
+      # The dispatch passes the tag explicitly so Extras builds the
+      # exact release that was just published. `--ref` runs the
+      # workflow file at that tag's commit, matching Priority's view.
+      - name: Trigger Extras workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          echo "::notice::Dispatching Extras workflow for $TAG"
+          gh workflow run build-extras-platforms.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref "$TAG" \
+            --field tag="$TAG"
 

@@ -1,31 +1,38 @@
 name: Build Extras Platforms (Android + iOS + macOS + Windows)
 
-# Extras workflow — the slower platforms. Triggered ONLY after the
-# GitHub Release for a tag is published by the priority workflow,
-# never in parallel with it:
+# Extras workflow — the slower platforms. Dispatched explicitly by
+# build-all-platforms.yml (priority) AFTER it publishes the release:
 #
 #   tag push v*
 #     ↓
 #   build-all-platforms.yml (priority) builds Linux + Flatpak + SBOM
 #   and PUBLISHES the GitHub Release for the tag with those assets.
 #     ↓
-#   GitHub fires a `release: created` event.
+#   priority's final step: `gh workflow run build-extras-platforms.yml`
 #     ↓
-#   This workflow builds Android + iOS + macOS + Windows and adds them
-#   to the existing release via `gh release upload --clobber`.
+#   This workflow receives the tag as input, builds Android + iOS +
+#   macOS + Windows, and adds them to the existing release via
+#   `gh release upload --clobber`.
 #
-# Outcome: the GitHub Release page is alive ~8 minutes after the tag
-# push with Linux + Flatpak downloadable, and the slower runners only
-# spin up after the release exists. A priority failure means no
-# release is created and extras never runs — no half-baked release
-# ever leaves the channel.
+# Why workflow_dispatch instead of the original `release: created`:
+# GitHub silently suppresses workflow triggering when the release
+# is authored by the default GITHUB_TOKEN (anti-cascade safeguard).
+# workflow_dispatch is one of two documented exceptions to that
+# rule, so the priority workflow can fire it without any PAT or
+# GitHub App credentials.
 #
-# Pull requests still trigger extras directly so reviewers see slow
-# platforms build before the merge.
+# Outcome: GitHub Release page is alive ~8 minutes after the tag
+# push with Linux + Flatpak downloadable, and the slower runners
+# spin up automatically once Priority finishes. A Priority failure
+# never dispatches Extras — no half-baked release ever leaves the
+# channel.
 on:
-  release:
-    types: [created]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build extras for (e.g. v2.144.7)'
+        required: true
+        type: string
 
 # Concurrency: PR / branch pushes share a group and cancel the previous
 # run on new commits (saves CI minutes). Tag pushes (v*) get an isolated
@@ -768,10 +775,10 @@ jobs:
   release-upload-extras:
     name: Release upload (extras)
     needs: [build-android, android-cache-save, build-ios, build-macos, build-windows]
-    # Only on the `release: created` trigger — that's the only time a
-    # release exists for us to upload to. PR / workflow_dispatch runs
-    # skip this job.
-    if: always() && github.event_name == 'release'
+    # Only on a workflow_dispatch run — that's the only time the
+    # release already exists (Priority dispatched us right after
+    # creating it). PR runs of this workflow skip this job.
+    if: always() && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write
