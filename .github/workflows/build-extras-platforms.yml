@@ -788,6 +788,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # `actions: write` is needed by the final step that dispatches
+      # `publish-version-json.yml` via `gh workflow run`. workflow_dispatch
+      # is one of the documented exceptions to GITHUB_TOKEN's anti-cascade
+      # rule, so this chains cleanly without any PAT or GitHub App.
+      actions: write
     steps:
       - name: Download all extras artifacts
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
@@ -845,3 +850,25 @@ jobs:
           # --clobber overwrites any same-named asset (idempotent reruns).
           gh release upload "$TAG" upload/* --clobber --repo "$GITHUB_REPOSITORY"
           echo "## Uploaded $(ls upload/ | wc -l) extras assets to release $TAG" >> "$GITHUB_STEP_SUMMARY"
+
+      # Close the loop: now that the release has every platform's
+      # artifacts, dispatch `publish-version-json` to generate the
+      # signed `version.json` manifest. The client's auto-update
+      # check polls `releases/latest/download/version.json`, so this
+      # step is what makes the release actually available to users.
+      #
+      # workflow_dispatch from GITHUB_TOKEN is allowed (it's one of
+      # the two documented anti-cascade exceptions), so no PAT or
+      # GitHub App is needed.
+      - name: Dispatch publish-version-json
+        if: steps.stage.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ env.RESOLVED_TAG }}
+        run: |
+          set -euo pipefail
+          echo "::notice::Dispatching publish-version-json for $TAG"
+          gh workflow run publish-version-json.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main \
+            --field tag="$TAG"
