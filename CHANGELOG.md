@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.145.3 - 2026-06-20
+#### Bug Fixes
+- (**android**) migrate kotlinOptions → compilerOptions DSL for Kotlin 2.4 (#105) - (7a8e083) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.145.2 - 2026-06-20
 #### Bug Fixes
 - (**android**) downgrade Gradle 9.6.0 → 9.5 to restore AGP 8.x compatibility (#104) - (7d8248a) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
