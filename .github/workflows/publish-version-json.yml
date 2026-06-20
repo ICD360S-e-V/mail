@@ -53,7 +53,10 @@ jobs:
           VERSION="${TAG#v}"
           BASE="https://github.com/${REPO}/releases/download/${TAG}"
 
-          pick() { ls -1 release | grep -E "$1" | head -1 || true; }
+          # Asset matching is case-INSENSITIVE because Priority emits
+          # `ICD360S-Mail-Client-*` while older builds shipped
+          # `icd360s-mail-*`. A single -iE pattern handles both.
+          pick() { ls -1 release | grep -iE "$1" | head -1 || true; }
           sha() {
             local f="$1"
             if [ -z "$f" ] || [ ! -f "release/$f" ]; then
@@ -67,13 +70,15 @@ jobs:
             if [ -z "$f" ]; then printf ''; else printf '%s/%s' "$BASE" "$f"; fi
           }
 
-          WIN=$(pick 'icd360s-mail-setup\.exe$')
-          MAC=$(pick 'icd360s-mail\.dmg$')
+          # Patterns match by extension + key fragments. Case-insensitive
+          # so both `ICD360S-Mail-Client-*` and `icd360s-mail-*` resolve.
+          WIN=$(pick 'icd360s.*setup.*\.exe$')
+          MAC=$(pick 'icd360s.*\.dmg$')
           AND=$(pick 'app-arm64-v8a-universal-release\.apk$')
-          LINUX=$(pick 'icd360s-mail\.AppImage$')
-          LINUX_TARGZ=$(pick 'icd360s-mail-linux\.tar\.gz$')
-          FLATPAK=$(pick 'icd360s-mail\.flatpak$')
-          IOS=$(pick 'icd360s-mail\.ipa$')
+          LINUX=$(pick 'icd360s.*\.appimage$')
+          LINUX_TARGZ=$(pick 'icd360s.*linux.*\.tar\.gz$')
+          FLATPAK=$(pick 'icd360s.*\.flatpak$')
+          IOS=$(pick 'icd360s.*\.ipa$')
 
           echo "Detected assets:"
           printf '  win=%s mac=%s and=%s linux=%s targz=%s flatpak=%s ios=%s\n' \
