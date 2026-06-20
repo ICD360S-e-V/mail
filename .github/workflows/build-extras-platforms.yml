@@ -58,6 +58,12 @@ env:
   FLUTTER_VERSION: "3.41.9"
   JAVA_VERSION: "17"
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # The release tag this run targets. Priority dispatches us with both
+  # `--ref <tag>` AND `--field tag=<tag>` so the two match. For ad-hoc
+  # operator reruns (dispatched against `main` for a past tag) the
+  # input wins so `release-upload-extras` still hits the correct
+  # release. Falls back to `github.ref_name` (tag for tag-push runs).
+  RESOLVED_TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   # ============================================================
@@ -290,7 +296,7 @@ jobs:
           flutter build "$BUILD_FORMAT" --release \
             --flavor "$BUILD_FLAVOR" $BUILD_ARGS \
             --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} \
-            --dart-define=SENTRY_RELEASE=mail-client-app@${{ github.ref_name }}+${{ github.run_number }} \
+            --dart-define=SENTRY_RELEASE=mail-client-app@${{ env.RESOLVED_TAG }}+${{ github.run_number }} \
             --dart-define=STARTUP_DIAG_KEY=${{ secrets.MAIL_STARTUP_DIAG_KEY }}
 
       - name: Upload Android ${{ matrix.flavor }} ${{ matrix.format }} artifact
@@ -449,7 +455,7 @@ jobs:
           export PATH="$HOME/flutter/bin:$PATH"
           flutter build ios --release --no-codesign \
             --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} \
-            --dart-define=SENTRY_RELEASE=mail-client-app@${{ github.ref_name }}+${{ github.run_number }} \
+            --dart-define=SENTRY_RELEASE=mail-client-app@${{ env.RESOLVED_TAG }}+${{ github.run_number }} \
             --dart-define=STARTUP_DIAG_KEY=${{ secrets.MAIL_STARTUP_DIAG_KEY }}
 
       - name: Package iOS .ipa from Runner.app
@@ -568,7 +574,7 @@ jobs:
           export PATH="$HOME/flutter/bin:$PATH"
           flutter build macos --release \
             --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} \
-            --dart-define=SENTRY_RELEASE=mail-client-app@${{ github.ref_name }}+${{ github.run_number }} \
+            --dart-define=SENTRY_RELEASE=mail-client-app@${{ env.RESOLVED_TAG }}+${{ github.run_number }} \
             --dart-define=STARTUP_DIAG_KEY=${{ secrets.MAIL_STARTUP_DIAG_KEY }}
 
       - name: Ad-hoc sign macOS app
@@ -662,7 +668,7 @@ jobs:
         run: |
           flutter build windows --release `
             --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} `
-            --dart-define=SENTRY_RELEASE=mail-client-app@${{ github.ref_name }}+${{ github.run_number }} `
+            --dart-define=SENTRY_RELEASE=mail-client-app@${{ env.RESOLVED_TAG }}+${{ github.run_number }} `
             --dart-define=STARTUP_DIAG_KEY=${{ secrets.MAIL_STARTUP_DIAG_KEY }}
 
       # SECURITY: Download VC++ Redistributable from Microsoft with pinned SHA-256.
@@ -791,7 +797,7 @@ jobs:
       - name: Stage upload set
         id: stage
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${RESOLVED_TAG#v}"
           mkdir -p upload
 
           # Android APKs (5 flavors).
@@ -834,7 +840,7 @@ jobs:
         if: steps.stage.outputs.count != '0'
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ env.RESOLVED_TAG }}
         run: |
           # --clobber overwrites any same-named asset (idempotent reruns).
           gh release upload "$TAG" upload/* --clobber --repo "$GITHUB_REPOSITORY"
