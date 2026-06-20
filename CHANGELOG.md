@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.146.3 - 2026-06-20
+#### Bug Fixes
+- (**deps**) pin pdf to ^3.11.1 — pdf 3.13.0 requires Dart 3.12+ (#110) - (a335a4d) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.146.2 - 2026-06-20
 #### Bug Fixes
 - (**update**) allow github.com download URLs (clients were stuck since #96) (#109) - (6ea124c) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
