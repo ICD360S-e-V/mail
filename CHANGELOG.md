@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.146.5 - 2026-06-20
+#### Bug Fixes
+- (**ci**) auto-version refreshes pubspec.lock before tagging (#112) - (e5db23e) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.146.4 - 2026-06-20
 #### Bug Fixes
 - (**deps**) pin printing to ^5.14.3 — printing 5.15.0 requires Dart 3.12+ (#111) - (4d7adb5) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
