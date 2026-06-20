@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.145.0 - 2026-06-20
+#### Features
+- (**updates**) migrate auto-update manifest to GitHub Releases (no server) (#96) - (67fa26a) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.144.7 - 2026-06-19
 #### Code Refactoring
 - (**client**) use SPKI-pinned validation on all non-mTLS HTTP clients (#95) - (ebecd87) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
