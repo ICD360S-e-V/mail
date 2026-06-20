@@ -856,10 +856,10 @@ packages:
     dependency: "direct main"
     description:
       name: printing
-      sha256: f6cd14c768c1352dd37a958a3ee351aa9ce305b398218d3acd86389d5f7ecad1
+      sha256: "689170c9ddb1bda85826466ba80378aa8993486d3c959a71cd7d2d80cb606692"
       url: "https://pub.dev"
     source: hosted
-    version: "5.15.0"
+    version: "5.14.3"
   provider:
     dependency: "direct main"
     description:

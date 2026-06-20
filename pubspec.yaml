@@ -64,7 +64,7 @@ dependencies:
   flutter_widget_from_html_core: ^0.17.2  # Secure HTML email rendering (no WebView)
 
   # Printing
-  printing: ^5.15.0  # Native print dialog for all platforms including Windows
+  printing: ^5.14.3  # Native print dialog (pinned: 5.15+ requires Dart 3.12, we have 3.11.5)
   pdf: ^3.11.1  # PDF generation (pinned: 3.13+ requires Dart 3.12, we have 3.11.5)
 
   # PDF Viewer - native PDFium rendering (no WebView dependency)
