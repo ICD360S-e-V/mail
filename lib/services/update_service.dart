@@ -24,7 +24,14 @@ import 'version_baseline.dart';
 
 /// Auto-update service for checking and installing updates
 class UpdateService {
-  static const String updateUrl = 'https://mail.icd360s.de/updates/version.json';
+  /// Public update manifest URL.
+  ///
+  /// Served directly from GitHub Releases via the stable
+  /// `/releases/latest/download/<asset>` redirect. Signed in CI by
+  /// `publish-version-json.yml`. mail.icd360s.de no longer participates
+  /// in the update path — no SCP, no cron, no PHP — only GitHub.
+  static const String updateUrl =
+      'https://github.com/ICD360S-e-V/mail/releases/latest/download/version.json';
   static const String currentVersion = '2.144.7';
 
   // Progress callback for UI updates
@@ -67,25 +74,21 @@ class UpdateService {
   /// Rotated 2026-05-16: the previous keypair (whose pubkey started with
   /// `BOaKDVWITCwis2+9tVGN…`) signed up to v2.136.1; its private key was
   /// lost so the active version.json froze for 5 days and no client could
-  /// auto-update past v2.136.1. New keypair generated offline and
-  /// installed at `/root/.icd360s/release_signing/version_signing_priv.pem`
-  /// on mail.icd360s.de; a systemd path-watcher (`sign-version-json.path`)
-  /// auto-signs every `version.json.draft` that CI rsyncs into
-  /// `/var/www/html/downloads/mail/`.
+  /// auto-update past v2.136.1. New keypair generated offline; the
+  /// private key lives only in the `VERSION_SIGNING_PRIVATE_KEY` GitHub
+  /// Actions secret. The `publish-version-json.yml` workflow signs
+  /// version.json in CI and attaches it (plus `.sig`) as a release asset.
   ///
-  /// Trust-model note: by living on mail.icd360s.de the key is no longer
-  /// strictly "offline" — a root compromise of that host can forge update
-  /// metadata. Acceptable because the same host already terminates IMAP/
-  /// SMTP, holds the user CA, and is the canonical source of binaries, so
-  /// a root compromise there is game-over regardless. Follow-up: migrate
-  /// signing into CI using `VERSION_SIGNING_PRIVATE_KEY` GitHub Secret so
-  /// the key never lives on the mail host.
+  /// Trust-model note: the signing key lives only in GitHub Secrets,
+  /// not on any of our hosts. A root compromise of mail.icd360s.de
+  /// can no longer forge update metadata. A compromise of the GitHub
+  /// secret (or a malicious workflow merge) can; branch protection
+  /// on `main` + required code review is the mitigation.
   ///
   /// To rotate again: generate a new keypair, ship a release whose pinned
-  /// key is the NEW one, then on the server replace
-  /// `/root/.icd360s/release_signing/version_signing_priv.pem` and trigger
-  /// `systemctl start sign-version-json.service` to re-sign the current
-  /// draft. Clients on older releases stay pinned to the previous key and
+  /// key is the NEW one, then update the `VERSION_SIGNING_PRIVATE_KEY`
+  /// Actions secret and re-run `publish-version-json` for the current
+  /// tag. Clients on older releases stay pinned to the previous key and
   /// must be updated out-of-band (manual download).
   static const String _versionJsonPublicKey =
       'BI+YZXuq+/fhMPMVYU3J4mKrzghAqEF0cInvGUHJ1PRezIU8PwA/02p/w/Q6gzrq/+SwcxEJBHOmzLioyscxIqA=';
