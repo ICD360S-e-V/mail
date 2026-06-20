@@ -48,6 +48,11 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="2.146.2" date="2026-06-20">
+      <description>
+        <p>Maintenance release. See the GitHub release notes for details.</p>
+      </description>
+    </release>
     <release version="2.146.1" date="2026-06-20">
       <description>
         <p>Maintenance release. See the GitHub release notes for details.</p>

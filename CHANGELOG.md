@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.146.2 - 2026-06-20
+#### Bug Fixes
+- (**update**) allow github.com download URLs (clients were stuck since #96) (#109) - (6ea124c) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.146.1 - 2026-06-20
 #### Bug Fixes
 - (**sentry**) defensive DSN validation, fall back when env value is malformed (#107) - (e6edf39) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
