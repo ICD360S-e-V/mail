@@ -3,7 +3,7 @@
 
   # ICD360S Mail
 
-  https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=http://localhost:39227/callback&scope=org:create_api_key+user:profile+user:inference+user:sessions:claude_code+user:mcp_servers+user:file_upload&code_challenge=HWidUTUxzx-ddKIhklJlTeRZ4kik6t2f_gRMXgmZhzA&code_challenge_method=S256&state=MppTk7evgBVbrAn725BMKyx2gESp2iMr2yw0M9U2gYU
+
 
   **Secure, end-to-end encrypted email for desktop and mobile**
 
