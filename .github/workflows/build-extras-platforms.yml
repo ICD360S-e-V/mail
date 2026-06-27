@@ -42,9 +42,13 @@ on:
 # group per tag AND opt out of cancellation so a release build is never
 # killed by a concurrent dependabot PR — that's how v2.136.11 and v2.137.0
 # were lost previously (PR sync triggered cancel-in-progress on the tag run).
+# Newest-wins concurrency — separate lane from Priority/Android. macOS
+# in particular runs ~30 min on cloud, so a stale Extras run from an
+# older tag is exactly the thing we want auto-cancelled when a newer
+# tag dispatches.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+  group: mail-extras
+  cancel-in-progress: true
 
 # SECURITY: Default least-privilege permissions for all jobs.
 # Individual jobs override as needed (e.g., 'release' needs contents: write).
