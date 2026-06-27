@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.149.0 - 2026-06-27
+#### Features
+- (**ci**) move Android build to the existing self-hosted Linux runner (#120) - (e877771) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.148.0 - 2026-06-27
 #### Features
 - (**ci**) split Android into its own workflow so APKs ship in ~10 min (#119) - (933cee1) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
