@@ -1381,10 +1381,21 @@ class _MainWindowState extends State<MainWindow> {
                 final acc = emailProvider.accounts[i];
                 final isActive = acc.username == emailProvider.currentAccount?.username;
                 final needsReapproval = emailProvider.needsReapproval(acc.username);
+                final certExpired = emailProvider.isCertExpired(acc.username);
                 Color statusColor;
                 IconData statusIcon;
                 String statusLabel;
-                if (needsReapproval) {
+                if (certExpired) {
+                  // Auto-refresh has given up — the cert is past the
+                  // server's grace period and the mid-life renew endpoint
+                  // returns 401 / TLS handshake fails. Show a red badge
+                  // and tell the user to re-enroll the account
+                  // (matches the Cloudflare WARP "Device not registered"
+                  // and Microsoft Entra "Re-enroll device" patterns).
+                  statusColor = Colors.red;
+                  statusIcon = FluentIcons.error_badge;
+                  statusLabel = 'Certificate expired';
+                } else if (needsReapproval) {
                   // Override the regular connection status: the server has
                   // told us this device is not registered for this account,
                   // so heartbeat is paused. The user must re-approve from
@@ -1466,7 +1477,18 @@ class _MainWindowState extends State<MainWindow> {
                                     color: theme.inactiveColor,
                                   ),
                                 ),
-                                if (needsReapproval)
+                                if (certExpired)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4),
+                                    child: Text(
+                                      'Certificate expired — re-enroll this account',
+                                      style: theme.typography.caption?.copyWith(
+                                        color: Colors.red,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  )
+                                else if (needsReapproval)
                                   Padding(
                                     padding: const EdgeInsets.only(top: 4),
                                     child: Text(

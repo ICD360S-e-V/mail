@@ -150,6 +150,12 @@ class EmailProvider with ChangeNotifier {
     // error so a storage hiccup never blocks startup.
     unawaited(loadReapprovalFlags());
 
+    // Kick off the daily cert refresh sweep. The Timer.periodic and its
+    // startup-delay run inside; calling it here is safe before
+    // _accounts is loaded because the sweep guards on `_accounts` being
+    // empty and re-reads it each pass.
+    _ensureCertRefreshTimer();
+
     // Load accounts from AccountService (JSON + secure storage)
     _accounts = await _accountService.loadAccountsAsync();
     LoggerService.log('PROVIDER', 'Loaded ${_accounts.length} accounts from storage');
@@ -610,6 +616,9 @@ class EmailProvider with ChangeNotifier {
   /// never block the connection flow.
   Future<void> _registerDeviceForAccount(EmailAccount account) async {
     final username = account.username;
+    // Cert past server-side grace period — heartbeat would fail at the
+    // TLS handshake. Skip so we don't spam nginx with handshake errors.
+    if (_accountsCertExpired.contains(username)) return;
     // Skip if we already registered in this session — heartbeat will
     // keep the last_seen fresh. We re-register on app restart.
     if (_devicesRegisteredThisSession.contains(username)) {
@@ -732,6 +741,106 @@ class EmailProvider with ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
+  // ── Cert expiry / auto-refresh state (v2.146.7+) ────────────────
+  /// Accounts whose mTLS cert is too far past expiry (or never trusted)
+  /// for the mid-life refresh endpoint to accept. Heartbeat / IMAP /
+  /// SMTP are paused for these and the UI shows a red "Certificate
+  /// expired" badge so the user re-enrolls via add-account.
+  final Set<String> _accountsCertExpired = <String>{};
+
+  /// UI helper — snapshot of accounts flagged as cert-expired.
+  Set<String> get accountsCertExpired =>
+      Set<String>.unmodifiable(_accountsCertExpired);
+
+  /// True if [username] is currently flagged as cert-expired.
+  bool isCertExpired(String username) =>
+      _accountsCertExpired.contains(username);
+
+  Future<void> _onCertExpired(String username) async {
+    _devicesRegisteredThisSession.remove(username);
+    if (_accountsCertExpired.add(username)) {
+      LoggerService.logWarning('PROVIDER',
+          '🔴 Account $username cert expired beyond grace — paused');
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  /// Clear the cert-expired flag for [username]. Called by the auto-
+  /// refresh sweep after a successful renew, and by the add-account
+  /// flow after a fresh enrollment.
+  void clearCertExpiredFlag(String username) {
+    if (_accountsCertExpired.remove(username)) {
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  Timer? _certRefreshTimer;
+  static const Duration _certRefreshInterval = Duration(hours: 24);
+  static const int _certRefreshThresholdDays = 14;
+  bool _certRefreshRunning = false;
+
+  /// Daily sweep: parse the locally-cached expiry for every account
+  /// with a cert in secure storage. For any cert that's within
+  /// [_certRefreshThresholdDays] of expiry (or already past expiry but
+  /// still within the server-side grace window), call the mid-life
+  /// renew endpoint via mTLS and persist the fresh bundle.
+  ///
+  /// Aligns with the Mastercard / Cloudflare WARP pattern: renewal at
+  /// 30/14 days, grace period after expiry, then block on permanent
+  /// failure. Skips silently when no accounts qualify (saves syscalls
+  /// for users whose certs are fresh).
+  void _ensureCertRefreshTimer() {
+    _certRefreshTimer?.cancel();
+    _certRefreshTimer = Timer.periodic(_certRefreshInterval, (_) {
+      if (_disposed) return;
+      unawaited(_runCertRefreshSweep());
+    });
+    // Also run once on startup, after a short delay so the first
+    // heartbeat round-trip isn't competing for the certificate locks.
+    unawaited(Future<void>.delayed(const Duration(seconds: 30),
+        () { if (!_disposed) _runCertRefreshSweep(); }));
+    LoggerService.log('PROVIDER',
+        'Started cert refresh timer (every 24h, threshold '
+        '${_certRefreshThresholdDays}d)');
+  }
+
+  Future<void> _runCertRefreshSweep() async {
+    if (_certRefreshRunning) return;
+    _certRefreshRunning = true;
+    try {
+      // Load any persisted expiries we haven't seen yet this session so
+      // the threshold check doesn't have to re-parse every PEM.
+      await CertificateExpiryMonitor.loadAllPersistedExpiries(
+          _accounts.map((a) => a.username).toList());
+
+      for (final account in _accounts.toList()) {
+        if (_disposed) return;
+        final username = account.username;
+        final days = CertificateExpiryMonitor.getDaysUntilExpiryFor(username);
+        // If we have no expiry record, assume the cert is fresh — the
+        // user just enrolled or hasn't switched to this account yet.
+        // Daily passes will catch it once an expiry is recorded.
+        if (days == null) continue;
+        if (days > _certRefreshThresholdDays) continue;
+
+        LoggerService.log('CERT-RENEW',
+            'Account $username cert expiring in $days days — refreshing');
+        final outcome = await CertificateService.refreshFor(username);
+        if (outcome == CertificateService.refreshOk) {
+          // Re-enable heartbeat if it was suppressed by a previous
+          // sweep that hit refreshExpired.
+          clearCertExpiredFlag(username);
+        } else if (outcome == CertificateService.refreshExpired) {
+          await _onCertExpired(username);
+        }
+        // Other outcomes (unreachable, notFound, skipped) leave the
+        // current state alone — we'll try again tomorrow.
+      }
+    } finally {
+      _certRefreshRunning = false;
+    }
+  }
+
   /// Handle remote device revocation: wipe credentials, lock, notify UI.
   Future<void> _onDeviceRevoked(String username) async {
     LoggerService.logWarning('PROVIDER',
@@ -778,6 +887,8 @@ class EmailProvider with ChangeNotifier {
     _disposed = true;
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
+    _certRefreshTimer?.cancel();
+    _certRefreshTimer = null;
     // Close all pooled IMAP connections on dispose
     ImapPool.instance.closeAll();
     super.dispose();
