@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.146.6 - 2026-06-27
+#### Bug Fixes
+- (**heartbeat**) treat 404 device_not_registered as permanent — pause + UI badge (#116) - (0efb19a) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.146.5 - 2026-06-20
 #### Bug Fixes
 - (**ci**) auto-version refreshes pubspec.lock before tagging (#112) - (e5db23e) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
