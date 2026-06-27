@@ -173,6 +173,32 @@ class UpdateService {
     return MtlsService.onBadCertificate(cert, host);
   }
 
+  /// Build an HttpClient appropriate for [uri]:
+  ///
+  ///   - `mail.icd360s.de` → [PinnedSecurityContext] (Let's Encrypt-only
+  ///      trust store + SPKI pin via [_validateCertificate]). Strict, pinned.
+  ///   - `github.com`      → vanilla [HttpClient] (system trust store, which
+  ///      includes the DigiCert chain github.com actually uses).
+  ///
+  /// version.json carries a detached ECDSA P-256 signature that we verify
+  /// before reading any field, and the APK/EXE/etc. is verified against
+  /// the SHA-256 recorded in that signed manifest. The TLS layer for
+  /// github.com therefore only needs typical CA-based confidentiality, not
+  /// the LE-only pin we use for our own infra. The pin would actually be
+  /// counterproductive: github.com is signed by DigiCert and was never
+  /// going to validate against the ISRG roots in PinnedSecurityContext —
+  /// the result was a hard `CERTIFICATE_VERIFY_FAILED` on every
+  /// /releases/latest/download/version.json fetch from v2.146.0+ until
+  /// today (no client was actually auto-updating; bridge installs masked
+  /// the breakage).
+  static HttpClient _httpClientFor(Uri uri) {
+    if (uri.host == 'mail.icd360s.de') {
+      return PinnedSecurityContext.createHttpClient()
+        ..badCertificateCallback = _validateCertificate;
+    }
+    return HttpClient();
+  }
+
   /// Verify that an update download URL is allowed: must be HTTPS and
   /// pointed at one of the two trusted upstreams.
   ///
@@ -247,16 +273,18 @@ class UpdateService {
       await VersionBaseline.initialize(currentVersion);
       LoggerService.log('UPDATE', 'Checking for updates at $updateUrl');
 
-      // Download version.json from server
-      final client = PinnedSecurityContext.createHttpClient()
-        ..badCertificateCallback = _validateCertificate;
+      // Download version.json from server. Pick the right HttpClient
+      // for the host — github.com gets the system trust store
+      // (DigiCert), mail.icd360s.de gets our pinned LE-only context.
+      final updateUri = Uri.parse(updateUrl);
+      final client = _httpClientFor(updateUri);
       try {
         // Download version.json AND its detached ECDSA signature, then
         // verify before trusting any field. Defends against compromise
         // of mail.icd360s.de itself: an attacker who controls the
         // server can serve any JSON, but cannot forge a valid signature
         // without the offline private key.
-        final request = await client.getUrl(Uri.parse(updateUrl));
+        final request = await client.getUrl(updateUri);
         final response = await request.close();
 
         if (response.statusCode == 200) {
@@ -466,10 +494,10 @@ class UpdateService {
       return null;
     }
 
-    final client = PinnedSecurityContext.createHttpClient()
-      ..badCertificateCallback = _validateCertificate;
+    final downloadUri = Uri.parse(updateInfo.downloadUrl);
+    final client = _httpClientFor(downloadUri);
     try {
-      final request = await client.getUrl(Uri.parse(updateInfo.downloadUrl));
+      final request = await client.getUrl(downloadUri);
       final response = await request.close();
 
       if (response.statusCode != 200) return null;
