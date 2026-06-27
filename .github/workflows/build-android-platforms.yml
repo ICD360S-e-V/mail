@@ -91,18 +91,26 @@ jobs:
   # ============================================================
   analyze:
     name: Analyze
-    # Self-hosted runner on 10.10.10.60 — Flutter pre-installed in
-    # /opt/flutter, same as the Linux/Flatpak jobs in
-    # build-all-platforms.yml. No subosito/flutter-action.
-    runs-on: [self-hosted, linux, x64]
+    # GitHub-hosted runner — the 6 Android matrix jobs run in parallel
+    # here (~10 min total), versus serialized through a single
+    # self-hosted registration (~30 min total). Priority's Linux+Flatpak
+    # remains on the self-hosted runner; Android stays in the cloud
+    # because that's where it's faster end-to-end.
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Resolve dependencies + analyze
-        run: |
-          export PATH="/opt/flutter/bin:/opt/flutter/bin/cache/dart-sdk/bin:$PATH"
-          flutter pub get --enforce-lockfile
-          flutter analyze --no-fatal-infos
+      - name: Install Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Run flutter analyze
+        run: flutter analyze --no-fatal-infos
 
   # ============================================================
   # Android Build — per-flavor APKs + AAB, each on its own runner.
@@ -113,21 +121,14 @@ jobs:
     name: Android (${{ matrix.flavor }}${{ matrix.format == 'aab' && ' AAB' || '' }})
     needs: [detect-changes, analyze]
     if: needs.detect-changes.outputs.android_changed == 'true'
-    # Self-hosted runner on 10.10.10.60. Prerequisites already installed
-    # by the runner host (NOT by this workflow — see runner-prereqs.md):
-    #   - Flutter SDK at /opt/flutter (same as the Linux build)
-    #   - JDK 17 (Temurin) on PATH or pointed at by JAVA_HOME
-    #   - Android command-line tools + platform-tools + build-tools
-    #     reachable via $ANDROID_SDK_ROOT
-    # No setup-java, no subosito/flutter-action — same approach as the
-    # Linux job in build-all-platforms.yml.
-    runs-on: [self-hosted, linux, x64]
+    # GitHub-hosted runner. The self-hosted Linux runner has only one
+    # registration, so a 6-job Android matrix serialized through it
+    # (~30 min). On ubuntu-latest the 6 jobs fan out in parallel and the
+    # whole matrix lands in ~10 min — cheaper end-to-end even when
+    # we're paying for cloud minutes. Priority's Linux+Flatpak stays on
+    # the self-hosted runner; only Android went back to the cloud.
+    runs-on: ubuntu-latest
     strategy:
-      # Matrix kept fail-fast: false so a single bad flavor doesn't kill
-      # the other 5 — but the matrix size (6 jobs) means the self-hosted
-      # runner will serialize them unless multiple runners are
-      # registered. Sysadmin: scale registrations on the host if total
-      # wall-clock matters.
       fail-fast: false
       matrix:
         include:
@@ -151,6 +152,18 @@ jobs:
             build_args: "--obfuscate --split-debug-info=build/symbols"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Java
+        uses: actions/setup-java@ad2b38190b15e4d6bdf0c97fb4fca8412226d287 # v5.3.0
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
 
       - name: Cache Gradle
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
@@ -191,14 +204,15 @@ jobs:
           restore-keys: |
             native-hooks-${{ runner.os }}-${{ runner.arch }}-
 
-      - name: Resolve Flutter dependencies + compile Android ${{ matrix.flavor }} ${{ matrix.format }} (release)
+      - name: Resolve Flutter dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Compile Android ${{ matrix.flavor }} ${{ matrix.format }} (release)
         env:
           BUILD_FORMAT: ${{ matrix.format }}
           BUILD_FLAVOR: ${{ matrix.flavor }}
           BUILD_ARGS: ${{ matrix.build_args }}
         run: |
-          export PATH="/opt/flutter/bin:/opt/flutter/bin/cache/dart-sdk/bin:$PATH"
-          flutter pub get --enforce-lockfile
           flutter build "$BUILD_FORMAT" --release \
             --flavor "$BUILD_FLAVOR" $BUILD_ARGS \
             --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} \
