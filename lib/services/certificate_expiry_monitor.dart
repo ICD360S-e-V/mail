@@ -21,7 +21,22 @@ class CertificateExpiryMonitor {
   static const _kNotAfter = 'client_cert_not_after_utc';
   static const _kNotBefore = 'client_cert_not_before_utc';
 
+  // Per-account expiry keys (v2.146.7+). The pre-v2.146.7 global keys
+  // above tracked only the singleton "current account" cert; multi-
+  // account installs would silently overwrite the expiry every time
+  // the user switched accounts, so the daily refresh sweep had no way
+  // to know which account was actually expiring. Per-account keys
+  // mirror the storage layout of CertificateService.
+  static String _safeUserSuffix(String username) =>
+      username.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+  static String _kNotAfterFor(String username) =>
+      'client_cert_not_after_utc_${_safeUserSuffix(username)}';
+
   static DateTime? _certNotAfter;
+
+  /// In-memory map of NotAfter per account, populated lazily by
+  /// [parseCertAndPersistExpiryFor] or [loadAllPersistedExpiries].
+  static final Map<String, DateTime> _certNotAfterPerAccount = {};
 
   /// Parse the real expiry from a PEM certificate string and persist it.
   ///
@@ -175,5 +190,74 @@ class CertificateExpiryMonitor {
     _certNotAfter = null;
     await _storage.delete(key: _kNotAfter);
     await _storage.delete(key: _kNotBefore);
+  }
+
+  // ── Per-account API (v2.146.7+) ───────────────────────────────────
+
+  /// Parse the real expiry from [pemCert] and persist under [username].
+  /// Mirrors [parseCertAndPersistExpiry] but isolates per-account state
+  /// so the daily refresh sweep can target the right cert.
+  static Future<DateTime?> parseCertAndPersistExpiryFor(
+      String username, String pemCert) async {
+    DateTime notAfter;
+    try {
+      final certData = X509Utils.x509CertificateFromPem(pemCert);
+      final validity = certData.tbsCertificate?.validity;
+      if (validity == null) return null;
+      notAfter = validity.notAfter;
+    } catch (ex, stackTrace) {
+      LoggerService.logError('CERT-EXPIRY',
+          'PEM parse failed for $username: $ex', stackTrace);
+      return null;
+    }
+    _certNotAfterPerAccount[username] = notAfter;
+    try {
+      await _storage.write(
+        key: _kNotAfterFor(username),
+        value: notAfter.toUtc().toIso8601String(),
+      );
+    } catch (ex) {
+      LoggerService.logWarning('CERT-EXPIRY',
+          'Could not persist expiry for $username: $ex');
+    }
+    return notAfter;
+  }
+
+  /// Load every persisted per-account expiry into memory. Best-effort:
+  /// callers that need an immediate answer for one account can fall
+  /// back to parsing the PEM at use-time. Call once at startup so the
+  /// daily refresh sweep does not have to hit secure storage per
+  /// account.
+  static Future<void> loadAllPersistedExpiries(
+      List<String> usernames) async {
+    for (final u in usernames) {
+      try {
+        final raw = await _storage.read(key: _kNotAfterFor(u));
+        if (raw != null) {
+          _certNotAfterPerAccount[u] = DateTime.parse(raw);
+        }
+      } catch (_) {/* silent — fall back to on-demand parse */}
+    }
+  }
+
+  /// Days until expiry for [username], or null if the cert isn't known
+  /// to this monitor. Returns negative when already expired.
+  static int? getDaysUntilExpiryFor(String username) {
+    final na = _certNotAfterPerAccount[username];
+    if (na == null) return null;
+    return na.difference(DateTime.now().toUtc()).inDays;
+  }
+
+  /// Snapshot for diagnostics / UI rendering.
+  static Map<String, DateTime> snapshotPerAccountExpiry() =>
+      Map<String, DateTime>.unmodifiable(_certNotAfterPerAccount);
+
+  /// Clear the per-account record (call from cert wipe / account
+  /// removal).
+  static Future<void> clearExpiryFor(String username) async {
+    _certNotAfterPerAccount.remove(username);
+    try {
+      await _storage.delete(key: _kNotAfterFor(username));
+    } catch (_) {/* ignore */}
   }
 }

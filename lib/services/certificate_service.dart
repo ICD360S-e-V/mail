@@ -1,12 +1,16 @@
 // SPDX-FileCopyrightText: 2024-2026 ICD360S e.V.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
+import 'package:http/io_client.dart';
 import 'certificate_expiry_monitor.dart';
 import 'logger_service.dart';
 import 'master_vault.dart';
+import 'mtls_service.dart';
 
 /// Per-user mTLS cert + private key + CA bundle, decrypted from secure
 /// storage. Used by [MtlsService.createMtlsHttpClientFor] to build a
@@ -424,6 +428,130 @@ class CertificateService {
           'mTLS cert wiped from secure storage (explicit logout, ${users.length} users)');
     } catch (ex, st) {
       LoggerService.logError('CERT-DOWNLOAD', ex, st);
+    }
+  }
+
+  // ── Auto-refresh (v2.146.7+) ────────────────────────────────────────
+
+  static const String _renewCertEndpoint =
+      'https://mail.icd360s.de/api/client/renew-cert.php';
+
+  /// Outcome of a [refreshFor] attempt — drives the [EmailProvider]
+  /// state machine that decides whether to keep heartbeating or flag
+  /// the account in the UI.
+  static const String refreshOk = 'ok';
+  static const String refreshExpired = 'expired';
+  static const String refreshUnreachable = 'unreachable';
+  static const String refreshNotFound = 'not_found';
+  static const String refreshSkipped = 'skipped';
+
+  static String _randomHex16() {
+    final r = Random.secure();
+    return List<int>.generate(16, (_) => r.nextInt(256))
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join();
+  }
+
+  /// Ask the server for the current per-user cert via the mid-life
+  /// refresh endpoint (mTLS-authenticated by the existing cert). If the
+  /// existing cert is still trusted (within the server's grace window),
+  /// the call succeeds and we persist the new bundle. If the existing
+  /// cert is already rejected at the TLS handshake the call returns
+  /// HTTP 401 / SocketException — the caller should flag the account so
+  /// the user re-enrolls via the regular add-account flow.
+  ///
+  /// Returns one of: [refreshOk], [refreshExpired], [refreshNotFound],
+  /// [refreshUnreachable], [refreshSkipped].
+  static Future<String> refreshFor(String username) async {
+    final bundle = await loadBundleFor(username);
+    if (bundle == null) return refreshSkipped;
+
+    final httpClient = await MtlsService.createMtlsHttpClientFor(
+      username: username,
+    );
+    if (httpClient == null) return refreshSkipped;
+
+    final client = IOClient(httpClient);
+    try {
+      final payload = jsonEncode({
+        'timestamp': DateTime.now().toUtc().toIso8601String(),
+        'nonce': _randomHex16(),
+      });
+      final response = await client
+          .post(
+            Uri.parse(_renewCertEndpoint),
+            headers: {'Content-Type': 'application/json'},
+            body: payload,
+          )
+          .timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 401) {
+        LoggerService.logWarning('CERT-RENEW',
+            'Refresh rejected for $username: server says cert is no '
+            'longer valid (HTTP 401). Re-enrollment required.');
+        return refreshExpired;
+      }
+      if (response.statusCode == 404) {
+        LoggerService.logWarning('CERT-RENEW',
+            'Server has no cert on file for $username (HTTP 404).');
+        return refreshNotFound;
+      }
+      if (response.statusCode != 200) {
+        LoggerService.logWarning('CERT-RENEW',
+            'Refresh failed for $username: HTTP ${response.statusCode}');
+        return refreshUnreachable;
+      }
+
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      if (body['success'] != true) {
+        LoggerService.logWarning('CERT-RENEW',
+            'Refresh returned success=false for $username: '
+            '${body['error']}');
+        return refreshUnreachable;
+      }
+      final cert = body['client_cert']?.toString();
+      final key = body['client_key']?.toString();
+      final ca = body['ca_cert']?.toString();
+      final serverUsername = body['username']?.toString() ?? username;
+      if (cert == null || key == null || ca == null) {
+        return refreshUnreachable;
+      }
+
+      // Persist under the requesting username (the canonical key used
+      // by the rest of the client) and parse expiry into the
+      // per-account monitor map.
+      await storeBundle(
+        username: username,
+        clientCert: cert,
+        clientKey: key,
+        caCert: ca,
+      );
+      await CertificateExpiryMonitor.parseCertAndPersistExpiryFor(
+          username, cert);
+      LoggerService.log('CERT-RENEW',
+          '✓ Refreshed cert for $username (server says: $serverUsername)');
+      return refreshOk;
+    } on SocketException catch (ex) {
+      LoggerService.logWarning('CERT-RENEW',
+          'Refresh network error for $username: $ex');
+      return refreshUnreachable;
+    } on HandshakeException catch (ex) {
+      // Most likely: the existing cert has already expired — the TLS
+      // handshake never completes so we can't even reach the endpoint.
+      // Treat the same as a 401 so the caller flags the account.
+      LoggerService.logWarning('CERT-RENEW',
+          'Refresh TLS handshake failed for $username (cert likely '
+          'already expired): $ex');
+      return refreshExpired;
+    } on TimeoutException {
+      return refreshUnreachable;
+    } catch (ex, st) {
+      LoggerService.logError('CERT-RENEW', ex, st);
+      return refreshUnreachable;
+    } finally {
+      try {
+        client.close();
+      } catch (_) {}
     }
   }
 
