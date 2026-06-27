@@ -337,6 +337,15 @@ class CertificateService {
       _currentUsername = username;
       // Restore persisted expiry dates (parsed from PEM at download time)
       await CertificateExpiryMonitor.loadPersistedExpiry();
+      // v2.147.1: also populate the per-account expiry map so the
+      // daily refresh sweep can target this account. Without this,
+      // getDaysUntilExpiryFor(username) returns null for every account
+      // loaded out of secure storage (pre-v2.147.0 stored only the
+      // singleton key) and the sweep silently skips everyone.
+      try {
+        await CertificateExpiryMonitor.parseCertAndPersistExpiryFor(
+            username, cert);
+      } catch (_) {/* fall back to the legacy singleton state */}
       LoggerService.log('CERT-DOWNLOAD',
           'mTLS cert cache restored from secure storage for $username');
       return true;
@@ -364,6 +373,16 @@ class CertificateService {
       final key  = await _secureStorage.read(key: _kStorageClientKeyFor(username));
       final ca   = await _secureStorage.read(key: _kStorageCaCertFor(username));
       if (cert == null || key == null || ca == null) return null;
+
+      // v2.147.1: populate the per-account expiry map on the
+      // non-mutating restore path too, so the daily refresh sweep can
+      // see expiries even for accounts whose singleton cache was never
+      // promoted to current (e.g. background heartbeats for inactive
+      // accounts).
+      try {
+        await CertificateExpiryMonitor.parseCertAndPersistExpiryFor(
+            username, cert);
+      } catch (_) {/* monitor is best-effort */}
 
       return UserCertBundle(
         clientCert: Uint8List.fromList(utf8.encode(cert)),

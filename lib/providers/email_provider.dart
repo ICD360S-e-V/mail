@@ -4,6 +4,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'dart:async';
 import 'dart:collection' show LinkedHashMap;
+import 'dart:convert' show utf8;
 import '../models/models.dart';
 import '../services/services.dart';
 import 'dart:io' show Platform;
@@ -816,11 +817,21 @@ class EmailProvider with ChangeNotifier {
       for (final account in _accounts.toList()) {
         if (_disposed) return;
         final username = account.username;
-        final days = CertificateExpiryMonitor.getDaysUntilExpiryFor(username);
-        // If we have no expiry record, assume the cert is fresh — the
-        // user just enrolled or hasn't switched to this account yet.
-        // Daily passes will catch it once an expiry is recorded.
-        if (days == null) continue;
+        var days = CertificateExpiryMonitor.getDaysUntilExpiryFor(username);
+        // Fallback: pre-v2.147.0 installs persisted only the singleton
+        // expiry, so the per-account map can be empty for accounts that
+        // haven't been (re)connected since the upgrade. Load the bundle
+        // and parse the PEM on demand — this also primes the map for
+        // the next pass.
+        if (days == null) {
+          final bundle = await CertificateService.loadBundleFor(username);
+          if (bundle == null) continue;
+          final pem = utf8.decode(bundle.clientCert);
+          final notAfter = await CertificateExpiryMonitor
+              .parseCertAndPersistExpiryFor(username, pem);
+          if (notAfter == null) continue;
+          days = notAfter.difference(DateTime.now().toUtc()).inDays;
+        }
         if (days > _certRefreshThresholdDays) continue;
 
         LoggerService.log('CERT-RENEW',
