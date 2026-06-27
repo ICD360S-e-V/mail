@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.149.2 - 2026-06-27
+#### Bug Fixes
+- (**ci**) newest-wins concurrency across the three build pipelines (#122) - (b1a0250) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.149.1 - 2026-06-27
 #### Bug Fixes
 - (**update**) use system trust for github.com, keep LE pin only for mail (#121) - (cc3234c) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
