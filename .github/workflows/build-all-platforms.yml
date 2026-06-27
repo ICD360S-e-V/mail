@@ -738,12 +738,14 @@ jobs:
   release:
     name: Release (priority — creates GitHub Release)
     # Priority workflow creates the release with Linux + Flatpak + SBOM.
-    # The companion build-extras-platforms.yml uploads Android, Windows,
-    # macOS, iOS to this same release as they finish via
-    # `gh release upload --clobber`. Each workflow finishes (and its
-    # artifacts become downloadable from the UI) independently, so users
-    # can grab Linux + Flatpak within ~8 minutes of pushing a tag,
-    # without waiting for the slow runners.
+    # Two companion workflows then upload their artifacts to the same
+    # release via `gh release upload --clobber`:
+    #   • build-android-platforms.yml — Android APKs + AAB (~10 min)
+    #   • build-extras-platforms.yml  — iOS + macOS + Windows (~30 min)
+    # Each finishes (and its artifacts become downloadable from the UI)
+    # independently, so users get Linux + Flatpak within ~8 minutes of
+    # pushing a tag, Android within ~10–15 minutes total, without
+    # waiting for the slow Apple runners.
     needs: [build-linux, build-flatpak, sbom]
     if: always() && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
@@ -959,6 +961,18 @@ jobs:
       # The dispatch passes the tag explicitly so Extras builds the
       # exact release that was just published. `--ref` runs the
       # workflow file at that tag's commit, matching Priority's view.
+      - name: Trigger Android workflow
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          echo "::notice::Dispatching Android workflow for $TAG"
+          gh workflow run build-android-platforms.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref "$TAG" \
+            --field tag="$TAG"
+
       - name: Trigger Extras workflow
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

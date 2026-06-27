@@ -1,0 +1,343 @@
+name: Build Android Platforms (APKs + AAB)
+
+# Android-only workflow — split out of build-extras-platforms.yml so
+# Android artifacts land in the GitHub release as soon as they're
+# built (~10 min), instead of waiting for iOS/macOS/Windows (~30 min).
+#
+#   tag push v*
+#     ↓
+#   build-all-platforms.yml (priority) publishes the release with
+#   Linux + Flatpak.
+#     ↓
+#   priority's final step dispatches THREE downstreams in parallel:
+#     • build-android-platforms.yml   (this file)   → Android APKs/AAB
+#     • build-extras-platforms.yml                   → iOS/macOS/Windows
+#     • (each independently uploads to the same release + dispatches
+#       publish-version-json when done)
+#
+# Each workflow uploads its own artifacts via `gh release upload --clobber`
+# and triggers `publish-version-json.yml` so the signed manifest at
+# /releases/latest/download/version.json is refreshed as fields fill in.
+# publish-version-json is idempotent — the final run wins.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build Android for (e.g. v2.148.0)'
+        required: true
+        type: string
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: "3.41.9"
+  JAVA_VERSION: "17"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  RESOLVED_TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  # ============================================================
+  # Detect Changes — Android-only cache check
+  # ============================================================
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      android_changed: ${{ steps.check.outputs.android_changed }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Compute Android hash
+        id: hashes
+        run: |
+          SHARED_HASH=$(find lib/ pubspec.yaml pubspec.lock assets/ enough_mail_fork/ -type f -print0 2>/dev/null | sort -z | xargs -0 cat 2>/dev/null | sha256sum | cut -d' ' -f1)
+          ANDROID_HASH=$(find android/ -type f -print0 | sort -z | xargs -0 cat | sha256sum | cut -d' ' -f1)
+          echo "android_hash=${SHARED_HASH:0:16}${ANDROID_HASH:0:16}" >> "$GITHUB_OUTPUT"
+
+      - name: Check Android cache
+        id: cache-android
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: .cache-marker-android
+          key: build-success-android-${{ steps.hashes.outputs.android_hash }}
+          lookup-only: true
+
+      - name: Determine what changed
+        id: check
+        env:
+          CACHE_ANDROID: ${{ steps.cache-android.outputs.cache-hit }}
+        run: |
+          if [ "$CACHE_ANDROID" = "true" ]; then
+            echo "android_changed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Android: skipping (no changes since last successful build)"
+          else
+            echo "android_changed=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Android: will build"
+          fi
+
+  # ============================================================
+  # Static Analysis — same flutter analyze as the other workflows.
+  # Kept here so the Android workflow is self-contained and can fail
+  # fast on a syntax error without waiting on Extras' analyze job.
+  # ============================================================
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Run flutter analyze
+        run: flutter analyze --no-fatal-infos
+
+  # ============================================================
+  # Android Build — per-flavor APKs + AAB, each on its own runner.
+  # Identical to the old Extras build matrix; copied here verbatim so
+  # the split is a pure structural change (no behavior delta).
+  # ============================================================
+  build-android:
+    name: Android (${{ matrix.flavor }}${{ matrix.format == 'aab' && ' AAB' || '' }})
+    needs: [detect-changes, analyze]
+    if: needs.detect-changes.outputs.android_changed == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - flavor: universal
+            format: apk
+            build_args: "--split-per-abi --obfuscate --split-debug-info=build/symbols"
+          - flavor: fdroid
+            format: apk
+            build_args: "--split-per-abi --obfuscate --split-debug-info=build/symbols"
+          - flavor: googleplay
+            format: apk
+            build_args: "--split-per-abi --obfuscate --split-debug-info=build/symbols"
+          - flavor: samsung
+            format: apk
+            build_args: "--split-per-abi --obfuscate --split-debug-info=build/symbols"
+          - flavor: huawei
+            format: apk
+            build_args: "--split-per-abi --obfuscate --split-debug-info=build/symbols"
+          - flavor: googleplay
+            format: aab
+            build_args: "--obfuscate --split-debug-info=build/symbols"
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Java
+        uses: actions/setup-java@ad2b38190b15e4d6bdf0c97fb4fca8412226d287 # v5.3.0
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Install Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Cache Gradle
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      # SECURITY (M7): Pass secrets via env vars so they are never
+      # interpolated directly into the shell script body.
+      - name: Decode keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          printf '%s' "$KEYSTORE_B64" | base64 -d > android/upload-keystore.jks
+
+      - name: Create key.properties
+        env:
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          {
+            printf 'storePassword=%s\n' "$STORE_PASSWORD"
+            printf 'keyPassword=%s\n' "$KEY_PASSWORD"
+            printf 'keyAlias=%s\n' "$KEY_ALIAS"
+            printf 'storeFile=../upload-keystore.jks\n'
+          } > android/key.properties
+          chmod 600 android/key.properties
+
+      - name: Restore native build hooks (sodium)
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: .dart_tool/hooks_runner/
+          key: native-hooks-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: |
+            native-hooks-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Resolve Flutter dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Compile Android ${{ matrix.flavor }} ${{ matrix.format }} (release)
+        env:
+          BUILD_FORMAT: ${{ matrix.format }}
+          BUILD_FLAVOR: ${{ matrix.flavor }}
+          BUILD_ARGS: ${{ matrix.build_args }}
+        run: |
+          flutter build "$BUILD_FORMAT" --release \
+            --flavor "$BUILD_FLAVOR" $BUILD_ARGS \
+            --dart-define=SENTRY_DSN=${{ secrets.SENTRY_DSN }} \
+            --dart-define=SENTRY_RELEASE=mail-client-app@${{ env.RESOLVED_TAG }}+${{ github.run_number }} \
+            --dart-define=STARTUP_DIAG_KEY=${{ secrets.MAIL_STARTUP_DIAG_KEY }}
+
+      - name: Upload Android ${{ matrix.flavor }} ${{ matrix.format }} artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: android-${{ matrix.flavor }}-${{ matrix.format }}
+          path: |
+            build/app/outputs/flutter-apk/*${{ matrix.flavor }}*.apk
+            build/app/outputs/bundle/${{ matrix.flavor }}Release/*.aab
+            build/symbols/
+          retention-days: 30
+
+      - name: Android ${{ matrix.flavor }} ${{ matrix.format }} build summary
+        if: always()
+        env:
+          BUILD_FORMAT: ${{ matrix.format }}
+          BUILD_FLAVOR: ${{ matrix.flavor }}
+        run: |
+          {
+            echo "## 🤖 Android Build Summary — $BUILD_FLAVOR ($BUILD_FORMAT)"
+            echo ""
+            echo "| Artifact | Size | Status |"
+            echo "|----------|-----:|:------:|"
+            for f in build/app/outputs/flutter-apk/*${BUILD_FLAVOR}*.apk \
+                     build/app/outputs/bundle/${BUILD_FLAVOR}Release/*.aab; do
+              if [ -f "$f" ]; then
+                NAME=$(basename "$f")
+                SIZE=$(du -h "$f" | cut -f1)
+                echo "| \`$NAME\` | $SIZE | ✅ |"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Save Android cache marker after all matrix jobs succeed.
+  android-cache-save:
+    name: Android Cache Save
+    needs: [detect-changes, build-android]
+    if: needs.detect-changes.outputs.android_changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          sparse-checkout: |
+            lib
+            pubspec.yaml
+            pubspec.lock
+            assets
+            android
+
+      - name: Compute Android hash
+        id: hashes
+        run: |
+          SHARED_HASH=$(find lib/ pubspec.yaml pubspec.lock assets/ enough_mail_fork/ -type f -print0 2>/dev/null | sort -z | xargs -0 cat 2>/dev/null | sha256sum | cut -d' ' -f1)
+          ANDROID_HASH=$(find android/ -type f -print0 | sort -z | xargs -0 cat | sha256sum | cut -d' ' -f1)
+          echo "android_hash=${SHARED_HASH:0:16}${ANDROID_HASH:0:16}" >> "$GITHUB_OUTPUT"
+
+      - name: Save cache marker
+        run: |
+          mkdir -p .cache-marker-android
+          echo "$GITHUB_SHA" > .cache-marker-android/sha
+
+      - name: Save Android build cache
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: .cache-marker-android
+          key: build-success-android-${{ steps.hashes.outputs.android_hash }}
+
+  # ============================================================
+  # Release upload — stages every Android artifact and uploads to the
+  # existing GitHub Release. Does NOT depend on iOS/macOS/Windows, so
+  # Android lands in the release as soon as it's built.
+  # ============================================================
+  release-upload-android:
+    name: Release upload (Android)
+    needs: [build-android, android-cache-save]
+    if: always() && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Download Android artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          path: artifacts/
+          pattern: android-*
+
+      - name: Restore annotated tag object
+        run: |
+          # Same trick as Priority's release job — annotated tag isn't
+          # part of the default checkout because workflow_dispatch sets
+          # ref=main, but `gh release upload` needs the tag to exist.
+          git fetch --tags --force origin "refs/tags/${RESOLVED_TAG}:refs/tags/${RESOLVED_TAG}" || true
+
+      - name: Stage upload set
+        id: stage
+        run: |
+          VERSION="${RESOLVED_TAG#v}"
+          mkdir -p upload
+
+          for flavor in universal fdroid googleplay samsung huawei; do
+            if [ -d "artifacts/android-${flavor}-apk" ]; then
+              find "artifacts/android-${flavor}-apk" -name "*.apk" -exec cp {} upload/ \; 2>/dev/null || true
+            fi
+          done
+          if [ -d "artifacts/android-googleplay-aab" ]; then
+            find "artifacts/android-googleplay-aab" -name "*.aab" -exec cp {} upload/ \; 2>/dev/null || true
+          fi
+
+          count=$(find upload/ -mindepth 1 -maxdepth 1 -type f | wc -l)
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          echo "## Android assets staged: $count"
+          ls -lah upload/
+
+      - name: Upload Android to release
+        if: steps.stage.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ env.RESOLVED_TAG }}
+        run: |
+          gh release upload "$TAG" upload/* --clobber --repo "$GITHUB_REPOSITORY"
+          echo "## Uploaded $(ls upload/ | wc -l) Android assets to release $TAG" >> "$GITHUB_STEP_SUMMARY"
+
+      # Re-sign version.json the moment Android is in the release, so
+      # Android clients see the correct download URLs before iOS/macOS/
+      # Windows finish. publish-version-json is idempotent — Extras
+      # re-dispatches it later with the same effect.
+      - name: Dispatch publish-version-json
+        if: steps.stage.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ env.RESOLVED_TAG }}
+        run: |
+          set -euo pipefail
+          echo "::notice::Dispatching publish-version-json for $TAG (Android pass)"
+          gh workflow run publish-version-json.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main \
+            --field tag="$TAG"
