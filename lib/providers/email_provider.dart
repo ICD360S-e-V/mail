@@ -144,6 +144,12 @@ class EmailProvider with ChangeNotifier {
     // Initialize trash tracker for 30-day auto-delete feature
     await TrashTrackerService.initialize();
 
+    // Load persisted re-approval flags so the account-picker UI shows
+    // the orange badge immediately on launch, before the first heartbeat
+    // tick. Cheap (one secure-storage readAll); fire-and-forget on
+    // error so a storage hiccup never blocks startup.
+    unawaited(loadReapprovalFlags());
+
     // Load accounts from AccountService (JSON + secure storage)
     _accounts = await _accountService.loadAccountsAsync();
     LoggerService.log('PROVIDER', 'Loaded ${_accounts.length} accounts from storage');
@@ -610,6 +616,7 @@ class EmailProvider with ChangeNotifier {
       // Just bump heartbeat — check for revocation
       DeviceRegistrationService.sendHeartbeat(username: username).then((result) {
         if (result == HeartbeatResult.revoked) _onDeviceRevoked(username);
+        if (result == HeartbeatResult.notRegistered) _onNotRegistered(username);
       });
       return;
     }
@@ -630,6 +637,10 @@ class EmailProvider with ChangeNotifier {
       );
       if (hbResult == HeartbeatResult.revoked) {
         _onDeviceRevoked(username);
+        return;
+      }
+      if (hbResult == HeartbeatResult.notRegistered) {
+        _onNotRegistered(username);
         return;
       }
       _devicesRegisteredThisSession.add(username);
@@ -660,10 +671,65 @@ class EmailProvider with ChangeNotifier {
           await _onDeviceRevoked(username);
           return; // stop processing — app is locked
         }
+        if (result == HeartbeatResult.notRegistered) {
+          _onNotRegistered(username);
+        }
       }
     });
     LoggerService.log('PROVIDER',
         'Started device heartbeat timer (every 5 min)');
+  }
+
+  // ── Stale-registration state ─────────────────────────────────────
+  /// Accounts that the server has told us aren't registered (HTTP 404
+  /// device_not_registered). Heartbeat is paused for these and the UI
+  /// shows a "needs re-approval" badge so the user can act.
+  final Set<String> _accountsNeedingReapproval = <String>{};
+
+  /// UI helper — snapshot of accounts currently flagged for re-approval.
+  Set<String> get accountsNeedingReapproval =>
+      Set<String>.unmodifiable(_accountsNeedingReapproval);
+
+  /// True if [username] is currently flagged as needing re-approval.
+  bool needsReapproval(String username) =>
+      _accountsNeedingReapproval.contains(username);
+
+  Future<void> _onNotRegistered(String username) async {
+    // Stop bumping heartbeat for this account, surface to UI.
+    _devicesRegisteredThisSession.remove(username);
+    if (_accountsNeedingReapproval.add(username)) {
+      LoggerService.logWarning('PROVIDER',
+          '🔶 Account $username needs re-approval — paused');
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  /// Clear the re-approval flag for [username] and allow the heartbeat
+  /// loop to resume on the next folder fetch. Call this after the user
+  /// completes admin re-approval and the next registerDevice succeeds —
+  /// the underlying service also clears its persistent flag.
+  Future<void> clearReapprovalFlag(String username) async {
+    await DeviceRegistrationService.clearNeedsReapproval(username);
+    if (_accountsNeedingReapproval.remove(username)) {
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  /// Load persisted re-approval flags into the in-memory provider state
+  /// at startup so the UI immediately shows the correct badges. Call
+  /// once after providers initialize.
+  ///
+  /// The service stores bare usernames (without the @icd360s.de suffix),
+  /// the provider keys by the full username — translate at the boundary
+  /// so both the UI lookup and downstream service calls land on the
+  /// same identifier.
+  Future<void> loadReapprovalFlags() async {
+    final flagged = await DeviceRegistrationService.snapshotNeedingReapproval();
+    if (flagged.isEmpty) return;
+    _accountsNeedingReapproval
+      ..clear()
+      ..addAll(flagged.map((bare) => '$bare@icd360s.de'));
+    if (!_disposed) notifyListeners();
   }
 
   /// Handle remote device revocation: wipe credentials, lock, notify UI.

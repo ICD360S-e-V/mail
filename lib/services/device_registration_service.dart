@@ -17,8 +17,16 @@ import 'platform_service.dart';
 import 'portable_secure_storage.dart';
 import 'update_service.dart';
 
-/// Result of a heartbeat call — used to detect remote device revocation.
-enum HeartbeatResult { ok, revoked, error }
+/// Result of a heartbeat call — used to detect remote device revocation
+/// and stale registrations.
+///
+/// `notRegistered` is returned when the server replies with HTTP 404
+/// `device_not_registered`. The client persists this state per-account in
+/// secure storage and stops heartbeating for that account until the user
+/// re-approves the device — matches the Netflix Eureka / Cloudflare WARP
+/// pattern where 404 means "stop polling, re-enroll" instead of retrying
+/// forever (RFC: 404 is not a transient error).
+enum HeartbeatResult { ok, revoked, error, notRegistered }
 
 /// Client API for the mail-admin backend on mail.icd360s.de.
 ///
@@ -46,8 +54,72 @@ class DeviceRegistrationService {
       'https://mail.icd360s.de/api/client/can-send.php';
 
   static const String _kDeviceId = 'icd360s_device_id_v1';
+  static const String _kNeedsReapprovalPrefix = 'icd360s_needs_reapproval_';
 
   static final _storage = PortableSecureStorage.instance;
+
+  /// In-memory cache so we don't hit secure storage on every heartbeat tick.
+  /// Loaded lazily on first access via [needsReapproval].
+  static final Set<String> _needsReapprovalCache = <String>{};
+  static bool _needsReapprovalCacheReady = false;
+
+  /// Returns true if the given account is currently flagged as needing
+  /// admin re-approval (server returned 404 device_not_registered on the
+  /// last heartbeat attempt). Heartbeat is suppressed for flagged
+  /// accounts until [clearNeedsReapproval] is called — typically by the
+  /// successful [registerDevice] following an admin approval.
+  static Future<bool> needsReapproval(String username) async {
+    final clean = username.replaceAll('@icd360s.de', '');
+    if (!_needsReapprovalCacheReady) await _loadNeedsReapprovalCache();
+    return _needsReapprovalCache.contains(clean);
+  }
+
+  /// Snapshot of the in-memory flagged set (loads on first call). Useful
+  /// for UI that needs to render all flagged accounts in one pass.
+  static Future<Set<String>> snapshotNeedingReapproval() async {
+    if (!_needsReapprovalCacheReady) await _loadNeedsReapprovalCache();
+    return Set<String>.from(_needsReapprovalCache);
+  }
+
+  /// Flag [username] as needing re-approval. Persists across restarts via
+  /// secure storage. Idempotent.
+  static Future<void> markNeedsReapproval(String username) async {
+    final clean = username.replaceAll('@icd360s.de', '');
+    if (!_needsReapprovalCacheReady) await _loadNeedsReapprovalCache();
+    if (_needsReapprovalCache.add(clean)) {
+      await _storage.write(key: '$_kNeedsReapprovalPrefix$clean', value: '1');
+    }
+  }
+
+  /// Clear the re-approval flag for [username]. Called by [registerDevice]
+  /// on success, or by the user after manually re-approving via admin
+  /// panel and triggering a fresh registration.
+  static Future<void> clearNeedsReapproval(String username) async {
+    final clean = username.replaceAll('@icd360s.de', '');
+    if (!_needsReapprovalCacheReady) await _loadNeedsReapprovalCache();
+    if (_needsReapprovalCache.remove(clean)) {
+      await _storage.delete(key: '$_kNeedsReapprovalPrefix$clean');
+    }
+  }
+
+  /// Best-effort load — secure-storage cursor APIs differ per backend, so
+  /// we lazy-load on first access. On any unexpected error, the cache is
+  /// left empty and we re-try at the next call; this fails open
+  /// (heartbeat continues normally rather than silently suppressing).
+  static Future<void> _loadNeedsReapprovalCache() async {
+    _needsReapprovalCacheReady = true;
+    try {
+      final all = await _storage.readAll();
+      for (final entry in all.entries) {
+        if (entry.key.startsWith(_kNeedsReapprovalPrefix) && entry.value == '1') {
+          _needsReapprovalCache
+              .add(entry.key.substring(_kNeedsReapprovalPrefix.length));
+        }
+      }
+    } catch (_) {
+      // Leave cache empty and silently retry on next call.
+    }
+  }
 
   /// Get the persistent device ID, generating one on first call.
   ///
@@ -147,6 +219,9 @@ class DeviceRegistrationService {
       final ok = data['success'] == true;
 
       if (ok) {
+        // Successful registration clears the needs-reapproval flag so
+        // the regular heartbeat loop resumes for this account.
+        await clearNeedsReapproval(username);
         LoggerService.log('DEVICE_REG',
             'Device registered successfully for $cleanUsername');
         return DeviceRegistrationResult(success: true);
@@ -205,6 +280,14 @@ class DeviceRegistrationService {
   static const _heartbeatSpacing = Duration(milliseconds: 200);
 
   static Future<HeartbeatResult> sendHeartbeat({required String username}) async {
+    // Suppress heartbeat for accounts the server has already told us are
+    // not registered (HTTP 404 device_not_registered). Retrying every 5
+    // min spams the server and the client log without doing anything
+    // useful — re-registration is the only path back. The flag clears
+    // automatically on a successful registerDevice().
+    if (await needsReapproval(username)) {
+      return HeartbeatResult.notRegistered;
+    }
     final previous = _heartbeatChain;
     final ticket = Completer<void>();
     _heartbeatChain = ticket.future;
@@ -276,8 +359,27 @@ class DeviceRegistrationService {
         }
         return HeartbeatResult.ok;
       }
+
+      // 404 device_not_registered: this account never had a device
+      // record on the server, or it was deleted. Treat as permanent
+      // (404 ≠ transient per RFC 7231) — flag for re-approval and stop
+      // heartbeating until the user re-registers.
+      if (response.statusCode == 404) {
+        String? errCode;
+        try {
+          final body = jsonDecode(response.body) as Map<String, dynamic>;
+          errCode = body['error'] as String?;
+        } catch (_) {/* non-JSON */}
+        if (errCode == 'device_not_registered') {
+          await markNeedsReapproval(username);
+          LoggerService.logWarning('DEVICE_REG',
+              '🔶 Account $cleanUsername needs re-approval — heartbeat paused (mtls=$useMtls)');
+          return HeartbeatResult.notRegistered;
+        }
+      }
+
       LoggerService.logWarning('DEVICE_REG',
-          'Heartbeat failed: HTTP ${response.statusCode} (mtls=$useMtls)');
+          'Heartbeat failed for $cleanUsername: HTTP ${response.statusCode} (mtls=$useMtls)');
       return HeartbeatResult.error;
     } catch (ex) {
       LoggerService.logWarning('DEVICE_REG', 'Heartbeat error: $ex');

@@ -1380,30 +1380,44 @@ class _MainWindowState extends State<MainWindow> {
               itemBuilder: (_, i) {
                 final acc = emailProvider.accounts[i];
                 final isActive = acc.username == emailProvider.currentAccount?.username;
+                final needsReapproval = emailProvider.needsReapproval(acc.username);
                 Color statusColor;
                 IconData statusIcon;
                 String statusLabel;
-                switch (acc.connectionStatus) {
-                  case AccountConnectionStatus.connected:
-                    statusColor = Colors.green;
-                    statusIcon = FluentIcons.accept_medium;
-                    statusLabel = 'Connected';
-                    break;
-                  case AccountConnectionStatus.authError:
-                    statusColor = Colors.red;
-                    statusIcon = FluentIcons.error_badge;
-                    statusLabel = 'Authentication error';
-                    break;
-                  case AccountConnectionStatus.networkError:
-                    statusColor = Colors.orange;
-                    statusIcon = FluentIcons.warning;
-                    statusLabel = 'Network error';
-                    break;
-                  case AccountConnectionStatus.unknown:
-                    statusColor = Colors.grey;
-                    statusIcon = FluentIcons.contact;
-                    statusLabel = 'Unknown status';
-                    break;
+                if (needsReapproval) {
+                  // Override the regular connection status: the server has
+                  // told us this device is not registered for this account,
+                  // so heartbeat is paused. The user must re-approve from
+                  // the admin panel before traffic resumes. Per the
+                  // PatternFly / Microsoft Entra pattern, surface this as
+                  // an actionable orange badge (action required, not an
+                  // error caused by us).
+                  statusColor = Colors.orange;
+                  statusIcon = FluentIcons.warning;
+                  statusLabel = 'Re-approval needed';
+                } else {
+                  switch (acc.connectionStatus) {
+                    case AccountConnectionStatus.connected:
+                      statusColor = Colors.green;
+                      statusIcon = FluentIcons.accept_medium;
+                      statusLabel = 'Connected';
+                      break;
+                    case AccountConnectionStatus.authError:
+                      statusColor = Colors.red;
+                      statusIcon = FluentIcons.error_badge;
+                      statusLabel = 'Authentication error';
+                      break;
+                    case AccountConnectionStatus.networkError:
+                      statusColor = Colors.orange;
+                      statusIcon = FluentIcons.warning;
+                      statusLabel = 'Network error';
+                      break;
+                    case AccountConnectionStatus.unknown:
+                      statusColor = Colors.grey;
+                      statusIcon = FluentIcons.contact;
+                      statusLabel = 'Unknown status';
+                      break;
+                  }
                 }
                 return HoverButton(
                   onPressed: () {
@@ -1452,6 +1466,17 @@ class _MainWindowState extends State<MainWindow> {
                                     color: theme.inactiveColor,
                                   ),
                                 ),
+                                if (needsReapproval)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4),
+                                    child: Text(
+                                      'Re-approval needed — heartbeat paused',
+                                      style: theme.typography.caption?.copyWith(
+                                        color: Colors.orange,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
