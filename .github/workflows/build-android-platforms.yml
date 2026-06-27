@@ -27,9 +27,13 @@ on:
         required: true
         type: string
 
+# Newest-wins concurrency — separate lane from Priority/Extras so a new
+# tag's Linux build doesn't kill an in-flight Android build for the same
+# tag. But a NEWER tag's Android dispatch DOES cancel an older Android
+# build in this lane — that's the whole point.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+  group: mail-android
+  cancel-in-progress: true
 
 permissions:
   contents: read
