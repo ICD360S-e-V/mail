@@ -834,6 +834,20 @@ class EmailProvider with ChangeNotifier {
         }
         if (days > _certRefreshThresholdDays) continue;
 
+        // Already past notAfter — the renew-cert endpoint mTLS-authenticates
+        // with the very cert we're trying to refresh, so calling it would
+        // just produce a confusing nginx "400 SSL certificate error" each
+        // sweep and hide the re-enrollment prompt from the user. Flag the
+        // account immediately so the badge appears and heartbeat stops
+        // hammering the server with a dead cert.
+        if (days < 0) {
+          LoggerService.logWarning('CERT-RENEW',
+              'Account $username cert already expired ($days days) — '
+              'flagging for re-enrollment without trying renew-cert');
+          await _onCertExpired(username);
+          continue;
+        }
+
         LoggerService.log('CERT-RENEW',
             'Account $username cert expiring in $days days — refreshing');
         final outcome = await CertificateService.refreshFor(username);
