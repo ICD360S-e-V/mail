@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.149.7 - 2026-06-28
+#### Bug Fixes
+- (**pgp-sync**) overwrite server blob when we can no longer decrypt it (#127) - (eaccf29) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.149.6 - 2026-06-28
 #### Bug Fixes
 - (**cert-renew**) flag account when local cert already expired (#126) - (404e37e) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*

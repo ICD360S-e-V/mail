@@ -32,7 +32,7 @@ class UpdateService {
   /// in the update path — no SCP, no cron, no PHP — only GitHub.
   static const String updateUrl =
       'https://github.com/ICD360S-e-V/mail/releases/latest/download/version.json';
-  static const String currentVersion = '2.149.6';
+  static const String currentVersion = '2.149.7';
 
   // Progress callback for UI updates
   static Function(int downloaded, int total, String status)? onProgress;
