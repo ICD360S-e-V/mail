@@ -36,6 +36,24 @@ class PgpKeyService {
   static final Map<String, dynamic> _publicKeys = {};
   static final Map<String, Future<dynamic>> _keyGenFutures = {};
 
+  /// Accounts whose server-side PGP blob was present but decrypted with
+  /// a GCM auth failure during the most recent key-load. Populated by
+  /// [getOrCreatePrivateKey] when the user has just gone through the
+  /// admin-mediated reset flow with a new master password but historical
+  /// mail under previous keys is still on the server. The UI shows a
+  /// "remember the old password?" dialog for each entry; on success the
+  /// keys are imported via [attemptRecoveryWithOldPassword] and the
+  /// entry is dropped.
+  static final Set<String> _accountsAwaitingRecovery = <String>{};
+
+  /// Read-only snapshot of [_accountsAwaitingRecovery] for the UI layer.
+  static Set<String> get accountsAwaitingRecovery =>
+      Set<String>.unmodifiable(_accountsAwaitingRecovery);
+
+  static void clearRecoveryFlag(String email) {
+    _accountsAwaitingRecovery.remove(email.toLowerCase());
+  }
+
   // The "active" account for decrypt operations (set by the currently
   // selected account in the UI — decrypt worker uses this key).
   static String? _activeEmail;
@@ -211,6 +229,14 @@ class PgpKeyService {
       LoggerService.logWarning('PGP',
           'PgpSyncService.fetchBlob failed for $email '
           '(network/blob-KEK mismatch; will attempt fresh key gen as last resort): $ex');
+      // A GCM auth failure here means the server's blob is encrypted
+      // under a master password we no longer hold (typical after a
+      // reset where the user picked a new password). Surface this so
+      // the UI can offer the post-approval recovery dialog where the
+      // user types the OLD password to reclaim the historical keys.
+      if (ex.toString().contains('GCM authentication failed')) {
+        _accountsAwaitingRecovery.add(email.toLowerCase());
+      }
     }
 
     if (syncedBlob != null) {
@@ -846,6 +872,113 @@ class PgpKeyService {
             : (existing == null
                 ? '✓ Uploaded first v2 blob for $email'
                 : '✓ Upgraded v1 → v2 blob for $email'));
+  }
+
+  /// Try to reclaim the server-stored PGP key for [email] by re-deriving
+  /// the blob KEK from [oldMasterPassword] instead of the vault's
+  /// current master key. Used by the UI's "remember the old password?"
+  /// dialog after the admin-mediated reset flow leaves an account in
+  /// [_accountsAwaitingRecovery].
+  ///
+  /// On success the recovered armored key + passphrase are persisted
+  /// under the *current* vault (so the next normal startup loads them
+  /// transparently), the blob is re-uploaded so it's now decryptable
+  /// with the new master password, and the pubkey is republished. The
+  /// recovery flag is cleared. Returns true.
+  ///
+  /// Returns false on:
+  ///   * server has no blob at all (nothing to recover);
+  ///   * wrong password (GCM authentication fails);
+  ///   * any other crypto / network failure.
+  ///
+  /// The vault must be unlocked; [oldMasterPassword] is the user-typed
+  /// candidate, NOT the current master password.
+  static Future<bool> attemptRecoveryWithOldPassword(
+      String email, String oldMasterPassword) async {
+    final key = email.toLowerCase();
+    try {
+      final vault = MasterVault.instance;
+      final salt = vault.currentArgonSalt;
+      if (salt == null) {
+        LoggerService.logWarning('PGP_RECOVERY',
+            'No Argon2id salt bound — vault not unlocked yet, '
+            'cannot try recovery for $email');
+        return false;
+      }
+      final oldMasterKey =
+          await vault.deriveMasterKey(oldMasterPassword, salt);
+      PgpBlob? recoveredBlob;
+      try {
+        recoveredBlob = await PgpSyncService.fetchBlob(email,
+            recoveryMasterKey: oldMasterKey);
+      } on PgpSyncException catch (ex) {
+        LoggerService.logWarning('PGP_RECOVERY',
+            'Decryption with proposed old password failed for $email: $ex');
+        return false;
+      }
+      if (recoveredBlob == null) {
+        LoggerService.log('PGP_RECOVERY',
+            'No blob on server for $email — nothing to recover');
+        return false;
+      }
+
+      final syncPassphrase = recoveredBlob.passphrase;
+      if (syncPassphrase == null) {
+        // v1 (armor-only) blob — we have no passphrase to unwrap the
+        // armor, so even though the AAD authenticated, we can't use it.
+        LoggerService.logWarning('PGP_RECOVERY',
+            'Recovered v1 (armor-only) blob for $email — no passphrase, '
+            'cannot unwrap');
+        return false;
+      }
+      // Validate the armored key parses with the recovered passphrase.
+      final recoveredPrivateKey =
+          OpenPGP.decryptPrivateKey(recoveredBlob.armor, syncPassphrase);
+
+      // Persist under the CURRENT vault (which is keyed by the NEW
+      // master password). Subsequent startups use the normal local-armor
+      // load path with no recovery prompt.
+      await vault.write(key: _vaultKeyPassphrase, value: syncPassphrase);
+      await vault.write(key: _vaultKey(email), value: recoveredBlob.armor);
+
+      _privateKeys[key] = recoveredPrivateKey;
+      _publicKeys[key] = recoveredPrivateKey.publicKey;
+      if (_activeEmail == null) {
+        _activeEmail = key;
+        await _startWorker(recoveredBlob.armor, syncPassphrase);
+      }
+
+      // Re-upload under the current master KEK so the next fresh-device
+      // install (with the new password) sees a decryptable blob. The
+      // 409-retry path in encryptAndUpload bumps past the server version
+      // we just decrypted, so we always end up monotonically newer.
+      try {
+        await PgpSyncService.uploadBlob(
+            email,
+            PgpBlob(
+                armor: recoveredBlob.armor,
+                passphrase: syncPassphrase,
+                format: 2));
+        LoggerService.log('PGP_RECOVERY',
+            '✓ Re-uploaded recovered blob for $email under current master KEK');
+      } catch (ex) {
+        LoggerService.logWarning('PGP_RECOVERY',
+            'Re-upload after recovery failed for $email (key still '
+            'usable locally): $ex');
+      }
+
+      // Republish pubkey so the server keyring matches what other senders
+      // will encrypt to.
+      await _uploadPublicKey(recoveredPrivateKey.publicKey, email);
+
+      _accountsAwaitingRecovery.remove(key);
+      LoggerService.log(
+          'PGP_RECOVERY', '✓ Recovered PGP keys for $email');
+      return true;
+    } catch (ex, st) {
+      LoggerService.logError('PGP_RECOVERY', ex, st);
+      return false;
+    }
   }
 
   /// Returns the per-account S2K passphrase used to wrap the OpenPGP
