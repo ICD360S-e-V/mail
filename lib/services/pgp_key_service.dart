@@ -807,11 +807,33 @@ class PgpKeyService {
   /// v1 (armor-only) blob. After this completes successfully, any
   /// fresh-device install that shares the master password can recover
   /// the key without any local-state lookup.
+  ///
+  /// If the server has a blob we can no longer decrypt (master password
+  /// was rotated since the upload, so AES-GCM authentication fails),
+  /// treat the stale blob as if it didn't exist and overwrite it. The
+  /// upload uses `localVersion + 1` so the server's version-monotonicity
+  /// check still passes.
   static Future<void> _ensureServerHasV2Blob(
       String email, String passphrase, String armor) async {
-    final existing = await PgpSyncService.fetchBlob(email);
-    if (existing != null && existing.isSelfContained) {
-      return; // Server already has a v2 blob — nothing to do.
+    PgpBlob? existing;
+    var serverBlobUnreadable = false;
+    try {
+      existing = await PgpSyncService.fetchBlob(email);
+      if (existing != null && existing.isSelfContained) {
+        return; // Server already has a v2 blob — nothing to do.
+      }
+    } on PgpSyncException catch (ex) {
+      // GCM auth failure → server blob is encrypted under a different
+      // master key (typical after a master-password rotation that
+      // happened between the original upload and now). Anything else
+      // we can't read either has the same outcome: the server copy is
+      // useless to fresh-device installs, so overwrite with the
+      // currently-loaded key. We log the cause so the audit trail makes
+      // sense if this fires unexpectedly.
+      serverBlobUnreadable = true;
+      LoggerService.logWarning('PGP',
+          'Server blob unreadable for $email — overwriting with the '
+          'current key bundle: $ex');
     }
     await PgpSyncService.uploadBlob(
         email,
@@ -819,9 +841,11 @@ class PgpKeyService {
             armor: armor, passphrase: passphrase, format: 2));
     LoggerService.log(
         'PGP',
-        existing == null
-            ? '✓ Uploaded first v2 blob for $email'
-            : '✓ Upgraded v1 → v2 blob for $email');
+        serverBlobUnreadable
+            ? '✓ Overwrote unreadable server blob with v2 for $email'
+            : (existing == null
+                ? '✓ Uploaded first v2 blob for $email'
+                : '✓ Upgraded v1 → v2 blob for $email'));
   }
 
   /// Returns the per-account S2K passphrase used to wrap the OpenPGP
