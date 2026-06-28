@@ -1399,18 +1399,25 @@ class EmailProvider with ChangeNotifier {
   /// so the viewer rebuilds with the content.
   ///
   /// Idempotent: if `email.bodyLoaded` is already true, this is a no-op.
-  Future<void> loadBody(Email email) async {
+  ///
+  /// Pass [forceFull] = true to bypass both the idempotent short-circuit
+  /// and the cache, and to forward `forceFull` to [MailService.fetchFullBody]
+  /// so the IMAP fetch ignores the 1 MB body cap. Used by the "Download full
+  /// message" affordance in the viewer when [Email.bodyTruncated] is set.
+  Future<void> loadBody(Email email, {bool forceFull = false}) async {
     // Already loaded on this Email instance — just touch the LRU.
-    if (email.bodyLoaded) {
+    // Skip the early-return when forceFull is set so the user can
+    // re-fetch a previously-truncated body without clearing it first.
+    if (email.bodyLoaded && !forceFull) {
       _touchBodyCache(email.messageId);
       return;
     }
 
     // Cache hit on a different Email shell (same messageId, e.g. after
     // an envelope-only refresh replaced the list). Hydrate from cache,
-    // skip the IMAP fetch entirely.
+    // skip the IMAP fetch entirely. Same forceFull skip rule applies.
     final cached = _bodyCache[email.messageId];
-    if (cached != null) {
+    if (cached != null && !forceFull) {
       email.body = cached.body;
       email.bodyTruncated = cached.bodyTruncated;
       email.isEncrypted = cached.isEncrypted;
@@ -1432,12 +1439,14 @@ class EmailProvider with ChangeNotifier {
       return;
     }
     try {
-      await _mailService.fetchFullBody(account, email, folder: _currentFolder);
+      await _mailService.fetchFullBody(account, email,
+          folder: _currentFolder, forceFull: forceFull);
       LoggerService.log('PROVIDER',
           '✓ Loaded body for ${email.messageId} (${email.body?.length ?? 0} chars, '
           '${email.attachments.length} attachments, '
           'encrypted=${email.isEncrypted}, truncated=${email.bodyTruncated})');
       // Insert into LRU on success only (don't pollute cache with errors).
+      // On forceFull this overwrites the previously cached truncated body.
       if (email.bodyLoaded) {
         _putBodyCache(email);
       }

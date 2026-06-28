@@ -62,6 +62,10 @@ class _EmailViewerState extends State<EmailViewer> {
   /// body when set.
   String? _bodyLoadError;
 
+  /// True while the user-initiated "Download full message" re-fetch is in
+  /// flight. Suppresses the action button + shows a spinner inline.
+  bool _refetchInFlight = false;
+
   @override
   void initState() {
     super.initState();
@@ -95,6 +99,24 @@ class _EmailViewerState extends State<EmailViewer> {
         _bodyReady = true; // exit spinner; show error inline
         _bodyLoadError = ex.toString();
       });
+    }
+  }
+
+  /// Re-fetch the body without the 1 MB cap. Triggered from the orange
+  /// "Large message" badge so the user can pull the full body + any
+  /// attachments past the cap (e.g. when reviewing own sent mail).
+  Future<void> _downloadFullBody() async {
+    setState(() => _refetchInFlight = true);
+    try {
+      await context
+          .read<EmailProvider>()
+          .loadBody(widget.email, forceFull: true);
+      if (!mounted) return;
+      _scanAttachments();
+    } catch (ex) {
+      LoggerService.logError('EMAIL_VIEWER', ex, StackTrace.current);
+    } finally {
+      if (mounted) setState(() => _refetchInFlight = false);
     }
   }
 
@@ -558,6 +580,22 @@ class _EmailViewerState extends State<EmailViewer> {
                     ),
                   ),
                 ),
+                const SizedBox(width: 8),
+                if (_refetchInFlight)
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: ProgressRing(strokeWidth: 2),
+                  )
+                else
+                  HyperlinkButton(
+                    style: const ButtonStyle(
+                      padding: WidgetStatePropertyAll(
+                          EdgeInsets.symmetric(horizontal: 4, vertical: 0)),
+                    ),
+                    onPressed: _downloadFullBody,
+                    child: const Text('Download full message'),
+                  ),
               ],
             ),
           ),
