@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.149.8 - 2026-06-28
+#### Bug Fixes
+- (**pgp-sync**) retry encryptAndUpload at server-version+1 on 409 (#129) - (f0ca3d0) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+- (**vault**) drop write silently when locked instead of throwing (#128) - (062e658) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.149.7 - 2026-06-28
 #### Bug Fixes
 - (**pgp-sync**) overwrite server blob when we can no longer decrypt it (#127) - (eaccf29) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
