@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.150.0 - 2026-06-28
+#### Features
+- (**pgp-recovery**) prompt for previous master password after reset (#130) - (92a0803) - icd360sevofficial, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.149.8 - 2026-06-28
 #### Bug Fixes
 - (**pgp-sync**) retry encryptAndUpload at server-version+1 on 409 (#129) - (f0ca3d0) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
