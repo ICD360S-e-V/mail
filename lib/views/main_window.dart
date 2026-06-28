@@ -2003,6 +2003,9 @@ class _MainWindowState extends State<MainWindow> {
   /// Build delivery status icon for an email.
   /// Reads server-side status from the RAM cache populated by a single
   /// batch fetch in _buildEmailList — no per-widget HTTP calls.
+  ///
+  /// Tapping opens [_showDeliveryLogDialog] which fetches the raw maillog
+  /// lines from /api/mail-status.php (include_log=true).
   Widget _buildDeliveryStatusIcon(Email email, FluentThemeData theme) {
     final cached = MailStatusService.getCached(email.messageId);
 
@@ -2023,37 +2026,62 @@ class _MainWindowState extends State<MainWindow> {
         tooltipMsg = 'Deferred — retrying';
         break;
       case MailDeliveryStatus.bounced:
-        icon = FluentIcons.error_badge;
+        icon = FluentIcons.cancel;
         color = Colors.red;
         tooltipMsg = 'Bounced — permanent failure';
         break;
       case MailDeliveryStatus.expired:
-        icon = FluentIcons.blocked2;
+        icon = FluentIcons.cancel;
         color = Colors.red;
         tooltipMsg = 'Expired — gave up retrying';
         break;
       case MailDeliveryStatus.pending:
-        icon = FluentIcons.send;
-        color = Colors.blue;
+        icon = FluentIcons.unknown;
+        color = theme.inactiveColor;
         tooltipMsg = 'Pending — in queue';
         break;
       case MailDeliveryStatus.notFound:
       case MailDeliveryStatus.forbidden:
-        icon = FluentIcons.help;
+        icon = FluentIcons.unknown;
         color = theme.inactiveColor;
-        tooltipMsg = 'No delivery status available';
+        tooltipMsg = 'No delivery status available — tap for log';
         break;
       case null:
       case MailDeliveryStatus.unknown:
-        icon = FluentIcons.sync;
+        icon = FluentIcons.unknown;
         color = theme.inactiveColor;
         tooltipMsg = 'Checking delivery status…';
         break;
     }
 
+    // Click → open detail dialog; the GestureDetector swallows the tap so
+    // the parent row's onTap (which opens the email viewer) does not fire.
     return Tooltip(
       message: tooltipMsg,
-      child: Icon(icon, size: 14, color: color),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _showDeliveryLogDialog(email),
+        child: Padding(
+          padding: const EdgeInsets.all(2),
+          child: Icon(icon, size: 14, color: color),
+        ),
+      ),
+    );
+  }
+
+  /// Show a dialog with the maillog lines for a sent email. Fires a
+  /// fresh /api/mail-status.php call with include_log=true so the user
+  /// always sees the current server-side state, not a cached snapshot.
+  Future<void> _showDeliveryLogDialog(Email email) async {
+    final emailProvider = Provider.of<EmailProvider>(context, listen: false);
+    final sender = emailProvider.currentAccount?.username;
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => _DeliveryLogDialog(
+        email: email,
+        senderUsername: sender,
+      ),
     );
   }
 
@@ -2392,6 +2420,153 @@ class _MainWindowState extends State<MainWindow> {
     );
   }
 
+}
+
+/// Dialog that fetches and displays the raw maillog lines for a sent
+/// email. Used by the row delivery-status icon — when the user clicks the
+/// green check / orange ? / red X next to a Sent message, we show the
+/// underlying postfix log so they can see exactly what the external MX
+/// said (250 OK, 550 user does not exist, etc.).
+class _DeliveryLogDialog extends StatefulWidget {
+  final Email email;
+  final String? senderUsername;
+  const _DeliveryLogDialog({required this.email, required this.senderUsername});
+
+  @override
+  State<_DeliveryLogDialog> createState() => _DeliveryLogDialogState();
+}
+
+class _DeliveryLogDialogState extends State<_DeliveryLogDialog> {
+  MailStatusResult? _result;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+  }
+
+  Future<void> _fetch() async {
+    try {
+      final result = await MailStatusService.fetchDetail(
+        widget.email.messageId,
+        senderUsername: widget.senderUsername,
+      );
+      if (!mounted) return;
+      setState(() {
+        _result = result;
+        _loading = false;
+        if (result == null) _error = 'No response from server';
+      });
+    } catch (ex) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = ex.toString();
+      });
+    }
+  }
+
+  String _statusLabel(MailDeliveryStatus s) {
+    switch (s) {
+      case MailDeliveryStatus.sent:
+        return 'Delivered to remote MX';
+      case MailDeliveryStatus.deferred:
+        return 'Deferred — retrying';
+      case MailDeliveryStatus.bounced:
+        return 'Bounced — permanent failure';
+      case MailDeliveryStatus.expired:
+        return 'Expired — gave up retrying';
+      case MailDeliveryStatus.pending:
+        return 'Pending — in queue';
+      case MailDeliveryStatus.notFound:
+        return 'No log entry on the server';
+      case MailDeliveryStatus.forbidden:
+        return 'This message was not sent by your account';
+      case MailDeliveryStatus.unknown:
+        return 'Status unknown';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = FluentTheme.of(context);
+    Widget body;
+    if (_loading) {
+      body = const SizedBox(
+        height: 80,
+        child: Center(child: ProgressRing()),
+      );
+    } else if (_error != null) {
+      body = Padding(
+        padding: const EdgeInsets.all(8),
+        child: Text(_error!, style: TextStyle(color: Colors.red)),
+      );
+    } else {
+      final r = _result!;
+      body = ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 360),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_statusLabel(r.status),
+                style: theme.typography.bodyStrong),
+            if (r.relay != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text('Relay: ${r.relay}'),
+              ),
+            if (r.timestamp != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text('When: ${r.timestamp}'),
+              ),
+            if (r.queueId != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text('Queue ID: ${r.queueId}',
+                    style: theme.typography.caption?.copyWith(
+                      color: theme.inactiveColor,
+                    )),
+              ),
+            const SizedBox(height: 8),
+            if (r.logLines.isEmpty)
+              Text('No log lines available.',
+                  style: theme.typography.caption)
+            else
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: theme.resources.subtleFillColorSecondary,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: SingleChildScrollView(
+                    child: SelectableText(
+                      r.logLines.join('\n'),
+                      style: const TextStyle(
+                          fontFamily: 'monospace', fontSize: 11),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+    return ContentDialog(
+      title: const Text('Delivery log'),
+      content: body,
+      actions: [
+        Button(
+          child: const Text('Close'),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ],
+    );
+  }
 }
 
 // Keyboard shortcut intents
