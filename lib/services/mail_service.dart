@@ -365,6 +365,7 @@ class MailService {
     EmailAccount account,
     Email email, {
     String folder = 'INBOX',
+    bool forceFull = false,
   }) async {
     _validateAccount(account);
 
@@ -390,7 +391,7 @@ class MailService {
         // during the envelope fetch.
         final size = email.bodySize ?? 0;
         final isEncrypted = PgpKeyService.isPgpEncryptedHeaders(email.headers);
-        final exceedsCap = !isEncrypted && size > _maxBodyFetchBytes;
+        final exceedsCap = !forceFull && !isEncrypted && size > _maxBodyFetchBytes;
         final fetchSpec = exceedsCap
             ? '(UID FLAGS BODY.PEEK[HEADER] BODY.PEEK[]<0.$_maxBodyFetchBytes>)'
             : '(UID FLAGS BODY.PEEK[])';
