@@ -170,11 +170,32 @@ class PgpSyncService {
     final tag = 'PGP_SYNC';
     LoggerService.log(tag, 'encryptAndUpload: $email');
 
-    final nextVersion = (await getLocalVersion(email)) + 1;
-    final blobBytes = await _encryptBlob(armoredKey, email, nextVersion);
-    final blobBase64 = base64.encode(blobBytes);
+    var nextVersion = (await getLocalVersion(email)) + 1;
+    var blobBytes = await _encryptBlob(armoredKey, email, nextVersion);
+    var blobBase64 = base64.encode(blobBytes);
 
-    await _uploadBlob(email, nextVersion, blobBase64);
+    try {
+      await _uploadBlob(email, nextVersion, blobBase64);
+    } on PgpSyncException catch (ex) {
+      // 409 means the server already has a blob at version ≥ ours. Common
+      // scenarios: (a) fresh-device install after a master-password reset
+      // — server still holds the unreadable v(N) and our localVersion is
+      // 0, so we tried to upload v1; (b) two devices uploaded in quick
+      // succession. In both cases, the right thing is to bump past the
+      // server's current version and retry once. The server enforces
+      // monotonicity, so we can't end up downgrading.
+      if (!ex.message.contains('Version conflict')) rethrow;
+      final serverPayload = await _fetchBlob(email);
+      if (serverPayload == null) rethrow;
+      final serverVersion = serverPayload['version'] as int;
+      LoggerService.logWarning(tag,
+          'encryptAndUpload v$nextVersion lost to server v$serverVersion '
+          'for $email — retrying at v${serverVersion + 1}');
+      nextVersion = serverVersion + 1;
+      blobBytes = await _encryptBlob(armoredKey, email, nextVersion);
+      blobBase64 = base64.encode(blobBytes);
+      await _uploadBlob(email, nextVersion, blobBase64);
+    }
 
     // Persist the new version only after a confirmed successful upload.
     await _saveLocalVersion(email, nextVersion);
