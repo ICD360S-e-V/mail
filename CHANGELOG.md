@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.149.5 - 2026-06-28
+#### Bug Fixes
+- (**delivery-status**) icon click opens log dialog with raw maillog (#125) - (9deeb26) - icd360sevofficial, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.149.4 - 2026-06-28
 #### Bug Fixes
 - (**viewer**) add Download full message button when body was truncated (#124) - (16238f0) - icd360sevofficial, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
