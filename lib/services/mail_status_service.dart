@@ -27,8 +27,16 @@ class MailStatusResult {
   final MailDeliveryStatus status;
   final String? relay;      // e.g. "mx00.ionos.de"
   final String? timestamp;  // e.g. "Apr 14 09:57:29"
+  final String? queueId;    // postfix queue id, only when include_log was set
+  final List<String> logLines; // raw maillog lines for this queue id
 
-  MailStatusResult({required this.status, this.relay, this.timestamp});
+  MailStatusResult({
+    required this.status,
+    this.relay,
+    this.timestamp,
+    this.queueId,
+    this.logLines = const [],
+  });
 
   factory MailStatusResult.fromJson(Map<String, dynamic> json) {
     final s = json['status'] as String? ?? 'unknown';
@@ -58,10 +66,15 @@ class MailStatusResult {
       default:
         status = MailDeliveryStatus.unknown;
     }
+    final rawLog = json['log_lines'];
     return MailStatusResult(
       status: status,
       relay: json['relay'] as String?,
       timestamp: json['timestamp'] as String?,
+      queueId: json['queue_id'] as String?,
+      logLines: rawLog is List
+          ? rawLog.map((e) => e.toString()).toList()
+          : const [],
     );
   }
 }
@@ -157,6 +170,79 @@ class MailStatusService {
       LoggerService.logWarning('MAIL_STATUS', 'Fetch failed: $ex');
     } finally {
       _inFlight.removeAll(toFetch);
+    }
+  }
+
+  /// Fetch delivery status for a single message with the raw maillog lines
+  /// attached. Never cached — the user explicitly asked for the detail.
+  /// Returns null on transport/HTTP error so the caller can show a fallback.
+  ///
+  /// [senderUsername] picks the per-account mTLS cert so the server matches
+  /// from=<user@icd360s.de> in maillog. Without it the singleton cert is
+  /// used, which may belong to a different account when the user has
+  /// switched recently.
+  static Future<MailStatusResult?> fetchDetail(
+    String messageId, {
+    String? senderUsername,
+  }) async {
+    HttpClient client;
+    bool poolOwned = false;
+    if (senderUsername != null) {
+      try {
+        client = await MtlsClientPool.instance.get(senderUsername);
+        poolOwned = true;
+      } catch (e) {
+        LoggerService.log('MAIL_STATUS',
+            'mTLS pool unavailable for detail, using fallback: $e');
+        client = MtlsService.createMtlsHttpClient() ??
+            (PinnedSecurityContext.createHttpClient()
+              ..badCertificateCallback = (cert, host, port) {
+                if (host != 'mail.icd360s.de') return false;
+                return isTrustedLetsEncryptIssuer(cert.issuer);
+              });
+      }
+    } else {
+      client = MtlsService.createMtlsHttpClient() ??
+          (PinnedSecurityContext.createHttpClient()
+            ..badCertificateCallback = (cert, host, port) {
+              if (host != 'mail.icd360s.de') return false;
+              return isTrustedLetsEncryptIssuer(cert.issuer);
+            });
+    }
+
+    try {
+      final request = await client
+          .postUrl(Uri.parse(_endpoint))
+          .timeout(const Duration(seconds: 10));
+      request.headers.set('Content-Type', 'application/json');
+      request.write(jsonEncode({
+        'message_ids': [messageId],
+        'include_log': true,
+      }));
+
+      final response = await request.close().timeout(const Duration(seconds: 10));
+      final body = await response.transform(utf8.decoder).join();
+
+      if (response.statusCode != 200) {
+        LoggerService.logWarning('MAIL_STATUS',
+            'Detail HTTP ${response.statusCode}: $body');
+        return null;
+      }
+
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      final results = json['results'] as Map<String, dynamic>? ?? {};
+      final entry = results[messageId];
+      if (entry is! Map<String, dynamic>) return null;
+      final result = MailStatusResult.fromJson(entry);
+      // Refresh the batch cache so the row icon picks up status/relay/timestamp
+      // without waiting for the next batch fetch.
+      _cache[messageId] = result;
+      return result;
+    } catch (ex) {
+      LoggerService.logWarning('MAIL_STATUS', 'Detail fetch failed: $ex');
+      return null;
+    } finally {
+      if (!poolOwned) client.close();
     }
   }
 }
