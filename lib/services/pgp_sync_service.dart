@@ -124,7 +124,14 @@ class PgpSyncService {
   /// Returns `null` if no blob exists yet for [email].
   ///
   /// Throws [PgpSyncException] on crypto or network failures.
-  static Future<String?> downloadAndDecrypt(String email) async {
+  ///
+  /// When [recoveryMasterKey] is non-null, the KEK for decryption is
+  /// derived from that key instead of the vault's currently-cached
+  /// master key. The local version cache is NOT updated in this
+  /// recovery mode, since the caller is testing a past password and
+  /// will later re-upload under the current one.
+  static Future<String?> downloadAndDecrypt(String email,
+      {Uint8List? recoveryMasterKey}) async {
     final tag = 'PGP_SYNC';
     LoggerService.log(tag, 'downloadAndDecrypt: $email');
 
@@ -149,10 +156,14 @@ class PgpSyncService {
 
     // Decrypt blob.
     final blobBytes = base64.decode(blobBase64);
-    final armoredKey = await _decryptBlob(blobBytes, email, serverVersion);
+    final armoredKey = await _decryptBlob(blobBytes, email, serverVersion,
+        recoveryMasterKey: recoveryMasterKey);
 
-    // Update local version cache.
-    await _saveLocalVersion(email, serverVersion);
+    if (recoveryMasterKey == null) {
+      // Update local version cache (skip in recovery mode — the caller
+      // will re-upload under the current master KEK shortly).
+      await _saveLocalVersion(email, serverVersion);
+    }
     LoggerService.log(
         tag, 'downloadAndDecrypt OK: version=$serverVersion for $email');
     return armoredKey;
@@ -218,9 +229,11 @@ class PgpSyncService {
   ///     installs get the self-contained version.
   ///
   /// Returns `null` if the server has no blob for [email].
-  static Future<PgpBlob?> fetchBlob(String email) async {
+  static Future<PgpBlob?> fetchBlob(String email,
+      {Uint8List? recoveryMasterKey}) async {
     final tag = 'PGP_SYNC';
-    final plaintext = await downloadAndDecrypt(email);
+    final plaintext = await downloadAndDecrypt(email,
+        recoveryMasterKey: recoveryMasterKey);
     if (plaintext == null) return null;
     try {
       final decoded = jsonDecode(plaintext);
@@ -320,10 +333,20 @@ class PgpSyncService {
       throw const PgpSyncException(
           'MasterVault is locked — unlock before syncing PGP blobs');
     }
+    return _deriveBlobKekFromMasterKey(masterKeyBytes);
+  }
+
+  /// Derive the blob KEK from an arbitrary master key. Same HKDF
+  /// parameters as [_deriveBlobKek] so the result is bit-identical when
+  /// fed the same master key. Used by the post-approval recovery flow
+  /// to derive the blob KEK from an OLD master password the user just
+  /// re-entered, without touching the vault's currently-cached key.
+  static Future<SecretKey> _deriveBlobKekFromMasterKey(
+      Uint8List masterKey) async {
     try {
       final hkdf = Hkdf(hmac: Hmac.sha256(), outputLength: 32);
       final blobKek = await hkdf.deriveKey(
-        secretKey: SecretKey(masterKeyBytes),
+        secretKey: SecretKey(masterKey),
         nonce: utf8.encode(_hkdfSalt),
         info: utf8.encode(_hkdfInfo),
       );
@@ -368,8 +391,14 @@ class PgpSyncService {
   /// [expectedVersion] (prevents a corrupted/tampered header from being
   /// silently accepted — the GCM tag also catches this via AAD, but
   /// the explicit check produces a clearer error message).
+  ///
+  /// When [recoveryMasterKey] is non-null, that key is used to derive the
+  /// blob KEK instead of MasterVault's cached one — the post-approval
+  /// recovery flow uses this with the master key derived from a past
+  /// password the user just re-entered.
   static Future<String> _decryptBlob(
-      Uint8List blob, String email, int expectedVersion) async {
+      Uint8List blob, String email, int expectedVersion,
+      {Uint8List? recoveryMasterKey}) async {
     // Minimum: 4 (version) + 12 (nonce) + 0 (empty plaintext) + 16 (tag)
     const minLen = _versionBytes + _gcmNonceBytes + 16;
     if (blob.length < minLen) {
@@ -400,7 +429,9 @@ class PgpSyncService {
         ciphertextAndTag.sublist(0, ciphertextAndTag.length - 16);
     final tag = ciphertextAndTag.sublist(ciphertextAndTag.length - 16);
 
-    final blobKek = await _deriveBlobKek();
+    final blobKek = recoveryMasterKey == null
+        ? await _deriveBlobKek()
+        : await _deriveBlobKekFromMasterKey(recoveryMasterKey);
     final aes = AesGcm.with256bits();
     final aad = utf8.encode('v$version|${email.toLowerCase()}');
 

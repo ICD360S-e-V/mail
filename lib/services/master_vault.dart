@@ -373,6 +373,14 @@ class MasterVault {
     return Uint8List.fromList(bytes);
   }
 
+  /// The Argon2id salt currently bound to this vault. Exposed so the
+  /// post-approval recovery flow can re-derive an OLD master key from a
+  /// past master password the user remembers — the server-bound salt is
+  /// stable across password changes, so the same salt feeds both the
+  /// current and any previous password.
+  Uint8List? get currentArgonSalt =>
+      _argon2Salt == null ? null : Uint8List.fromList(_argon2Salt!);
+
   /// Derive auth hash via BLAKE2b-KDF (sodium).
   /// For NEW vaults (v0x04). Returns 32 bytes.
   Future<Uint8List> deriveAuthHash(Uint8List masterKeyBytes) async {

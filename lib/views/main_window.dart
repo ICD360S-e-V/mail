@@ -74,6 +74,11 @@ class _MainWindowState extends State<MainWindow> {
   // build cycle while the flag is set.
   bool _deviceLimitDialogShown = false;
 
+  /// Accounts for which the "remember the old master password?" recovery
+  /// prompt has already fired this session. Avoids re-prompting on every
+  /// build / setState while we wait for the user to type.
+  final Set<String> _recoveryPromptShownFor = <String>{};
+
   // Ping/connection quality
   Timer? _pingTimer;
   int? _pingMs;
@@ -719,6 +724,29 @@ class _MainWindowState extends State<MainWindow> {
               ),
             ],
           ),
+        );
+      });
+    }
+
+    // ── post-approval PGP key recovery prompt ──
+    // After an admin-approved reset where the user picked a new master
+    // password, the server still holds a blob encrypted under the OLD
+    // password. PgpKeyService logs each such account into
+    // [accountsAwaitingRecovery]. Offer a one-time prompt per session
+    // per account so the user can type the old password and reclaim
+    // their historical keys without an external recovery phrase. The
+    // admin-approval flow already verified identity, so this is the
+    // right moment to ask.
+    for (final pendingAcc in PgpKeyService.accountsAwaitingRecovery) {
+      if (_recoveryPromptShownFor.contains(pendingAcc)) continue;
+      _recoveryPromptShownFor.add(pendingAcc);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) =>
+              _PgpRecoveryDialog(email: pendingAcc),
         );
       });
     }
@@ -2563,6 +2591,109 @@ class _DeliveryLogDialogState extends State<_DeliveryLogDialog> {
         Button(
           child: const Text('Close'),
           onPressed: () => Navigator.of(context).pop(),
+        ),
+      ],
+    );
+  }
+}
+
+/// Modal that asks the user whether they remember a previous master
+/// password for [email]. On submit it calls
+/// [PgpKeyService.attemptRecoveryWithOldPassword] — on success the user
+/// gets back the historical PGP keys + the ability to decrypt all
+/// pre-reset mail; on failure the dialog stays open with an error
+/// hint so the user can retry (typos happen) or skip and accept that
+/// pre-reset mail stays unreadable.
+class _PgpRecoveryDialog extends StatefulWidget {
+  final String email;
+  const _PgpRecoveryDialog({required this.email});
+
+  @override
+  State<_PgpRecoveryDialog> createState() => _PgpRecoveryDialogState();
+}
+
+class _PgpRecoveryDialogState extends State<_PgpRecoveryDialog> {
+  final _controller = TextEditingController();
+  bool _busy = false;
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _tryRecover() async {
+    final candidate = _controller.text;
+    if (candidate.isEmpty) return;
+    setState(() {
+      _busy = true;
+      _errorMessage = null;
+    });
+    final ok = await PgpKeyService.attemptRecoveryWithOldPassword(
+        widget.email, candidate);
+    if (!mounted) return;
+    if (ok) {
+      Navigator.of(context).pop();
+      return;
+    }
+    setState(() {
+      _busy = false;
+      _errorMessage = 'That password did not unlock the historical '
+          'PGP key — try again or skip.';
+      _controller.clear();
+    });
+  }
+
+  void _skip() {
+    PgpKeyService.clearRecoveryFlag(widget.email);
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ContentDialog(
+      title: const Text('Recover historical PGP keys'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'The server still holds an encrypted PGP key bundle for '
+            '${widget.email} from before this device was reset. If you '
+            'remember the master password you used before, type it now '
+            'to recover access to historical encrypted mail.\n\n'
+            'Skip to accept that pre-reset mail stays unreadable — new '
+            'mail going forward is unaffected either way.',
+          ),
+          const SizedBox(height: 12),
+          TextBox(
+            controller: _controller,
+            placeholder: 'Previous master password',
+            obscureText: true,
+            autofocus: true,
+            enabled: !_busy,
+            onSubmitted: (_) => _tryRecover(),
+          ),
+          if (_errorMessage != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(_errorMessage!,
+                  style: TextStyle(color: Colors.red)),
+            ),
+        ],
+      ),
+      actions: [
+        Button(
+          onPressed: _busy ? null : _skip,
+          child: const Text('Skip'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _tryRecover,
+          child: _busy
+              ? const SizedBox(
+                  width: 16, height: 16, child: ProgressRing(strokeWidth: 2))
+              : const Text('Recover'),
         ),
       ],
     );
