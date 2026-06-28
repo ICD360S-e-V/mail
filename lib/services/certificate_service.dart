@@ -510,6 +510,17 @@ class CertificateService {
             'longer valid (HTTP 401). Re-enrollment required.');
         return refreshExpired;
       }
+      if (response.statusCode == 400) {
+        // nginx returns "400 The SSL certificate error" with body containing
+        // that phrase when the client cert is rejected at the TLS layer
+        // (expired or revoked). The PHP guard would have returned 401 if it
+        // ran, so a 400 here means we never reached the application —
+        // treat the same as 401.
+        LoggerService.logWarning('CERT-RENEW',
+            'Refresh rejected for $username at TLS layer (HTTP 400 — '
+            'cert expired or revoked). Re-enrollment required.');
+        return refreshExpired;
+      }
       if (response.statusCode == 404) {
         LoggerService.logWarning('CERT-RENEW',
             'Server has no cert on file for $username (HTTP 404).');
