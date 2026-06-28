@@ -317,7 +317,15 @@ class MasterVault {
 
   Future<void> write({required String key, required String? value}) async {
     if (!isUnlocked) {
-      throw StateError('MasterVault.write before unlock');
+      // Symmetric with [read]: when an async task is racing the auto-lock
+      // timer (e.g. a heartbeat completes a write right after auto-lock
+      // fires) we don't want a StateError stack trace bubbling up. The
+      // auto-lock path has already zeroed the keys, so any write would
+      // also lose its state — log a warning and bail gracefully instead.
+      LoggerService.logWarning('MASTER_VAULT',
+          'write($key) before unlock — dropping (likely a write racing '
+          'the auto-lock timer)');
+      return;
     }
     if (value == null) {
       _cache!.remove(key);
