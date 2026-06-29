@@ -585,13 +585,24 @@ class _ComposeWindowState extends State<ComposeWindow> {
     _recipientSecurity.removeWhere((k, _) => !recipients.contains(k));
   }
 
-  /// Strip characters that cannot legally appear in a MIME header value (RFC 5322).
-  /// CR / LF / NUL / TAB get silently removed — they only end up in a controller
-  /// when the user pastes pre-formatted text (e.g. "3:28 AM\nfoo@bar.com" copied
-  /// from a chat app), and propagating them into `setHeader` throws FormatException
-  /// (CWE-93 CRLF injection guard in `enough_mail`).
+  /// Strip CR/LF/TAB (RFC 5322 header-injection prevention) plus invisible
+  /// Unicode chars that commonly leak in from copy-paste (anti-scraping ZWSP
+  /// on websites, BOM, non-breaking spaces, BiDi controls, soft hyphens,
+  /// variation selectors). Without this, dovecot's strict SMTP path parser
+  /// rejects `RCPT TO:<addr-[U+200B]-rest>` with the cryptic
+  /// `501 5.5.4 Invalid TO: Missing '>' at end of path`.
+  ///
+  /// `\p{Cf}` covers all Format chars (ZWSP/ZWNJ/ZWJ/LRM/RLM/BOM/SOFT-HYPHEN
+  /// /WORD-JOINER/BiDi-controls). Explicit `\uXXXX` additions cover invisibles
+  /// from other Unicode categories: NBSP (Zs), CGJ (Mn), LINE/PARA SEPARATOR
+  /// (Zl/Zp), NARROW NO-BREAK SPACE (Zs), and VARIATION SELECTORS (Mn).
+  static final RegExp _headerSanitizeRe = RegExp(
+    r'[\r\n\t\u00A0\u034F\u2028\u2029\u202F\uFE00-\uFE0F]|\p{Cf}',
+    unicode: true,
+  );
+
   static String _sanitizeHeaderValue(String s) =>
-      s.replaceAll(RegExp(r'[\r\n\t]'), '');
+      s.replaceAll(_headerSanitizeRe, '');
 
   /// Split a recipient field into addresses. Comma is the RFC 5322 canonical
   /// delimiter; we also accept `;` (Outlook-style) and newlines (paste from

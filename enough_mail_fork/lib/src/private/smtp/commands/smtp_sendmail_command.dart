@@ -10,6 +10,17 @@ void _validateSmtpAddress(String? email) {
     if (c < 32 || c == 127) {
       throw ArgumentError('Email address contains control character at $i');
     }
+    // RFC 5321 mandates ASCII for SMTP path addresses (SMTPUTF8 negotiation
+    // aside, which our server does not advertise). Reject non-ASCII early so
+    // invisible junk (ZWSP/BOM/NBSP from web copy-paste) surfaces as a clear
+    // error here, instead of the server's cryptic
+    // `501 5.5.4 Invalid TO: Missing '>' at end of path`.
+    if (c > 127) {
+      throw ArgumentError(
+        'Email address contains non-ASCII character U+'
+        '${c.toRadixString(16).toUpperCase().padLeft(4, '0')} at position $i',
+      );
+    }
   }
   if (email.contains('<') || email.contains('>')) {
     throw ArgumentError('Email address contains angle brackets');
