@@ -14,7 +14,7 @@ dependencies:
     sdk: flutter
 
   # UI Framework
-  fluent_ui: ^4.15.1  # Microsoft Fluent Design for Windows
+  fluent_ui: ^4.16.0  # Microsoft Fluent Design for Windows
 
   # Email handling (IMAP/SMTP) - LOCAL FORK with mTLS support
   enough_mail:
@@ -64,8 +64,8 @@ dependencies:
   flutter_widget_from_html_core: ^0.17.2  # Secure HTML email rendering (no WebView)
 
   # Printing
-  printing: ^5.14.3  # Native print dialog (pinned: 5.15+ requires Dart 3.12, we have 3.11.5)
-  pdf: ^3.11.1  # PDF generation (pinned: 3.13+ requires Dart 3.12, we have 3.11.5)
+  printing: ^5.15.0  # Native print dialog (pinned: 5.15+ requires Dart 3.12, we have 3.11.5)
+  pdf: ^3.13.0  # PDF generation (pinned: 3.13+ requires Dart 3.12, we have 3.11.5)
 
   # PDF Viewer - native PDFium rendering (no WebView dependency)
   pdfrx: ^2.4.4  # Native PDF viewer for Windows/macOS/Linux/Android/iOS
@@ -88,7 +88,7 @@ dependencies:
   no_screenshot: ^1.1.0
 
   # Root/jailbreak detection (mobile only, no external telemetry)
-  safe_device: ^1.1.0
+  safe_device: ^1.4.0
 
   # Sentry crash reporting + perf monitoring.
   # Self-hosted instance at https://sentry-mail.icd360s.de (project ID 3,
@@ -101,7 +101,7 @@ dev_dependencies:
     sdk: flutter
 
   flutter_lints: ^6.0.0
-  msix: ^3.17.0  # Windows installer package
+  msix: ^3.18.0  # Windows installer package
 
 flutter:
   uses-material-design: true
