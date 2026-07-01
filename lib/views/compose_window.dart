@@ -7,7 +7,7 @@ import 'dart:io';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' show showModalBottomSheet;
 import 'package:file_picker/file_picker.dart';
-import 'package:cunning_document_scanner/cunning_document_scanner.dart';
+import 'document_scanner_view.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../utils/l10n_helper.dart';
@@ -156,9 +156,9 @@ class _ComposeWindowState extends State<ComposeWindow> {
     final l10n = l10nOf(context);
     final isMobile = Platform.isAndroid || Platform.isIOS;
 
-    // Camera scanner supported on iOS (VisionKit, always works) and
-    // Android (ML Kit — may require Play Services; on GrapheneOS the
-    // _scanDocument call fails gracefully with a toast).
+    // Camera scanner: custom OpenCV pipeline (fully offline, no Google
+    // Play Services, works on GrapheneOS/CalyxOS). Supported on iOS and
+    // Android; on desktop the scan button is hidden.
     final canScan = Platform.isIOS || Platform.isAndroid;
 
     if (isMobile) {
@@ -309,11 +309,13 @@ class _ComposeWindowState extends State<ComposeWindow> {
     }
   }
 
-  /// Scan document with camera.
-  /// iOS: VisionKit (on-device, no Google dependency, works perfectly).
-  /// Android: ML Kit Document Scanner — requires Google Play Services.
-  /// On GrapheneOS/CalyxOS without GMS this will throw — user should
-  /// use "Choose File" option instead (or use Gallery import).
+  /// Scan document with camera. Uses the custom OpenCV pipeline
+  /// (lib/services/document_scanner_service.dart + document_scanner_view)
+  /// — fully offline, no Google Play Services, works on GrapheneOS.
+  ///
+  /// Auto-detects the four corners of a document via Canny edge + contour
+  /// analysis, stabilizer confirms across 3 consecutive frames, then
+  /// auto-shutters and perspective-warps to a rectangular JPEG.
   Future<void> _scanDocument() async {
     if (!Platform.isIOS && !Platform.isAndroid) {
       final l10n = l10nOf(context);
@@ -325,10 +327,9 @@ class _ComposeWindowState extends State<ComposeWindow> {
     List<String>? imagePaths;
 
     try {
-      LoggerService.log('COMPOSE', 'Opening document scanner...');
-      imagePaths = await CunningDocumentScanner.getPictures(
-        isGalleryImportAllowed: true,
-      );
+      LoggerService.log('COMPOSE', 'Opening custom OpenCV document scanner...');
+      final path = await DocumentScannerView.open(context);
+      imagePaths = path == null ? null : [path];
     } catch (ex) {
       LoggerService.logError('COMPOSE', ex, StackTrace.current);
       if (!mounted) return;

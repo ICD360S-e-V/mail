@@ -70,14 +70,13 @@ dependencies:
   # PDF Viewer - native PDFium rendering (no WebView dependency)
   pdfrx: ^2.4.4  # Native PDF viewer for Windows/macOS/Linux/Android/iOS
 
-  # Document Scanner — primary: uses VisionKit on iOS, ML Kit on Android
-  # (ML Kit requires Google Play Services — works on standard Android).
-  cunning_document_scanner: ^1.4.0  # Auto-crop, edge detection, perspective correction
-  # NOTE: edge_detection (WeScan/SmartPaperScan) was considered as a
-  # GMS-free fallback for GrapheneOS, but the package is from 2023 and
-  # doesn't set `namespace` in build.gradle, which breaks AGP 8.x. On
-  # GrapheneOS users will get an error toast when they try to scan —
-  # the "Choose File" option is always available as workaround.
+  # Document Scanner — custom OpenCV pipeline (2026-07-01).
+  # Replaces cunning_document_scanner (ML Kit) with a fully-offline,
+  # Google-telemetry-free scanner that also works on GrapheneOS.
+  # Pipeline: camera preview → Canny edge → contour → 4-point polygon
+  # → IoU/area-delta stabilizer → auto-shutter → perspective warp.
+  camera: ^0.11.0  # cross-platform camera preview + stills
+  opencv_dart: ^1.4.0  # OpenCV 4 via dart:ffi (Canny/findContours/warpPerspective)
 
   # NOTE: pdfrx uses PDFium natively, works on RDP sessions unlike WebView
   # Other storage uses pure Dart file I/O (hardcoded %APPDATA% paths)
