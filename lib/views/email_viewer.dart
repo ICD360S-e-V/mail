@@ -182,8 +182,9 @@ class _EmailViewerState extends State<EmailViewer> {
       }
       final zipBytes = ZipEncoder().encode(archive);
       final downloadsPath = PlatformService.instance.downloadsPath;
-      final subjectSlug =
-          safeAttachmentFileName(email.subject ?? 'attachments');
+      final rawSubject =
+          email.subject.trim().isEmpty ? 'attachments' : email.subject;
+      final subjectSlug = safeAttachmentFileName(rawSubject);
       final stem = p.basenameWithoutExtension(subjectSlug);
       final ts = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
       final zipFile = File(p.join(downloadsPath, '${stem}_$ts.zip'));
