@@ -572,5 +572,16 @@
     "placeholders": {
       "days": {"type": "int"}
     }
-  }
+  },
+  "attachmentsDownloadAllZip": "Download all as ZIP",
+  "attachmentsZipEmpty": "No attachment data to save",
+  "attachmentsZipSuccessTitle": "ZIP saved",
+  "attachmentsZipSuccessMessage": "{count} files saved to {path}",
+  "@attachmentsZipSuccessMessage": {
+    "placeholders": {
+      "count": {"type": "int"},
+      "path": {"type": "String"}
+    }
+  },
+  "attachmentsZipErrorTitle": "ZIP failed"
 }

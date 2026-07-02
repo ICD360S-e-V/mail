@@ -260,5 +260,10 @@
   "certExpiryStatusUnknown": "Status certificat necunoscut",
   "certExpiryExpired": "Certificat EXPIRAT - Te rog autentifică-te din nou pentru reînnoire",
   "certExpiryExpiresSoon": "Certificatul expiră în {days} zile - Reautentificare recomandată",
-  "certExpiryValid": "Certificat valabil pentru {days}+ zile"
+  "certExpiryValid": "Certificat valabil pentru {days}+ zile",
+  "attachmentsDownloadAllZip": "Descarcă toate ca ZIP",
+  "attachmentsZipEmpty": "Nu există date de atașamente de salvat",
+  "attachmentsZipSuccessTitle": "ZIP salvat",
+  "attachmentsZipSuccessMessage": "{count} fișiere salvate la {path}",
+  "attachmentsZipErrorTitle": "ZIP eșuat"
 }
