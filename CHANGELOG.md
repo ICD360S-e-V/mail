@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.152.0 - 2026-07-02
+#### Features
+- (**scanner**) swap OpenCV pipeline for flutter_edge_detection (GrapheneOS-friendly) (#142) - (3897c93) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.151.3 - 2026-07-02
 #### Bug Fixes
 - unblock Android (Gradle) + Windows (opencv_dart) at v2.151.3 (#141) - (6eef487) - icd360sevofficial, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
