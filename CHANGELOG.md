@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.151.2 - 2026-07-02
+#### Bug Fixes
+- (**deps**) pin fluent_ui to <4.16.0 (Flutter 3.41.9 API skew) (#140) - (6c440f5) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.151.1 - 2026-07-02
 #### Bug Fixes
 - (**scanner**) match opencv_dart 1.4 API types for findContours + getPerspectiveTransform (#139) - (161b881) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
