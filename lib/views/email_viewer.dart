@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
+import 'package:archive/archive.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:path/path.dart' as p;
@@ -138,6 +139,70 @@ class _EmailViewerState extends State<EmailViewer> {
       recognizer.dispose();
     }
     super.dispose();
+  }
+
+  /// Bundle every attachment on the current email into a single .zip and
+  /// drop it in the platform's Downloads directory. The archive filename
+  /// is sanitized from the email subject plus a timestamp so multiple
+  /// saves from the same thread don't collide.
+  ///
+  /// Each entry name inside the zip is filtered through
+  /// [safeAttachmentFileName] because attachment filenames arrive from
+  /// attacker-controlled MIME headers and could otherwise embed path
+  /// traversal (`../`) or absolute paths. Duplicate sanitized names get
+  /// numeric suffixes so nothing is silently overwritten.
+  Future<void> _downloadAllAsZip(BuildContext ctx) async {
+    final email = widget.email;
+    final l10n = l10nOf(ctx);
+    try {
+      final archive = Archive();
+      final usedNames = <String>{};
+      for (final att in email.attachments) {
+        final data = att.data;
+        if (data == null || data.isEmpty) continue;
+        var name = safeAttachmentFileName(att.fileName);
+        // Guarantee uniqueness inside the zip.
+        if (usedNames.contains(name)) {
+          final ext = p.extension(name);
+          final stem = p.basenameWithoutExtension(name);
+          var i = 2;
+          while (usedNames.contains('${stem}_$i$ext')) {
+            i++;
+          }
+          name = '${stem}_$i$ext';
+        }
+        usedNames.add(name);
+        archive.addFile(ArchiveFile(name, data.length, data));
+      }
+      if (archive.isEmpty) {
+        if (!ctx.mounted) return;
+        NotificationService.showErrorToast(
+            l10n.attachmentsZipErrorTitle, l10n.attachmentsZipEmpty);
+        return;
+      }
+      final zipBytes = ZipEncoder().encode(archive);
+      final downloadsPath = PlatformService.instance.downloadsPath;
+      final subjectSlug =
+          safeAttachmentFileName(email.subject ?? 'attachments');
+      final stem = p.basenameWithoutExtension(subjectSlug);
+      final ts = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      final zipFile = File(p.join(downloadsPath, '${stem}_$ts.zip'));
+      await zipFile.writeAsBytes(zipBytes, flush: true);
+      LoggerService.log(
+        'VIEWER',
+        'Downloaded ${archive.length} attachments as zip: ${zipFile.path}',
+      );
+      if (!ctx.mounted) return;
+      NotificationService.showSuccessToast(
+        l10n.attachmentsZipSuccessTitle,
+        l10n.attachmentsZipSuccessMessage(archive.length, zipFile.path),
+      );
+    } catch (ex, st) {
+      LoggerService.logError('VIEWER', ex, st);
+      if (!ctx.mounted) return;
+      NotificationService.showErrorToast(
+          l10n.attachmentsZipErrorTitle, ex.toString());
+    }
   }
 
   /// Strip HTML tags from text for plain text display
@@ -711,9 +776,29 @@ class _EmailViewerState extends State<EmailViewer> {
               const SizedBox(height: 16),
               const Divider(),
               const SizedBox(height: 16),
-              Text(
-                l10n.infoAttachmentsTitle(email.attachments.length),
-                style: theme.typography.subtitle,
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      l10n.infoAttachmentsTitle(email.attachments.length),
+                      style: theme.typography.subtitle,
+                    ),
+                  ),
+                  if (email.attachments.length >= 2)
+                    Builder(
+                      builder: (ctx) => HyperlinkButton(
+                        onPressed: () => _downloadAllAsZip(ctx),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(FluentIcons.zip_folder, size: 14),
+                            const SizedBox(width: 6),
+                            Text(l10n.attachmentsDownloadAllZip),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
               ),
               const SizedBox(height: 8),
               ...email.attachments.map((attachment) {
