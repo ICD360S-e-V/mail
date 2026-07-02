@@ -85,21 +85,15 @@ dependencies:
   # PDF Viewer - native PDFium rendering (no WebView dependency)
   pdfrx: ^2.4.4  # Native PDF viewer for Windows/macOS/Linux/Android/iOS
 
-  # Document Scanner — custom OpenCV pipeline (2026-07-01).
-  # Replaces cunning_document_scanner (ML Kit) with a fully-offline,
-  # Google-telemetry-free scanner that also works on GrapheneOS.
-  # Pipeline: camera preview → Canny edge → contour → 4-point polygon
-  # → IoU/area-delta stabilizer → auto-shutter → perspective warp.
-  camera: ^0.12.0+1  # cross-platform camera preview + stills
-  # OpenCV 4 via dart:ffi. Pinned range `>=1.4.5 <2.0.0`:
-  #   • 1.4.5 is the LAST v1.x — v2.x requires Flutter native-assets
-  #     which our Flutter 3.41.9 predates (introduced in 3.38 but stable
-  #     later). Cap at <2.0 until we upgrade Flutter.
-  #   • 1.4.0 (initial pick in PR #135) crashed Windows CMake with
-  #     `OpenCVConfig.cmake set OpenCV_FOUND to FALSE`. Changelog 1.4.2+1
-  #     `fix: optional modules parsing in cmake script` looks like the
-  #     matching fix; bump to 1.4.5 (latest 1.x) picks it up + patches.
-  opencv_dart: '>=1.4.5 <2.0.0'
+  # Document Scanner — flutter_edge_detection (2026-07-02).
+  # Replaces the previous custom OpenCV pipeline (PR #135) which shipped
+  # broken auto-detection AND wouldn't compile on Windows (opencv_dart
+  # CMake `OpenCV_FOUND=FALSE`). This package wraps a native Kotlin/Java
+  # implementation (no Google Play Services), so it works on
+  # GrapheneOS Pixel where ML-Kit-based scanners (cunning_document_scanner
+  # / flutter_doc_scanner) fail. Live camera edge detection + perspective
+  # correction + built-in crop UI. Apache-2.0, published 3 months ago.
+  flutter_edge_detection: ^1.2.0
 
   # NOTE: pdfrx uses PDFium natively, works on RDP sessions unlike WebView
   # Other storage uses pure Dart file I/O (hardcoded %APPDATA% paths)
