@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.153.1 - 2026-07-02
+#### Bug Fixes
+- (**viewer**) use FluentIcons.download for the download-all-zip button (#145) - (b3881b5) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.153.0 - 2026-07-02
 #### Features
 - (**viewer**) download all attachments as a single ZIP (#143) - (4bc1d24) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
