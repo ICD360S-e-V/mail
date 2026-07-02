@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.151.1 - 2026-07-02
+#### Bug Fixes
+- (**scanner**) match opencv_dart 1.4 API types for findContours + getPerspectiveTransform (#139) - (161b881) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.151.0 - 2026-07-02
 #### Features
 - (**scanner**) replace ML Kit with custom OpenCV pipeline + auto-shutter (#135) - (97d7907) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
