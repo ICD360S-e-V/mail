@@ -7,7 +7,8 @@ import 'dart:io';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/material.dart' show showModalBottomSheet;
 import 'package:file_picker/file_picker.dart';
-import 'document_scanner_view.dart';
+import 'package:flutter_edge_detection/flutter_edge_detection.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../utils/l10n_helper.dart';
@@ -309,13 +310,11 @@ class _ComposeWindowState extends State<ComposeWindow> {
     }
   }
 
-  /// Scan document with camera. Uses the custom OpenCV pipeline
-  /// (lib/services/document_scanner_service.dart + document_scanner_view)
-  /// — fully offline, no Google Play Services, works on GrapheneOS.
-  ///
-  /// Auto-detects the four corners of a document via Canny edge + contour
-  /// analysis, stabilizer confirms across 3 consecutive frames, then
-  /// auto-shutters and perspective-warps to a rectangular JPEG.
+  /// Scan document with camera. Uses `flutter_edge_detection` (Apache-2.0)
+  /// which wraps a native Kotlin/Java OpenCV pipeline on Android and
+  /// Vision on iOS — **no Google Play Services**, works on GrapheneOS.
+  /// The plugin renders its own live-preview UI with 4-corner auto-detect
+  /// + manual quad adjust + perspective correction + built-in crop.
   Future<void> _scanDocument() async {
     if (!Platform.isIOS && !Platform.isAndroid) {
       final l10n = l10nOf(context);
@@ -327,9 +326,22 @@ class _ComposeWindowState extends State<ComposeWindow> {
     List<String>? imagePaths;
 
     try {
-      LoggerService.log('COMPOSE', 'Opening custom OpenCV document scanner...');
-      final path = await DocumentScannerView.open(context);
-      imagePaths = path == null ? null : [path];
+      LoggerService.log('COMPOSE', 'Opening flutter_edge_detection scanner...');
+      // The plugin writes the perspective-corrected JPEG to a path we
+      // provide — we hand it a temp file so cleanup is automatic on
+      // next boot. Returns true on capture success, false on cancel.
+      final tmpDir = await getTemporaryDirectory();
+      final tmpPath =
+          '${tmpDir.path}/icd_scan_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final success = await FlutterEdgeDetection.detectEdge(
+        tmpPath,
+        canUseGallery: false,
+        androidScanTitle: 'Scan document',
+        androidCropTitle: 'Adjust corners',
+        androidCropBlackWhiteTitle: 'Black & white',
+        androidCropReset: 'Reset',
+      );
+      imagePaths = success ? [tmpPath] : null;
     } catch (ex) {
       LoggerService.logError('COMPOSE', ex, StackTrace.current);
       if (!mounted) return;
