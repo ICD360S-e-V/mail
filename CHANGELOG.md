@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.153.0 - 2026-07-02
+#### Features
+- (**viewer**) download all attachments as a single ZIP (#143) - (4bc1d24) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.152.0 - 2026-07-02
 #### Features
 - (**scanner**) swap OpenCV pipeline for flutter_edge_detection (GrapheneOS-friendly) (#142) - (3897c93) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
