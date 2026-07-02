@@ -151,7 +151,7 @@ class DocumentScannerService {
     cv.Mat? kernel;
     cv.Mat? dilated;
     cv.VecVecPoint? contours;
-    cv.Mat? hierarchy;
+    cv.VecVec4i? hierarchy;
     int imgW = 0;
     int imgH = 0;
     try {
@@ -229,7 +229,9 @@ class DocumentScannerService {
         cv.Point2f(outW.toDouble() - 1, outH.toDouble() - 1),
         cv.Point2f(0, outH.toDouble() - 1),
       ]);
-      transform = cv.getPerspectiveTransform(srcPts, dstPts);
+      // getPerspectiveTransform2f is the float overload (VecPoint2f);
+      // the integer variant getPerspectiveTransform expects VecPoint.
+      transform = cv.getPerspectiveTransform2f(srcPts, dstPts);
       warped = cv.warpPerspective(src, transform, (outW, outH));
 
       final (ok, encoded) = cv.imencode('.jpg', warped, params: cv.VecI32.fromList([cv.IMWRITE_JPEG_QUALITY, 92]));

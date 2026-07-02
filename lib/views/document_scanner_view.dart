@@ -19,7 +19,6 @@
 
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
 import 'package:fluent_ui/fluent_ui.dart' as fluent;
@@ -316,7 +315,7 @@ class _DocumentScannerViewState extends State<DocumentScannerView>
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.white, width: 4),
-                        color: Colors.white.withOpacity(0.15),
+                        color: Colors.white.withValues(alpha: 0.15),
                       ),
                       child: const Icon(Icons.camera_alt,
                           color: Colors.white, size: 32),
