@@ -791,7 +791,7 @@ class _EmailViewerState extends State<EmailViewer> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(FluentIcons.zip_folder, size: 14),
+                            const Icon(FluentIcons.download, size: 14),
                             const SizedBox(width: 6),
                             Text(l10n.attachmentsDownloadAllZip),
                           ],
