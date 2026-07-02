@@ -32,9 +32,36 @@ flutter_ios_podfile_setup
 
 # file_picker: disable photo gallery picker (DKImagePickerController).
 # We only use FileType.any (UIDocumentPickerViewController) and
-# cunning_document_scanner for camera. This removes DKImagePickerController
+# flutter_edge_detection for camera. This removes DKImagePickerController
 # and DKPhotoGallery pods which produce Swift 6 sendability warnings.
 Pod::PICKER_MEDIA = false
+
+# WeScan (transitive dep of flutter_edge_detection) uses
+# `@available(*, unavailable, renamed: ...)` on stored properties which
+# Xcode 15+ rejects with: "Stored properties cannot be marked unavailable
+# with '@available'". WeScan 3.0.0-beta.1 fixed this upstream but
+# dropped CocoaPods support, so flutter_edge_detection still pulls the
+# broken 2.x line. See:
+#   https://github.com/WeTransfer/WeScan/issues/354
+#   https://github.com/sawankumarbundelkhandi/edge_detection/issues/146
+# Strip the offending decorators from the sources at pod install time
+# — the properties are `originalImage`/`croppedScan` which we don't call
+# from Dart, so stripping the deprecation annotation is a no-op for the
+# runtime behavior we exercise.
+def patch_wescan_available_on_stored_props(pods_root)
+  scan_dir = File.join(pods_root, 'WeScan')
+  return unless Dir.exist?(scan_dir)
+  changed = 0
+  Dir.glob(File.join(scan_dir, '**', '*.swift')).each do |f|
+    src = File.read(f)
+    stripped = src.gsub(/^\s*@available\(\*,\s*unavailable[^)]*\)\s*\n/, '')
+    if stripped != src
+      File.write(f, stripped)
+      changed += 1
+    end
+  end
+  puts "  [wescan-patch] Stripped @available(*, unavailable) from #{changed} file(s)"
+end
 
 target 'Runner' do
   use_frameworks!
@@ -46,6 +73,8 @@ target 'Runner' do
 end
 
 post_install do |installer|
+  patch_wescan_available_on_stored_props(installer.sandbox.root)
+
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
 
