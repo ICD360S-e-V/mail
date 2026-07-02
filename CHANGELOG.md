@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.151.0 - 2026-07-02
+#### Features
+- (**scanner**) replace ML Kit with custom OpenCV pipeline + auto-shutter (#135) - (97d7907) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+#### Bug Fixes
+- (**deps**) pin printing to <5.15.0 to unblock CI (Dart 3.11) (#138) - (afa57c6) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+- (**deps**) pin pdf to <3.13.0 to unblock CI (Dart 3.11) (#137) - (54d3757) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.150.1 - 2026-06-30
 #### Bug Fixes
 - (**compose**) strip invisible Unicode chars from header values (#134) - (0d11afb) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
