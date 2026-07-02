@@ -14,7 +14,13 @@ dependencies:
     sdk: flutter
 
   # UI Framework
-  fluent_ui: ^4.16.0  # Microsoft Fluent Design for Windows
+  # Microsoft Fluent Design for Windows. HARD-PINNED to <4.16.0 —
+  # fluent_ui 4.16.0 uses Flutter 3.44+ APIs (ScrollCacheExtent,
+  # ReorderableListView.onReorderItem) that don't exist in our pinned
+  # Flutter 3.41.9. Dependabot bumped this in PR #136 despite Flutter
+  # SDK skew; same explicit-range pattern as pdf/printing pins.
+  # Re-bump only after upgrading Flutter SDK in CI.
+  fluent_ui: '>=4.15.1 <4.16.0'
 
   # Email handling (IMAP/SMTP) - LOCAL FORK with mTLS support
   enough_mail:
