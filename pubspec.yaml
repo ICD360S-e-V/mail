@@ -64,7 +64,12 @@ dependencies:
   flutter_widget_from_html_core: ^0.17.2  # Secure HTML email rendering (no WebView)
 
   # Printing
-  printing: ^5.15.0  # Native print dialog (pinned: 5.15+ requires Dart 3.12, we have 3.11.5)
+  # Native print dialog. HARD-PINNED to <5.15.0 — printing 5.15+ requires
+  # Dart 3.12, our Flutter 3.41.9 ships Dart 3.11. Dependabot bumped this
+  # to ^5.15.0 in PR #136 despite the pin comment, breaking CI right
+  # after PR #137 fixed the same issue for `pdf`. Same explicit-range
+  # pattern applied here — re-bump only after Flutter SDK upgrade in CI.
+  printing: '>=5.14.3 <5.15.0'
   # PDF generation. HARD-PINNED to <3.13.0 — pdf 3.13+ requires Dart 3.12,
   # our pinned Flutter 3.41.9 ships Dart 3.11. Dependabot bumped this to
   # ^3.13.0 in PR #136 despite the pin comment and broke CI; reverted here.
