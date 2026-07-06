@@ -273,7 +273,7 @@ jobs:
       # ─────────────────────────────────────────────────────────────
       - name: Cache appimagetool
         id: cache-appimagetool
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.4 (Node 24)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5.0.4 (Node 24)
         with:
           path: appimagetool
           key: appimagetool-x86_64-1.9.1-ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0
