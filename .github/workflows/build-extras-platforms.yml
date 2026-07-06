@@ -175,7 +175,7 @@ jobs:
 
       - name: Cache Flutter SDK
         id: cache-flutter-ios
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
           path: ~/flutter
           key: flutter-${{ runner.os }}-${{ runner.arch }}-${{ env.FLUTTER_VERSION }}
@@ -212,14 +212,14 @@ jobs:
         run: flutter precache --ios
 
       - name: Cache pub dependencies
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
           path: ~/.pub-cache
           key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
           restore-keys: pub-${{ runner.os }}-
 
       - name: Cache CocoaPods
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
           path: |
             ios/Pods
@@ -228,7 +228,7 @@ jobs:
           restore-keys: pods-ios-
 
       - name: Cache native build hooks (sodium)
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
           path: .dart_tool/hooks_runner/
           key: native-hooks-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pubspec.lock') }}
@@ -286,7 +286,7 @@ jobs:
 
       - name: Cache Flutter SDK
         id: cache-flutter-macos
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
           path: ~/flutter
           key: flutter-${{ runner.os }}-${{ runner.arch }}-${{ env.FLUTTER_VERSION }}
@@ -323,14 +323,14 @@ jobs:
         run: flutter precache --macos
 
       - name: Cache pub dependencies
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
           path: ~/.pub-cache
           key: pub-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
           restore-keys: pub-${{ runner.os }}-
 
       - name: Cache CocoaPods
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
           path: |
             macos/Pods
@@ -442,7 +442,7 @@ jobs:
           cache: true
 
       - name: Cache native build hooks (sodium)
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
           path: .dart_tool/hooks_runner/
           key: native-hooks-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pubspec.lock') }}
@@ -470,7 +470,7 @@ jobs:
       # hash here AFTER auditing the new binary.
       - name: Cache VC++ Redistributable
         id: cache-vcredist
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v5
         with:
           path: windows/redist/vc_redist.x64.exe
           key: vcredist-cc0ff0eb1dc3f5188ae6300faef32bf5beeba4bdd6e8e445a9184072096b713b
