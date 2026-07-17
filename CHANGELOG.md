@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.154.0 - 2026-07-17
+#### Features
+- (**signature**) add association phone number after website line (#156) - (5b289b9) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.153.2 - 2026-07-02
 #### Bug Fixes
 - (**viewer**) drop dead null-aware on email.subject (#146) - (a1fa1bf) - icd360sevofficial, *Claude Opus 4.7 (1M context)*, *Claude Opus 4.7 (1M context)*, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
