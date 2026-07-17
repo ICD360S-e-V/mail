@@ -124,6 +124,7 @@ Elsa-Brändström-Str. 13
 
 E-Mail:    icd@icd360s.de
 Internet:  www.icd360s.de
+Telefon:   +49 160 9448 2053
 
 Amtsgericht Memmingen · VR 201335
 Gemeinnützig anerkannt
