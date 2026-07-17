@@ -103,14 +103,27 @@ class EmailAccount {
   static String defaultSignatureFor(String username) {
     final addr = username.toLowerCase();
     if (addr == 'icd@icd360s.de') {
-      // Mandatory disclosures per § 5 TMG / § 26 BGB for an eingetragener
-      // Verein: full association name, business address, Vertretungsberechtigter
-      // (Vorstand) and Vereinsregister (court + VR-Nr). Tagline is the
-      // association's official acronym expansion (Integration · Chancen ·
-      // Diversity · 360° Support) as shown on icd360s.de header.
+      // Mandatory disclosures per § 5 DDG (former § 5 TMG) + § 26 BGB for an
+      // eingetragener Verein: full association name with legal form suffix,
+      // business address (no PO box), immediate-contact channels (email +
+      // phone), competent Registergericht + VR-Nr, and ALL Vorstandsmitglieder
+      // with full names. Confidentiality disclaimer removed — it has no
+      // legal binding effect in Germany (recipient never consented) and
+      // adds no value for a gemeinnütziger Verein per BGH jurisprudence.
+      //
+      // Registry: Amtsgericht Memmingen keeps the electronic Vereinsregister
+      // centrally for districts Memmingen, Neu-Ulm and Günzburg (per Justiz
+      // Bayern), so Memmingen is correct even though the association is
+      // seated in Neu-Ulm — the association's own Impressum states
+      // "Amtsgericht Neu-Ulm" which is a template mistake.
+      //
+      // Not yet included (add when applicable):
+      //   - USt-IdNr — not applicable while gemeinnützig-scutit; add only
+      //     when the association obtains one.
       return '''Freundliche Grüße
 
 Ionuț Claudiu Duinea
+icd@icd360s.de
 1. Vorsitzender
 ____________________________________________
 
@@ -122,20 +135,21 @@ c/o Ionuț-Claudiu Duinea
 Elsa-Brändström-Str. 13
 89231 Neu-Ulm
 
-E-Mail:    icd@icd360s.de
-Internet:  www.icd360s.de
-Telefon:   +49 160 9448 2053
+E-Mail:      kontakt@icd360s.de
+Internet:    www.icd360s.de
+Telefon:     +49 160 9448 2053
+Datenschutz: www.icd360s.de/datenschutz
+
+Vorstand nach § 26 BGB:
+Ionuț-Claudiu Duinea (1. Vorsitzender)
+Michaela-Christine Weber (2. Vorsitzende)
+Anica Menning (Schatzmeisterin)
 
 Amtsgericht Memmingen · VR 201335
 Gemeinnützig anerkannt
 
 Integration · Chancen · Diversity
-360° Support
-____________________________________________
-Diese E-Mail ist ausschließlich für den Adressaten/die Adressatin bestimmt
-und kann vertrauliche oder gesetzlich geschützte Informationen enthalten.
-Wenn Sie nicht der/die bestimmungsgemäße Adressat/-in sind, unterrichten
-Sie bitte den Absender/die Absenderin und vernichten Sie diese E-Mail.''';
+360° Support''';
     }
     return '';
   }
