@@ -474,6 +474,15 @@ class PgpKeyService {
       );
       return plaintext;
     } catch (e) {
+      // Log the primary-key attempt failure BEFORE trying fallback — if
+      // both attempts fail, the caller previously saw only the fallback
+      // exception (or the primary one bubbling up bare via `rethrow`),
+      // with no way to tell which key actually matched or why the
+      // native Go engine rejected the ciphertext.
+      LoggerService.logWarning(
+        'PGP',
+        'decrypt primary-key attempt failed: ${e.runtimeType}: $e',
+      );
       // Fallback: try v6 key for old pre-migration messages
       if (_activeFallbackKey != null) {
         try {
@@ -482,7 +491,12 @@ class PgpKeyService {
             _activeFallbackKey!,
             _activePassphrase!,
           );
-        } catch (_) {}
+        } catch (e2) {
+          LoggerService.logWarning(
+            'PGP',
+            'decrypt fallback-key attempt also failed: ${e2.runtimeType}: $e2',
+          );
+        }
       }
       rethrow;
     }

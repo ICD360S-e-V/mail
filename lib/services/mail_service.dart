@@ -531,9 +531,17 @@ class MailService {
             }
             LoggerService.log('PGP',
                 '✓ Decrypted E2EE email from ${email.from}');
-          } catch (ex) {
-            LoggerService.logWarning('PGP',
-                'Decryption failed for ${email.messageId}');
+          } catch (ex, st) {
+            // Full exception surface so we can diagnose native-engine
+            // failures (StateError=vault-locked, "no matching secret key"
+            // =missing subkey, PlatformException from openpgp Go engine,
+            // passphrase mismatch, etc). Prior `logWarning(...)` swallowed
+            // everything past the message header.
+            LoggerService.logError(
+              'PGP',
+              'Decryption failed for ${email.messageId}: ${ex.runtimeType}: $ex',
+              st,
+            );
             email.body = '[Encrypted email — decryption failed]';
             email.isEncrypted = true;
           }
