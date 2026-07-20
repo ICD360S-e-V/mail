@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.155.3 - 2026-07-20
+#### Bug Fixes
+- (**pgp**) dearmor ciphertext before decryptBytes fallback (#161) - (e9c2114) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7*
+
+- - -
+
 ## v2.155.2 - 2026-07-20
 #### Bug Fixes
 - (**pgp**) fall back to decryptBytes + allowMalformed on UTF-8 FormatException (#160) - (1035eaf) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
