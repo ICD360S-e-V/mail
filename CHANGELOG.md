@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.155.1 - 2026-07-20
+#### Bug Fixes
+- (**pgp**) log full exception surface when native decrypt fails (#159) - (a79767b) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
+
+- - -
+
 ## v2.155.0 - 2026-07-17
 #### Features
 - (**signature**) full § 5 DDG + § 26 BGB conformance for icd@ signature (#157) - (b3e689d) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7 (1M context)*
