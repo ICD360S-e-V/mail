@@ -7,7 +7,7 @@ import 'dart:math';
 
 import 'package:dart_pg/dart_pg.dart';
 import 'package:enough_mail/enough_mail.dart';
-import 'package:flutter/foundation.dart' show compute, listEquals;
+import 'package:flutter/foundation.dart' show compute, listEquals, Uint8List;
 import 'package:openpgp/openpgp.dart' as native_pgp;
 
 import 'logger_service.dart';
@@ -460,6 +460,46 @@ class PgpKeyService {
 
   // ── Decrypt (via native Go-based PGP) ────────────────────────────
 
+  /// Try decrypt with a single key. Fast path uses openpgp's String API;
+  /// on `FormatException` (invalid UTF-8 in plaintext — happens when the
+  /// mail body has 8bit binary parts, embedded non-ASCII without
+  /// base64, or long HTML with emoji that trips the strict internal
+  /// `utf8.decode`), falls back to the bytes API + `allowMalformed`
+  /// decode. Same class of bug as flutter/flutter#94940 — String-typed
+  /// APIs over binary payloads always crash on the first invalid byte.
+  static Future<String> _tryDecryptWithKey(
+    String armoredCiphertext,
+    String armoredKey,
+    String passphrase,
+  ) async {
+    try {
+      return await native_pgp.OpenPGP.decrypt(
+        armoredCiphertext,
+        armoredKey,
+        passphrase,
+      );
+    } on FormatException catch (fe) {
+      LoggerService.logWarning(
+        'PGP',
+        'decrypt String-path UTF-8 decode failed ($fe) — '
+            'retrying via decryptBytes + allowMalformed',
+      );
+      // Armor is ASCII (RFC 4880 §6.2) — utf8.encode == raw bytes.
+      final ciphertextBytes = Uint8List.fromList(utf8.encode(armoredCiphertext));
+      final plainBytes = await native_pgp.OpenPGP.decryptBytes(
+        ciphertextBytes,
+        armoredKey,
+        passphrase,
+      );
+      // allowMalformed replaces invalid bytes with U+FFFD instead of
+      // throwing. Better a slightly-garbled body than no body at all —
+      // and for the mails that trigger this (long HTML from ESPs), the
+      // body still renders correctly since the invalid bytes are in
+      // attachment or CTE:binary sections we don't display as text.
+      return utf8.decode(plainBytes, allowMalformed: true);
+    }
+  }
+
   /// Decrypt a single PGP message using native Go PGP engine.
   /// Handles both SEIPD v1 (CFB+MDC) and v2 (AEAD/OCB) correctly.
   static Future<String> decrypt(String armoredCiphertext) async {
@@ -467,12 +507,11 @@ class PgpKeyService {
       throw StateError('PGP keys not loaded — unlock vault first');
     }
     try {
-      final plaintext = await native_pgp.OpenPGP.decrypt(
+      return await _tryDecryptWithKey(
         armoredCiphertext,
         _activeArmoredKey!,
         _activePassphrase!,
       );
-      return plaintext;
     } catch (e) {
       // Log the primary-key attempt failure BEFORE trying fallback — if
       // both attempts fail, the caller previously saw only the fallback
@@ -486,7 +525,7 @@ class PgpKeyService {
       // Fallback: try v6 key for old pre-migration messages
       if (_activeFallbackKey != null) {
         try {
-          return await native_pgp.OpenPGP.decrypt(
+          return await _tryDecryptWithKey(
             armoredCiphertext,
             _activeFallbackKey!,
             _activePassphrase!,
