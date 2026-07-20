@@ -7,7 +7,7 @@ import 'dart:math';
 
 import 'package:dart_pg/dart_pg.dart';
 import 'package:enough_mail/enough_mail.dart';
-import 'package:flutter/foundation.dart' show compute, listEquals, Uint8List;
+import 'package:flutter/foundation.dart' show compute, listEquals;
 import 'package:openpgp/openpgp.dart' as native_pgp;
 
 import 'logger_service.dart';
@@ -482,12 +482,18 @@ class PgpKeyService {
       LoggerService.logWarning(
         'PGP',
         'decrypt String-path UTF-8 decode failed ($fe) — '
-            'retrying via decryptBytes + allowMalformed',
+            'retrying via armorDecode + decryptBytes + allowMalformed',
       );
-      // Armor is ASCII (RFC 4880 §6.2) — utf8.encode == raw bytes.
-      final ciphertextBytes = Uint8List.fromList(utf8.encode(armoredCiphertext));
+      // decryptBytes expects RAW BINARY PGP packets, not the ASCII armor
+      // wrapper. Every PGP packet-tag byte requires MSB=1 (RFC 4880 §4.2),
+      // but armor's first byte is `-` (0x2D, MSB=0) — passing the armor
+      // as bytes fails with "tag byte does not have MSB set" at the very
+      // first parse step. armorDecode() strips `-----BEGIN … END-----`,
+      // base64-decodes the body, and returns the packet stream as
+      // Uint8List in `.body`, which is what decryptBytes actually wants.
+      final armorMeta = await native_pgp.OpenPGP.armorDecode(armoredCiphertext);
       final plainBytes = await native_pgp.OpenPGP.decryptBytes(
-        ciphertextBytes,
+        armorMeta.body,
         armoredKey,
         passphrase,
       );
