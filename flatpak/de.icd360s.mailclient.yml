@@ -114,6 +114,14 @@ modules:
       - -Dselinux=disabled
       - -Dsystemd=disabled
       - -Dlibcap-ng=disabled
+      # Redirect PKCS#11 install into /app — the empty defaults resolve
+      # to p11-kit's system paths (/usr/lib/x86_64-linux-gnu/pkcs11 and
+      # /usr/etc/pkcs11/modules), which are read-only inside a Flatpak
+      # build sandbox and blow the install step with:
+      #   ERROR: Unhandled python OSError (permission denied)
+      #   FAILED: [code=30] meson-internal__install
+      - -Dpkcs11-config=/app/etc/pkcs11/modules
+      - -Dpkcs11-modules=/app/lib/pkcs11
     sources:
       - type: archive
         url: https://download.gnome.org/sources/gnome-keyring/50/gnome-keyring-50.0.tar.xz
