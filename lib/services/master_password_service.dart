@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2024-2026 ICD360S e.V.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -10,6 +11,7 @@ import 'package:path/path.dart' as p;
 import 'account_service.dart';
 import 'aes_gcm_helpers.dart';
 import 'certificate_service.dart';
+import 'libsecret_diagnostic.dart';
 import 'logger_service.dart';
 import 'master_vault.dart';
 import 'portable_secure_storage.dart';
@@ -92,7 +94,21 @@ class MasterPasswordService {
     String? existingB64;
     try {
       existingB64 = await _secureStorage.read(key: _rateLimitKeyName);
-    } on PlatformException catch (e) {
+    } on PlatformException catch (e, st) {
+      // Log the FULL exception surface before rethrowing — previous
+      // versions only surfaced `e.message`, which for libsecret is just
+      // the string "KeyringLocked" with no context. code/details often
+      // carry the native error class name and the failing D-Bus name.
+      LoggerService.logError(
+          'AUTH',
+          'PlatformException at _getOrCreateRateLimitKey: '
+              'code=${e.code}, message=${e.message}, details=${e.details}',
+          st);
+      // Fire an async Linux Secret Service probe so the next log
+      // upload carries busctl/secret-tool/launcher.sh output — enough
+      // to diagnose whether the daemon is missing, unregistered, or
+      // just locked.
+      unawaited(LibsecretDiagnostic.dumpToLog(trigger: 'rate-limit-key-read'));
       throw StateError(
           'Secure storage unavailable for rate-limit key: ${e.message}');
     }
