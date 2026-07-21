@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.156.0 - 2026-07-21
+#### Features
+- (**linux**) use PortableSecureStorage file backend, drop libsecret (#172) - (1ad8d43) - icd360sevofficial, *claudeai*, *Claude Opus 4.7*
+
+- - -
+
 ## v2.155.11 - 2026-07-21
 #### Bug Fixes
 - (**flatpak**) probe Secret Service via dbus-send in launcher.sh (#171) - (384ee38) - icd360sevofficial, *Claude Opus 4.7*, *Claude Opus 4.7*, *claudeai*, *Claude Opus 4.7*
