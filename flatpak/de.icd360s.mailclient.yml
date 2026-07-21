@@ -73,9 +73,20 @@ modules:
   # use the upstream-maintained module definitions.
   - shared-modules/libayatana-appindicator/libayatana-appindicator-gtk3.json
 
-  # NOTE: libsecret module removed together with the Secret Service
-  # finish-args. flutter_secure_storage_linux is no longer on the
-  # runtime path — PortableSecureStorage handles Linux natively.
+  # libsecret-1.so.0 — must stay in the runtime even though we route
+  # around the Secret Service now. The `flutter_secure_storage_linux`
+  # plugin is compiled INTO the Flutter bundle (pubspec pulls it in
+  # unconditionally because we still use flutter_secure_storage on
+  # iOS/Android/Windows) and dynamically links `libsecret-1.so.0` at
+  # build time. Without this module the bundle's dynamic loader dies
+  # at process start with:
+  #   icd360s_mail_client: error while loading shared libraries:
+  #   libsecret-1.so.0: cannot open shared object file
+  # before the app can even reach main(). PortableSecureStorage's
+  # `_useFile = isMacOS || isLinux` branch keeps us from ever calling
+  # into libsecret at runtime — the library only needs to be resolvable
+  # by the loader.
+  - shared-modules/libsecret/libsecret.json
 
   - name: icd360s-mail-client
     buildsystem: simple
