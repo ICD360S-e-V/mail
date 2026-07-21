@@ -39,15 +39,25 @@ finish-args:
   # Desktop notifications (flutter_local_notifications via libnotify)
   - --talk-name=org.freedesktop.Notifications
 
-  # Secret storage — flutter_secure_storage_linux talks to:
-  #   org.freedesktop.secrets   gnome-keyring (Secret Service API)
-  #   org.kde.kwalletd5         KDE Wallet legacy
-  #   org.kde.kwalletd6         KDE Plasma 6 wallet
-  # Without these the plugin silently degrades to the AES-GCM file
-  # fallback (still secure, just not session-bound).
-  - --talk-name=org.freedesktop.secrets
-  - --talk-name=org.kde.kwalletd5
-  - --talk-name=org.kde.kwalletd6
+  # Secret storage via xdg-desktop-portal — libsecret 0.20.5+ (included
+  # in Freedesktop runtime 24.08) auto-detects the sandbox and switches
+  # to `org.freedesktop.portal.Secret`, which returns a per-application
+  # master secret from gnome-keyring-daemon over a file descriptor;
+  # libsecret then seals credentials into a local encrypted file in the
+  # app's XDG data dir. This decouples us from whether the user's login
+  # keyring on the host is unlocked — critical for RDP/xrdp sessions
+  # where PAM does not auto-unlock the host keyring and any direct
+  # `org.freedesktop.secrets` call throws `PlatformException(keyring_locked)`.
+  #
+  # Do NOT re-add `--talk-name=org.freedesktop.secrets` (or the kwalletd
+  # equivalents) — with those present, libsecret prefers the host
+  # Secret Service and never falls back to the portal, so RDP users hit
+  # the exact locked-keyring failure this manifest is meant to avoid.
+  # See flatpak/xdg-desktop-portal#359 and GNOME/dueno's write-up.
+  #
+  # The portal itself is reached via `org.freedesktop.portal.Desktop`,
+  # which Flatpak auto-injects into every sandbox — no explicit
+  # --talk-name needed for the portal bus.
 
   # NOTE: removed --talk-name=org.freedesktop.portal.Background.
   # Declaring it without implementing the Background portal handshake
