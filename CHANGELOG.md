@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.155.4 - 2026-07-21
+#### Bug Fixes
+- (**flatpak**) drop host Secret Service talk-names so RDP works (#162) - (51859ce) - icd360sevofficial, *claudeai*, *Claude Opus 4.7*
+
+- - -
+
 ## v2.155.3 - 2026-07-20
 #### Bug Fixes
 - (**pgp**) dearmor ciphertext before decryptBytes fallback (#161) - (e9c2114) - icd360sevofficial, *ICD360S e.V.*, *Claude Opus 4.7*
