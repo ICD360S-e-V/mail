@@ -84,8 +84,16 @@ class LibsecretDiagnostic {
 
   static Future<void> _runAndLog(String label, List<String> argv) async {
     try {
+      // Explicit 5s timeout — busctl / secret-tool can hang indefinitely
+      // if the session bus proxy is misconfigured (rare, but exactly the
+      // failure mode we're trying to diagnose), and hanging the diagnostic
+      // path would freeze the startup / Add Account codepath the user
+      // is waiting on.
       final r = await Process.run(argv.first, argv.sublist(1),
-          runInShell: false);
+              runInShell: false)
+          .timeout(const Duration(seconds: 5),
+              onTimeout: () => ProcessResult(
+                    0, 124, '', 'timeout after 5s'));
       final out = r.stdout.toString().trim();
       final err = r.stderr.toString().trim();
       final tail = (out.isEmpty && err.isEmpty)
