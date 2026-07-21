@@ -16,7 +16,11 @@ import 'aes_gcm_helpers.dart';
 import 'logger_service.dart';
 
 /// Cross-platform secure key/value storage that works on ad-hoc signed
-/// macOS builds (no Apple Developer Program required).
+/// macOS builds (no Apple Developer Program required) AND on Linux where
+/// no working Secret Service is reachable (Flatpak on XFCE/xrdp,
+/// server installs without a session gnome-keyring — see PR #171
+/// research for why gnome-keyring-daemon v50 in a Flatpak sandbox does
+/// NOT create the login collection without a PAM/UI-prompter context).
 ///
 /// Backend selection:
 /// - **macOS**: AES-256-GCM encrypted file under `~/Library/Application
@@ -24,8 +28,12 @@ import 'logger_service.dart';
 ///   via PBKDF2-HMAC-SHA256 (100k iters) from the Mac's Hardware UUID
 ///   (IOPlatformUUID), which is stable across reboots and unique per
 ///   machine. **Zero Keychain API calls.**
-/// - **iOS / Android / Windows / Linux**: native `flutter_secure_storage`
-///   (Keychain / Keystore / DPAPI / libsecret).
+/// - **Linux**: same AES-256-GCM file backend, keyed off `/etc/machine-id`
+///   (systemd's per-installation identifier — stable across reboots,
+///   available inside a Flatpak sandbox since Flatpak leaks it as-is).
+///   **Zero libsecret API calls.**
+/// - **iOS / Android / Windows**: native `flutter_secure_storage`
+///   (Keychain / Keystore / DPAPI).
 ///
 /// Why bypass Keychain on macOS:
 ///
@@ -74,7 +82,7 @@ class PortableSecureStorage {
   Uint8List? _key;
   String? _filePath;
 
-  bool get _useFile => Platform.isMacOS;
+  bool get _useFile => Platform.isMacOS || Platform.isLinux;
 
   // ── Public API (subset compatible with FlutterSecureStorage) ──
 
@@ -148,10 +156,31 @@ class PortableSecureStorage {
     return _filePath!;
   }
 
-  /// Read the macOS Hardware UUID + Serial Number via `ioreg`. Combines
-  /// both identifiers so an attacker must reproduce both (harder in VMs).
-  /// Stable across reboots, unique per machine, requires no entitlements.
+  /// Machine-unique secret used as PBKDF2 input material.
+  ///
+  /// - Linux: `/etc/machine-id` (systemd's per-installation 128-bit UUID,
+  ///   present inside the Flatpak sandbox by default, stable across
+  ///   reboots).
+  /// - macOS: `IOPlatformUUID` + `IOPlatformSerialNumber` from `ioreg`.
+  ///
+  /// Both identifiers survive user logout / app restart but change on a
+  /// reinstall of the OS or a disk clone — which is exactly what we
+  /// want (the cloned-machine attacker cannot re-derive the key without
+  /// the original hardware).
   Future<String> _machineSecret() async {
+    if (Platform.isLinux) {
+      try {
+        final s = (await File('/etc/machine-id').readAsString()).trim();
+        if (s.length >= 16) return 'machine-id:$s';
+      } catch (_) {/* fall through to systemd_id file */}
+      // Fallback: /var/lib/dbus/machine-id (present on non-systemd hosts)
+      try {
+        final s = (await File('/var/lib/dbus/machine-id').readAsString()).trim();
+        if (s.length >= 16) return 'dbus-machine-id:$s';
+      } catch (_) {}
+      throw StateError('Cannot determine machine secret — '
+          '/etc/machine-id and /var/lib/dbus/machine-id both unreadable.');
+    }
     try {
       final result = await Process.run(
         '/usr/sbin/ioreg',
