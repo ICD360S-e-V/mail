@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.156.1 - 2026-07-21
+#### Bug Fixes
+- (**flatpak**) keep libsecret-1.so.0 in the runtime, drop was wrong (#173) - (9f51e3c) - icd360sevofficial, *claudeai*, *Claude Opus 4.7*
+
+- - -
+
 ## v2.156.0 - 2026-07-21
 #### Features
 - (**linux**) use PortableSecureStorage file backend, drop libsecret (#172) - (1ad8d43) - icd360sevofficial, *claudeai*, *Claude Opus 4.7*
