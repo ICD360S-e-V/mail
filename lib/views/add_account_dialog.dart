@@ -1,11 +1,15 @@
 // SPDX-FileCopyrightText: 2024-2026 ICD360S e.V.
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import 'dart:async';
+
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/services.dart' show PlatformException;
 
 import '../models/models.dart';
 import '../services/device_approval_service.dart';
 import '../services/device_registration_service.dart';
+import '../services/libsecret_diagnostic.dart';
 import '../services/logger_service.dart';
 import '../utils/l10n_helper.dart';
 import 'awaiting_approval_view.dart';
@@ -170,6 +174,22 @@ class _AddAccountDialogState extends State<AddAccountDialog> {
             _errorMessage = null;
           });
           return;
+      }
+    } on PlatformException catch (e, st) {
+      // Split-out from the generic catch so the log carries native
+      // code/message/details instead of just `PlatformException(X, Y, null, null)`.
+      // Fires the Linux Secret Service probe so we see busctl / secret-tool /
+      // launcher.sh output in the next log upload.
+      LoggerService.logError(
+          'ADD_ACCOUNT',
+          'PlatformException: code=${e.code}, message=${e.message}, details=${e.details}',
+          st);
+      unawaited(LibsecretDiagnostic.dumpToLog(trigger: 'add-account'));
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+          _errorMessage = 'Unexpected error: ${e.code} — ${e.message}';
+        });
       }
     } catch (e, st) {
       LoggerService.logError('ADD_ACCOUNT', e, st);
