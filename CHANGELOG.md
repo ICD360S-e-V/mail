@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.155.8 - 2026-07-21
+#### Bug Fixes
+- (**flatpak**) switch launcher to --login, add diagnostic log (#166) - (867a698) - icd360sevofficial, *claudeai*, *Claude Opus 4.7*
+
+- - -
+
 ## v2.155.7 - 2026-07-21
 #### Bug Fixes
 - (**flatpak**) redirect gnome-keyring pkcs11 install into /app (#165) - (2d70a58) - icd360sevofficial, *claudeai*, *Claude Opus 4.7*
