@@ -2,7 +2,7 @@ app-id: de.icd360s.mailclient
 runtime: org.freedesktop.Platform
 runtime-version: '24.08'
 sdk: org.freedesktop.Sdk
-command: icd360s_mail_client
+command: launcher.sh
 
 finish-args:
   # IPC + network
@@ -39,25 +39,25 @@ finish-args:
   # Desktop notifications (flutter_local_notifications via libnotify)
   - --talk-name=org.freedesktop.Notifications
 
-  # Secret storage via xdg-desktop-portal — libsecret 0.20.5+ (included
-  # in Freedesktop runtime 24.08) auto-detects the sandbox and switches
-  # to `org.freedesktop.portal.Secret`, which returns a per-application
-  # master secret from gnome-keyring-daemon over a file descriptor;
-  # libsecret then seals credentials into a local encrypted file in the
-  # app's XDG data dir. This decouples us from whether the user's login
-  # keyring on the host is unlocked — critical for RDP/xrdp sessions
-  # where PAM does not auto-unlock the host keyring and any direct
-  # `org.freedesktop.secrets` call throws `PlatformException(keyring_locked)`.
+  # Secret storage — the app ships its OWN gnome-keyring-daemon and lets
+  # it own `org.freedesktop.secrets` on the sandbox session bus (see
+  # launcher.sh + gcr-3/gnome-keyring modules below). Rationale:
   #
-  # Do NOT re-add `--talk-name=org.freedesktop.secrets` (or the kwalletd
-  # equivalents) — with those present, libsecret prefers the host
-  # Secret Service and never falls back to the portal, so RDP users hit
-  # the exact locked-keyring failure this manifest is meant to avoid.
-  # See flatpak/xdg-desktop-portal#359 and GNOME/dueno's write-up.
+  # - PR #162 tried removing this talk-name so libsecret would fall back
+  #   to `org.freedesktop.portal.Secret`. That path needs an
+  #   `org.freedesktop.impl.portal.Secret` backend on the host, which
+  #   xdg-desktop-portal-xapp / -xfce (Linux Mint XFCE default) do NOT
+  #   implement — so libsecret found nothing and still failed.
+  # - PAM-based unlock of the host keyring doesn't happen over xrdp/VNC
+  #   (no cleartext login password), so any dependency on the host's
+  #   gnome-keyring is unusable in RDP sessions.
   #
-  # The portal itself is reached via `org.freedesktop.portal.Desktop`,
-  # which Flatpak auto-injects into every sandbox — no explicit
-  # --talk-name needed for the portal bus.
+  # Owning the name inside the sandbox makes host-side desktop / portal /
+  # PAM state irrelevant — the daemon is per-installation and per-user,
+  # unlocked with an empty password (the Flatpak per-app data dir is
+  # already the security boundary; a second layer would just be a UX tax).
+  - --own-name=org.freedesktop.secrets
+  - --talk-name=org.freedesktop.secrets
 
   # NOTE: removed --talk-name=org.freedesktop.portal.Background.
   # Declaring it without implementing the Background portal handshake
@@ -83,6 +83,43 @@ modules:
   # showing a window. Same root cause as ente-io/ente#6564.
   - shared-modules/libsecret/libsecret.json
 
+  # gcr-3 — hard dep of gnome-keyring-daemon (gcr-base-3 ≥ 3.27.90 and
+  # gck-1 ≥ 3.3.4, both provided by this tarball). Built minimal: no GTK,
+  # no docs, no introspection, no ssh-agent — only the crypto/PKCS#11
+  # bits gnome-keyring links against. gcr-4 would be nicer but
+  # gnome-keyring 50 still pulls the 3.x branch.
+  - name: gcr
+    buildsystem: meson
+    config-opts:
+      - -Dgtk=false
+      - -Dgtk_doc=false
+      - -Dintrospection=false
+      - -Dssh_agent=false
+      - -Dsystemd=disabled
+      - -Dvapi=false
+    sources:
+      - type: archive
+        url: https://download.gnome.org/sources/gcr/3.41/gcr-3.41.2.tar.xz
+        sha256: bad10f3c553a0e1854649ab59c5b2434da22ca1a54ae6138f1f53961567e1ab7
+
+  # gnome-keyring — provides the `gnome-keyring-daemon` binary launcher.sh
+  # spawns before the Flutter app. Built without PAM (no login helper needed
+  # inside a sandbox) and without libcap-ng (unavailable in 24.08 runtime).
+  # `--components=secrets` at runtime restricts it to the Secret Service
+  # role — no ssh-agent, no pkcs11 store.
+  - name: gnome-keyring
+    buildsystem: meson
+    config-opts:
+      - -Dpam=false
+      - -Dssh-agent=false
+      - -Dselinux=disabled
+      - -Dsystemd=disabled
+      - -Dlibcap-ng=disabled
+    sources:
+      - type: archive
+        url: https://download.gnome.org/sources/gnome-keyring/50/gnome-keyring-50.0.tar.xz
+        sha256: cbd72062c53c9702bc2c4733991ad5f051ca682882b30905a2829bcf1a8ecc7c
+
   - name: icd360s-mail-client
     buildsystem: simple
     build-commands:
@@ -91,6 +128,10 @@ modules:
       - mkdir -p /app/bin
       - cp -r bundle/* /app/bin/
       - chmod +x /app/bin/icd360s_mail_client
+      # Launcher wrapper that starts gnome-keyring-daemon before exec'ing
+      # the Flutter binary — this is what the manifest's `command:` points
+      # at, so it runs on every app start.
+      - install -Dm755 launcher.sh /app/bin/launcher.sh
       # Desktop integration
       - install -Dm644 de.icd360s.mailclient.desktop /app/share/applications/de.icd360s.mailclient.desktop
       - install -Dm644 de.icd360s.mailclient.metainfo.xml /app/share/metainfo/de.icd360s.mailclient.metainfo.xml
@@ -100,6 +141,8 @@ modules:
       - type: dir
         path: ./bundle
         dest: bundle
+      - type: file
+        path: ./launcher.sh
       - type: file
         path: ./de.icd360s.mailclient.desktop
       - type: file
