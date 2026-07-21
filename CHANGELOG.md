@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 Generated automatically from [Conventional Commits](https://www.conventionalcommits.org/).
 
 - - -
+## v2.155.5 - 2026-07-21
+#### Bug Fixes
+- (**flatpak**) bundle gnome-keyring-daemon in-sandbox for RDP hosts (#163) - (8b13087) - icd360sevofficial, *claudeai*, *Claude Opus 4.7*
+
+- - -
+
 ## v2.155.4 - 2026-07-21
 #### Bug Fixes
 - (**flatpak**) drop host Secret Service talk-names so RDP works (#162) - (51859ce) - icd360sevofficial, *claudeai*, *Claude Opus 4.7*
